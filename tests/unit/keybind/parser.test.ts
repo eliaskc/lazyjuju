@@ -133,4 +133,14 @@ describe("fromParsedKey", () => {
 			shift: false,
 		})
 	})
+
+	it("normalizes return to enter", () => {
+		const evt = { name: "return", ctrl: false, meta: false, shift: false }
+		expect(fromParsedKey(evt)).toEqual({
+			name: "enter",
+			ctrl: false,
+			meta: false,
+			shift: false,
+		})
+	})
 })

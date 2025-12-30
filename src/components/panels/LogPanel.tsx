@@ -15,6 +15,7 @@ export function LogPanel() {
 		selectPrev,
 		selectFirst,
 		selectLast,
+		enterFilesView,
 	} = useSync()
 	const focus = useFocus()
 	const command = useCommand()
@@ -53,6 +54,14 @@ export function LogPanel() {
 			context: "log",
 			category: "Navigation",
 			onSelect: selectLast,
+		},
+		{
+			id: "log.enter_files",
+			title: "View files",
+			keybind: "enter",
+			context: "log",
+			category: "Navigation",
+			onSelect: () => enterFilesView(),
 		},
 	])
 

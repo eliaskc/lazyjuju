@@ -10,3 +10,12 @@ export interface Commit {
 	immutable: boolean
 	empty: boolean
 }
+
+export type FileStatus = "added" | "modified" | "deleted" | "renamed" | "copied"
+
+export interface FileChange {
+	path: string
+	status: FileStatus
+	/** Original path for renamed/copied files */
+	oldPath?: string
+}

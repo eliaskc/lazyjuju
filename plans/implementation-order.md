@@ -293,6 +293,94 @@ bun run src/index.tsx
 
 ---
 
+## Phase 7: File Tree View
+**Target: 2-3 hours | Drill-down into commits (lazygit-style)**
+
+### 7.1 Files Commander
+- [ ] `src/commander/files.ts` - runs `jj diff --summary -r <change_id>`
+- [ ] Parse output: status prefix (A/M/D/R/C) + file path
+- [ ] Handle renames: `R {old => new}` format
+- [ ] `FileChange` type: `{ path, status, oldPath? }`
+
+### 7.2 File Tree Data Structure
+- [ ] `src/utils/file-tree.ts` - hierarchical tree builder
+- [ ] `FileTreeNode` type: `{ name, path, status?, children?, collapsed }`
+- [ ] `buildFileTree(files: FileChange[])` - groups files by directory
+- [ ] Path compression: merge single-child directories (e.g., `src/components/` as one node)
+- [ ] `flattenTree(root, collapsedPaths)` - for rendering
+
+### 7.3 FileTreePanel Component
+- [ ] `src/components/panels/FileTreePanel.tsx`
+- [ ] Shows hierarchical tree with indentation (2 spaces per level)
+- [ ] Directory indicators: `▼` expanded, `▶` collapsed
+- [ ] File status colors: green (A), yellow (M), red (D), blue (R)
+- [ ] Selection highlight on current item
+- [ ] `j/k` to navigate, `Enter` to toggle folder or select file
+- [ ] `Escape` to return to Log view
+
+### 7.4 Panel Morphing
+- [ ] Add `viewMode` signal to sync context: `"log" | "files"`
+- [ ] Add `selectedFileIndex` signal for file tree navigation
+- [ ] `Enter` on commit in Log → switch to `"files"` mode, load files
+- [ ] `Escape` in files mode → switch back to `"log"` mode
+- [ ] Left panel conditionally renders LogPanel or FileTreePanel
+- [ ] MainArea shows file-specific diff when file selected
+
+### 7.5 Unit Tests
+- [ ] `tests/unit/commander/files.test.ts` - parsing tests
+- [ ] `tests/unit/utils/file-tree.test.ts` - tree building tests
+
+**Milestone**: Press Enter on commit → see file tree, select file → see file diff.
+
+**References**:
+- lazygit: `pkg/gui/filetree/node.go`, `pkg/gui/filetree/build_tree.go`
+- lazyjj: `src/commander/files.rs`
+- jjui: uses flat list (we're doing hierarchical like lazygit)
+
+---
+
+## Phase 8: Bookmarks Panel
+**Target: 2-3 hours | Complete left-side layout**
+
+### 8.1 Bookmarks Commander
+- [ ] `src/commander/bookmarks.ts` - runs `jj bookmark list`
+- [ ] Parse output: bookmark name, target change ID, tracking status
+- [ ] `Bookmark` type: `{ name, changeId, isTracking?, remote? }`
+
+### 8.2 Layout Update
+- [ ] Update `Layout.tsx` for stacked left panels
+- [ ] Log/FileTree panel (top, grows)
+- [ ] Bookmarks panel (bottom, fixed or proportional height)
+- [ ] Consider focus-based expansion (focused panel gets more space)
+
+### 8.3 BookmarksPanel Component
+- [ ] `src/components/panels/BookmarksPanel.tsx`
+- [ ] List bookmarks with visual indicators (local vs tracked)
+- [ ] Selection highlight
+- [ ] `j/k` navigation within panel
+
+### 8.4 Focus System Update
+- [ ] Extend `FocusContext` type: `"log" | "files" | "bookmarks" | "diff"`
+- [ ] `Tab` cycles forward: Log → Bookmarks → Diff → Log
+- [ ] `Shift+Tab` cycles backward: Log → Diff → Bookmarks → Log
+- [ ] Number keys `1/2/3` jump directly to panels
+- [ ] Update StatusBar hints per focus context
+
+### 8.5 Panel Labels
+- [ ] Add `[N]-Title` label to each panel border (like lazygit)
+- [ ] Log panel: `[1]-Log` (swaps to `[1]-Files` when in file tree view)
+- [ ] Bookmarks panel: `[2]-Bookmarks`
+- [ ] Diff panel: `[3]-Diff`
+- [ ] Labels shown in panel border/title area
+
+### 8.6 Bookmark → Log Interaction
+- [ ] Selecting bookmark shows its log in MainArea (or filters main log)
+- [ ] `Enter` on bookmark jumps to that commit in Log panel
+
+**Milestone**: Three-panel layout with Log, Bookmarks, and MainArea working together.
+
+---
+
 ## Current State Summary (2025-12-30)
 
 ### ✅ What Works
@@ -319,19 +407,15 @@ bun run src/index.tsx
 ### 🎯 Read-Only Mode Complete!
 We have a polished, production-quality read-only jj TUI viewer. All Phase 1-6 goals met!
 
-### 🚧 What's Next (Phase 7: Core Operations)
-- `n` - new commit
-- `e` - edit commit
-- `d` - describe commit (opens modal)
-- `s` - squash into parent
-- `a` - abandon commit
+### 🚧 What's Next
+1. **Phase 7: File Tree View** - Enter on commit → file tree (lazygit-style)
+2. **Phase 8: Bookmarks Panel** - Complete left-side layout with panel labels
 
-### 📦 Post-Prototype Priorities
-1. **Core Operations** (Phase 7): new, edit, describe, squash, abandon
-2. **Modals** (Phase 8): describe modal, confirmation dialogs
-3. **Bookmarks Panel** (Phase 9): bookmark list, bookmark operations
-4. **Command Mode** (Phase 10): `:` command input and execution
-5. **Command Palette** (Phase 11): Ctrl+P searchable command list (trivial with registry)
+### 📦 Post-Layout Priorities
+1. **Core Operations** (Phase 9): new, edit, describe, squash, abandon
+2. **Modals** (Phase 10): describe modal, confirmation dialogs
+3. **Command Mode** (Phase 11): `:` command input and execution
+4. **Command Palette** (Phase 12): Ctrl+P searchable command list (trivial with registry)
 
 ### 🐛 Known Issues
 - Help modal has a small visual gap between border and outer edge (OpenTUI rendering quirk)

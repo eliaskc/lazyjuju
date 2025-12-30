@@ -1,7 +1,8 @@
 import { useRenderer } from "@opentui/solid"
-import { onMount } from "solid-js"
+import { Show, onMount } from "solid-js"
 import { Layout } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
+import { FileTreePanel } from "./components/panels/FileTreePanel"
 import { LogPanel } from "./components/panels/LogPanel"
 import { MainArea } from "./components/panels/MainArea"
 import { CommandProvider, useCommand } from "./context/command"
@@ -9,6 +10,16 @@ import { DialogContainer, DialogProvider, useDialog } from "./context/dialog"
 import { FocusProvider, useFocus } from "./context/focus"
 import { KeybindProvider } from "./context/keybind"
 import { SyncProvider, useSync } from "./context/sync"
+
+function LeftPanel() {
+	const { viewMode } = useSync()
+
+	return (
+		<Show when={viewMode() === "files"} fallback={<LogPanel />}>
+			<FileTreePanel />
+		</Show>
+	)
+}
 
 function AppContent() {
 	const renderer = useRenderer()
@@ -82,7 +93,7 @@ function AppContent() {
 
 	return (
 		<DialogContainer>
-			<Layout left={<LogPanel />} right={<MainArea />} />
+			<Layout left={<LeftPanel />} right={<MainArea />} />
 		</DialogContainer>
 	)
 }

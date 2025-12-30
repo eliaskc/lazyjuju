@@ -68,8 +68,11 @@ export function fromParsedKey(evt: {
 	meta?: boolean
 	shift?: boolean
 }): KeybindInfo {
+	let name = evt.name ?? ""
+	if (name === "return") name = "enter"
+
 	return {
-		name: evt.name ?? "",
+		name,
 		ctrl: evt.ctrl ?? false,
 		meta: evt.meta ?? false,
 		shift: evt.shift ?? false,

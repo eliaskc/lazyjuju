@@ -3,14 +3,25 @@ import {
 	type JSX,
 	createContext,
 	createEffect,
+	createMemo,
 	createSignal,
 	onCleanup,
 	onMount,
 	useContext,
 } from "solid-js"
 import { fetchDiff } from "../commander/diff"
+import { fetchFiles } from "../commander/files"
 import { fetchLog } from "../commander/log"
-import type { Commit } from "../commander/types"
+import type { Commit, FileChange } from "../commander/types"
+import {
+	type FileTreeNode,
+	type FlatFileNode,
+	buildFileTree,
+	flattenTree,
+	getFilePaths,
+} from "../utils/file-tree"
+
+export type ViewMode = "log" | "files"
 
 interface SyncContextValue {
 	commits: () => Commit[]
@@ -30,6 +41,24 @@ interface SyncContextValue {
 	terminalWidth: () => number
 	terminalHeight: () => number
 	mainAreaWidth: () => number
+
+	viewMode: () => ViewMode
+	fileTree: () => FileTreeNode | null
+	flatFiles: () => FlatFileNode[]
+	selectedFileIndex: () => number
+	setSelectedFileIndex: (index: number) => void
+	collapsedPaths: () => Set<string>
+	filesLoading: () => boolean
+	filesError: () => string | null
+	selectedFile: () => FlatFileNode | undefined
+
+	enterFilesView: () => Promise<void>
+	exitFilesView: () => void
+	toggleFolder: (path: string) => void
+	selectPrevFile: () => void
+	selectNextFile: () => void
+	selectFirstFile: () => void
+	selectLastFile: () => void
 }
 
 const SyncContext = createContext<SyncContextValue>()
@@ -45,6 +74,24 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	const [diffError, setDiffError] = createSignal<string | null>(null)
 	const [terminalWidth, setTerminalWidth] = createSignal(renderer.width)
 	const [terminalHeight, setTerminalHeight] = createSignal(renderer.height)
+
+	const [viewMode, setViewMode] = createSignal<ViewMode>("log")
+	const [files, setFiles] = createSignal<FileChange[]>([])
+	const [fileTree, setFileTree] = createSignal<FileTreeNode | null>(null)
+	const [selectedFileIndex, setSelectedFileIndex] = createSignal(0)
+	const [collapsedPaths, setCollapsedPaths] = createSignal<Set<string>>(
+		new Set(),
+	)
+	const [filesLoading, setFilesLoading] = createSignal(false)
+	const [filesError, setFilesError] = createSignal<string | null>(null)
+
+	const flatFiles = createMemo(() => {
+		const tree = fileTree()
+		if (!tree) return []
+		return flattenTree(tree, collapsedPaths())
+	})
+
+	const selectedFile = () => flatFiles()[selectedFileIndex()]
 
 	const mainAreaWidth = () => {
 		const width = terminalWidth()
@@ -80,25 +127,46 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
 	const selectedCommit = () => commits()[selectedIndex()]
 
-	let diffDebounceTimer: ReturnType<typeof setTimeout> | null = null
-	let currentDiffChangeId: string | null = null
+	const selectPrevFile = () => {
+		setSelectedFileIndex((i) => Math.max(0, i - 1))
+	}
 
-	const loadDiff = async (changeId: string, columns: number) => {
-		currentDiffChangeId = changeId
+	const selectNextFile = () => {
+		setSelectedFileIndex((i) => Math.min(flatFiles().length - 1, i + 1))
+	}
+
+	const selectFirstFile = () => {
+		setSelectedFileIndex(0)
+	}
+
+	const selectLastFile = () => {
+		setSelectedFileIndex(Math.max(0, flatFiles().length - 1))
+	}
+
+	let diffDebounceTimer: ReturnType<typeof setTimeout> | null = null
+	let currentDiffKey: string | null = null
+
+	const loadDiff = async (
+		changeId: string,
+		columns: number,
+		paths?: string[],
+	) => {
+		const key = paths?.length ? `${changeId}:${paths.join(",")}` : changeId
+		currentDiffKey = key
 		setDiffLoading(true)
 		setDiffError(null)
 		try {
-			const result = await fetchDiff(changeId, { columns })
-			if (currentDiffChangeId === changeId) {
+			const result = await fetchDiff(changeId, { columns, paths })
+			if (currentDiffKey === key) {
 				setDiff(result)
 			}
 		} catch (e) {
-			if (currentDiffChangeId === changeId) {
+			if (currentDiffKey === key) {
 				setDiffError(e instanceof Error ? e.message : "Failed to load diff")
 				setDiff(null)
 			}
 		} finally {
-			if (currentDiffChangeId === changeId) {
+			if (currentDiffKey === key) {
 				setDiffLoading(false)
 			}
 		}
@@ -107,10 +175,25 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	createEffect(() => {
 		const commit = selectedCommit()
 		const columns = mainAreaWidth()
-		if (commit) {
-			if (diffDebounceTimer) {
-				clearTimeout(diffDebounceTimer)
+		const mode = viewMode()
+
+		if (!commit) return
+
+		if (diffDebounceTimer) {
+			clearTimeout(diffDebounceTimer)
+		}
+
+		if (mode === "files") {
+			const file = selectedFile()
+			if (file) {
+				const paths = file.node.isDirectory
+					? getFilePaths(file.node)
+					: [file.node.path]
+				diffDebounceTimer = setTimeout(() => {
+					loadDiff(commit.changeId, columns, paths)
+				}, 100)
 			}
+		} else {
 			diffDebounceTimer = setTimeout(() => {
 				loadDiff(commit.changeId, columns)
 			}, 100)
@@ -131,6 +214,48 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		}
 	}
 
+	const enterFilesView = async () => {
+		const commit = selectedCommit()
+		if (!commit) return
+
+		setFilesLoading(true)
+		setFilesError(null)
+		try {
+			const result = await fetchFiles(commit.changeId, {
+				ignoreWorkingCopy: true,
+			})
+			setFiles(result)
+			setFileTree(buildFileTree(result))
+			setSelectedFileIndex(0)
+			setCollapsedPaths(new Set<string>())
+			setViewMode("files")
+		} catch (e) {
+			setFilesError(e instanceof Error ? e.message : "Failed to load files")
+		} finally {
+			setFilesLoading(false)
+		}
+	}
+
+	const exitFilesView = () => {
+		setViewMode("log")
+		setFiles([])
+		setFileTree(null)
+		setSelectedFileIndex(0)
+		setCollapsedPaths(new Set<string>())
+	}
+
+	const toggleFolder = (path: string) => {
+		setCollapsedPaths((prev) => {
+			const next = new Set(prev)
+			if (next.has(path)) {
+				next.delete(path)
+			} else {
+				next.add(path)
+			}
+			return next
+		})
+	}
+
 	const value: SyncContextValue = {
 		commits,
 		selectedIndex,
@@ -149,6 +274,24 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		terminalWidth,
 		terminalHeight,
 		mainAreaWidth,
+
+		viewMode,
+		fileTree,
+		flatFiles,
+		selectedFileIndex,
+		setSelectedFileIndex,
+		collapsedPaths,
+		filesLoading,
+		filesError,
+		selectedFile,
+
+		enterFilesView,
+		exitFilesView,
+		toggleFolder,
+		selectPrevFile,
+		selectNextFile,
+		selectFirstFile,
+		selectLastFile,
 	}
 
 	return (

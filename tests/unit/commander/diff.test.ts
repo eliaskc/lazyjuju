@@ -146,4 +146,54 @@ describe("fetchDiff", () => {
 		expect(result).toBe(coloredDiff)
 		expect(result).toContain("\x1b[")
 	})
+
+	test("passes single path to execute", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "diff output",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await fetchDiff("abc123", { paths: ["src/file.ts"] })
+
+		expect(mockExecute).toHaveBeenCalledWith(
+			[
+				"diff",
+				"-r",
+				"abc123",
+				"--color",
+				"always",
+				"--ignore-working-copy",
+				"src/file.ts",
+			],
+			{ cwd: undefined, env: {} },
+		)
+	})
+
+	test("passes multiple paths to execute", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "diff output",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await fetchDiff("abc123", { paths: ["src/a.ts", "src/b.ts", "src/c.ts"] })
+
+		expect(mockExecute).toHaveBeenCalledWith(
+			[
+				"diff",
+				"-r",
+				"abc123",
+				"--color",
+				"always",
+				"--ignore-working-copy",
+				"src/a.ts",
+				"src/b.ts",
+				"src/c.ts",
+			],
+			{ cwd: undefined, env: {} },
+		)
+	})
 })
