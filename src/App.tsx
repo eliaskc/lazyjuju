@@ -19,6 +19,15 @@ function AppContent() {
 
 	onMount(() => {
 		loadLog()
+
+		renderer.console.keyBindings = [
+			{ name: "y", ctrl: true, action: "copy-selection" },
+		]
+		renderer.console.onCopySelection = (text) => {
+			const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" })
+			proc.stdin.write(text)
+			proc.stdin.end()
+		}
 	})
 
 	useKeyboard((evt) => {

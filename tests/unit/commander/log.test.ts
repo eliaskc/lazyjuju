@@ -3,7 +3,7 @@ import { parseLogOutput } from "../../../src/commander/log"
 
 describe("parseLogOutput", () => {
 	test("parses single commit", () => {
-		const output = `○  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 user@email.com feat: add feature
+		const output = `○  __LJ__abc123__LJ__def456__LJ__false__LJ__false__LJ__feat: add feature__LJ__John Doe__LJ__john@example.com__LJ__2025-01-01 12:00:00__LJ__abc123 user@email.com
 │  description continues here`
 
 		const commits = parseLogOutput(output)
@@ -12,41 +12,50 @@ describe("parseLogOutput", () => {
 		expect(commits[0]?.changeId).toBe("abc123")
 		expect(commits[0]?.commitId).toBe("def456")
 		expect(commits[0]?.immutable).toBe(false)
+		expect(commits[0]?.empty).toBe(false)
 		expect(commits[0]?.isWorkingCopy).toBe(false)
+		expect(commits[0]?.description).toBe("feat: add feature")
+		expect(commits[0]?.author).toBe("John Doe")
+		expect(commits[0]?.authorEmail).toBe("john@example.com")
+		expect(commits[0]?.timestamp).toBe("2025-01-01 12:00:00")
 		expect(commits[0]?.lines).toHaveLength(2)
 	})
 
 	test("detects working copy from @ in gutter", () => {
 		const output =
-			"@  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 wip commit"
+			"@  __LJ__abc123__LJ__def456__LJ__false__LJ__false__LJ__wip commit__LJ__Jane__LJ__jane@test.com__LJ__2025-01-02 10:00:00__LJ__abc123"
 
 		const commits = parseLogOutput(output)
 
 		expect(commits[0]?.isWorkingCopy).toBe(true)
+		expect(commits[0]?.description).toBe("wip commit")
 	})
 
 	test("parses immutable commit", () => {
 		const output =
-			"◆  __LJ__abc123__LJ__def456__LJ__true__LJ__abc123 main commit"
+			"◆  __LJ__abc123__LJ__def456__LJ__true__LJ__false__LJ__main commit__LJ__Admin__LJ__admin@test.com__LJ__2025-01-03 09:00:00__LJ__abc123"
 
 		const commits = parseLogOutput(output)
 
 		expect(commits[0]?.immutable).toBe(true)
+		expect(commits[0]?.description).toBe("main commit")
 	})
 
 	test("parses multiple commits", () => {
-		const output = `@  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 current work
-○  __LJ__ghi789__LJ__jkl012__LJ__false__LJ__ghi789 previous commit
+		const output = `@  __LJ__abc123__LJ__def456__LJ__false__LJ__false__LJ__current work__LJ__User1__LJ__u1@test.com__LJ__2025-01-01 12:00:00__LJ__abc123
+○  __LJ__ghi789__LJ__jkl012__LJ__false__LJ__false__LJ__previous commit__LJ__User2__LJ__u2@test.com__LJ__2025-01-01 11:00:00__LJ__ghi789
 │  with description
-◆  __LJ__mno345__LJ__pqr678__LJ__true__LJ__mno345 root commit`
+◆  __LJ__mno345__LJ__pqr678__LJ__true__LJ__false__LJ__root commit__LJ__User3__LJ__u3@test.com__LJ__2025-01-01 10:00:00__LJ__mno345`
 
 		const commits = parseLogOutput(output)
 
 		expect(commits).toHaveLength(3)
 		expect(commits[0]?.changeId).toBe("abc123")
 		expect(commits[0]?.isWorkingCopy).toBe(true)
+		expect(commits[0]?.description).toBe("current work")
 		expect(commits[1]?.changeId).toBe("ghi789")
 		expect(commits[1]?.lines).toHaveLength(2)
+		expect(commits[1]?.description).toBe("previous commit")
 		expect(commits[2]?.changeId).toBe("mno345")
 		expect(commits[2]?.immutable).toBe(true)
 	})
@@ -57,23 +66,35 @@ describe("parseLogOutput", () => {
 	})
 
 	test("handles output with only whitespace lines", () => {
-		const output = `○  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 commit
+		const output = `○  __LJ__abc123__LJ__def456__LJ__false__LJ__false__LJ__commit__LJ__Author__LJ__a@b.com__LJ__2025-01-01 00:00:00__LJ__abc123
 
 `
 		const commits = parseLogOutput(output)
 		expect(commits).toHaveLength(1)
 		expect(commits[0]?.lines).toHaveLength(1)
+		expect(commits[0]?.description).toBe("commit")
 	})
 
 	test("strips ANSI codes from metadata but preserves in display", () => {
 		const output =
-			"@  __LJ__\x1b[38;5;5mwzqtrynx\x1b[39m__LJ__\x1b[38;5;4mcec3ab64\x1b[39m__LJ__false__LJ__\x1b[1m\x1b[38;5;13mw\x1b[38;5;8mzqtrynx\x1b[39m feat: test"
+			"@  __LJ__\x1b[38;5;5mwzqtrynx\x1b[39m__LJ__\x1b[38;5;4mcec3ab64\x1b[39m__LJ__false__LJ__false__LJ__feat: test__LJ__Author__LJ__a@b.com__LJ__2025-01-01 12:00:00__LJ__\x1b[1m\x1b[38;5;13mw\x1b[38;5;8mzqtrynx\x1b[39m"
 
 		const commits = parseLogOutput(output)
 
 		expect(commits[0]?.changeId).toBe("wzqtrynx")
 		expect(commits[0]?.commitId).toBe("cec3ab64")
+		expect(commits[0]?.description).toBe("feat: test")
 		expect(commits[0]?.lines[0]).toContain("@  ")
 		expect(commits[0]?.lines[0]).toContain("\x1b[")
+	})
+
+	test("parses empty commit", () => {
+		const output =
+			"@  __LJ__abc123__LJ__def456__LJ__false__LJ__true__LJ__\x1b[2m(empty)\x1b[0m test desc__LJ__Author__LJ__a@b.com__LJ__2025-01-01 12:00:00__LJ__abc123"
+
+		const commits = parseLogOutput(output)
+
+		expect(commits[0]?.empty).toBe(true)
+		expect(commits[0]?.description).toContain("(empty)")
 	})
 })

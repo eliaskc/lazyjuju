@@ -30,7 +30,7 @@ export function LogPanel() {
 							<For each={commit.lines}>
 								{(line) => (
 									<box backgroundColor={isSelected() ? "blue" : undefined} overflow="hidden">
-										<AnsiText content={line} />
+										<AnsiText content={line} bold={commit.isWorkingCopy} wrapMode="none" />
 									</box>
 								)}
 							</For>

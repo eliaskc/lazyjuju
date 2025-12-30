@@ -64,24 +64,40 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
 	const selectedCommit = () => commits()[selectedIndex()]
 
+	let diffDebounceTimer: ReturnType<typeof setTimeout> | null = null
+	let currentDiffChangeId: string | null = null
+
 	const loadDiff = async (changeId: string) => {
+		currentDiffChangeId = changeId
 		setDiffLoading(true)
 		setDiffError(null)
 		try {
 			const result = await fetchDiff(changeId)
-			setDiff(result)
+			// Only update if this is still the current request
+			if (currentDiffChangeId === changeId) {
+				setDiff(result)
+			}
 		} catch (e) {
-			setDiffError(e instanceof Error ? e.message : "Failed to load diff")
-			setDiff(null)
+			if (currentDiffChangeId === changeId) {
+				setDiffError(e instanceof Error ? e.message : "Failed to load diff")
+				setDiff(null)
+			}
 		} finally {
-			setDiffLoading(false)
+			if (currentDiffChangeId === changeId) {
+				setDiffLoading(false)
+			}
 		}
 	}
 
 	createEffect(() => {
 		const commit = selectedCommit()
 		if (commit) {
-			loadDiff(commit.changeId)
+			if (diffDebounceTimer) {
+				clearTimeout(diffDebounceTimer)
+			}
+			diffDebounceTimer = setTimeout(() => {
+				loadDiff(commit.changeId)
+			}, 100)
 		}
 	})
 

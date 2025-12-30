@@ -7,6 +7,8 @@ const MARKER = "__LJ__"
 const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, "")
 
 function buildTemplate(): string {
+	const styledDescription = `if(empty, label("empty", "(empty) "), "") ++ if(description.first_line(), description.first_line(), label("description placeholder", "(no description set)"))`
+
 	const prefix = [
 		`"${MARKER}"`,
 		"change_id.short()",
@@ -14,6 +16,16 @@ function buildTemplate(): string {
 		"commit_id.short()",
 		`"${MARKER}"`,
 		"immutable",
+		`"${MARKER}"`,
+		"empty",
+		`"${MARKER}"`,
+		styledDescription,
+		`"${MARKER}"`,
+		"author.name()",
+		`"${MARKER}"`,
+		"author.email()",
+		`"${MARKER}"`,
+		'author.timestamp().local().format("%Y-%m-%d %H:%M:%S %:z")',
 		`"${MARKER}"`,
 	].join(" ++ ")
 
@@ -27,7 +39,7 @@ export function parseLogOutput(output: string): Commit[] {
 	for (const line of output.split("\n")) {
 		if (line.includes(MARKER)) {
 			const parts = line.split(MARKER)
-			if (parts.length >= 5) {
+			if (parts.length >= 10) {
 				if (current) {
 					commits.push(current)
 				}
@@ -37,8 +49,13 @@ export function parseLogOutput(output: string): Commit[] {
 					changeId: stripAnsi(parts[1] ?? ""),
 					commitId: stripAnsi(parts[2] ?? ""),
 					immutable: stripAnsi(parts[3] ?? "") === "true",
+					empty: stripAnsi(parts[4] ?? "") === "true",
+					description: parts[5] ?? "",
+					author: stripAnsi(parts[6] ?? ""),
+					authorEmail: stripAnsi(parts[7] ?? ""),
+					timestamp: stripAnsi(parts[8] ?? ""),
 					isWorkingCopy: gutter.includes("@"),
-					lines: [gutter + (parts[4] ?? "")],
+					lines: [gutter + (parts[9] ?? "")],
 				}
 				continue
 			}
