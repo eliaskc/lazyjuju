@@ -1,0 +1,27 @@
+{
+	"name": "lazierjj",
+	"module": "src/index.tsx",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --watch src/index.tsx",
+		"check": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@babel/core": "^7.28.5",
+		"@babel/preset-typescript": "^7.28.5",
+		"@opentui/core": "^0.1.66",
+		"@opentui/solid": "^0.1.66",
+		"babel-preset-solid": "1.9.9",
+		"solid-js": "1.9.9"
+	}
+}
