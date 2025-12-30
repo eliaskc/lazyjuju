@@ -55,9 +55,12 @@ export function parseLogOutput(output: string): Commit[] {
 
 export async function fetchLog(cwd?: string): Promise<Commit[]> {
 	const template = buildTemplate()
-	const result = await execute(["log", "--color", "never", "--template", template], {
-		cwd,
-	})
+	const result = await execute(
+		["log", "--color", "never", "--template", template],
+		{
+			cwd,
+		},
+	)
 
 	if (!result.success) {
 		throw new Error(`jj log failed: ${result.stderr}`)

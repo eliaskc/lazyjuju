@@ -1,11 +1,10 @@
 import { execute } from "./executor"
 
-function stripAnsi(str: string): string {
-	return str.replace(/\x1b\[[0-9;]*m/g, "")
-}
-
-export async function fetchDiff(changeId: string, cwd?: string): Promise<string> {
-	const result = await execute(["diff", "-r", changeId], {
+export async function fetchDiff(
+	changeId: string,
+	cwd?: string,
+): Promise<string> {
+	const result = await execute(["diff", "-r", changeId, "--color", "always"], {
 		cwd,
 	})
 
@@ -13,5 +12,5 @@ export async function fetchDiff(changeId: string, cwd?: string): Promise<string>
 		throw new Error(`jj diff failed: ${result.stderr}`)
 	}
 
-	return stripAnsi(result.stdout)
+	return result.stdout
 }

@@ -1,5 +1,6 @@
-import { Show } from "solid-js"
+import { type Accessor, Show } from "solid-js"
 import { useSync } from "../../context/sync"
+import { AnsiText } from "../AnsiText"
 
 export function MainArea() {
 	const { selectedCommit, diff, diffLoading, diffError } = useSync()
@@ -23,7 +24,11 @@ export function MainArea() {
 				<text>Error: {diffError()}</text>
 			</Show>
 			<Show when={!diffLoading() && !diffError() && diff()}>
-				<text>{diff()}</text>
+				{(content: Accessor<string>) => (
+					<scrollbox focused flexGrow={1} scrollbarOptions={{ visible: true }}>
+						<AnsiText content={content()} />
+					</scrollbox>
+				)}
 			</Show>
 			<Show when={!diffLoading() && !diffError() && !diff()}>
 				<text>No changes in this commit</text>

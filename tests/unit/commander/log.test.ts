@@ -17,7 +17,8 @@ describe("parseLogOutput", () => {
 	})
 
 	test("detects working copy from @ in gutter", () => {
-		const output = "@  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 wip commit"
+		const output =
+			"@  __LJ__abc123__LJ__def456__LJ__false__LJ__abc123 wip commit"
 
 		const commits = parseLogOutput(output)
 
@@ -25,7 +26,8 @@ describe("parseLogOutput", () => {
 	})
 
 	test("parses immutable commit", () => {
-		const output = "◆  __LJ__abc123__LJ__def456__LJ__true__LJ__abc123 main commit"
+		const output =
+			"◆  __LJ__abc123__LJ__def456__LJ__true__LJ__abc123 main commit"
 
 		const commits = parseLogOutput(output)
 
