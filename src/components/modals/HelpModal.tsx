@@ -1,8 +1,7 @@
-import { type Accessor, For, Show, createMemo, createSignal } from "solid-js"
+import { For, createMemo, createSignal } from "solid-js"
 import { type CommandOption, useCommand } from "../../context/command"
 import { useDialog } from "../../context/dialog"
 import { useKeybind } from "../../context/keybind"
-import type { KeybindConfigKey } from "../../keybind"
 import { colors } from "../../theme"
 
 interface CategoryGroup {
@@ -62,63 +61,87 @@ export function HelpModal() {
 		return cols
 	})
 
+	const columnKeybindWidths = createMemo(() => {
+		return columns().map((col) => {
+			let maxWidth = 0
+			for (const group of col) {
+				for (const cmd of group.commands) {
+					if (cmd.keybind) {
+						const width = keybind.print(cmd.keybind).length
+						if (width > maxWidth) maxWidth = width
+					}
+				}
+			}
+			return maxWidth
+		})
+	})
+
 	return (
 		<box
 			flexDirection="column"
+			backgroundColor={colors.background}
 			border
-			borderColor={colors.borderFocused}
-			backgroundColor={colors.backgroundSecondary}
-			padding={1}
+			borderColor={colors.border}
+			title="Commands"
+			paddingTop={1}
+			paddingBottom={1}
+			paddingLeft={3}
+			paddingRight={3}
 			width="90%"
 			height="80%"
 		>
-			<box flexDirection="row" marginBottom={1}>
-				<text fg={colors.primary}>Search: </text>
+			<box flexDirection="row" marginBottom={2}>
+				<text fg={colors.text}>Search: </text>
 				<input
 					focused
-					placeholder="Type to filter..."
+					placeholder="Type to filter ..."
 					onInput={(value) => setFilter(value)}
 					onSubmit={() => dialog.close()}
 				/>
 			</box>
 
-			<box flexDirection="row" flexGrow={1} gap={2}>
+			<box flexDirection="row" flexGrow={1} gap={4}>
 				<For each={columns()}>
-					{(column) => (
-						<box flexDirection="column" flexGrow={1} flexBasis={0}>
-							<For each={column}>
-								{(group) => (
-									<box flexDirection="column" marginBottom={1}>
-										<text fg={colors.primary}>
-											<b>{group.name}</b>
-										</text>
-										<For each={group.commands}>
-											{(cmd) => (
-												<text fg={colors.text}>
-													<Show
-														when={cmd.keybind}
-														fallback={<span>{"        "}</span>}
-													>
-														{(kb: Accessor<KeybindConfigKey>) => (
-															<span style={{ fg: colors.primary }}>
-																{keybind.print(kb()).padEnd(8)}
-															</span>
-														)}
-													</Show>{" "}
-													{cmd.title}
+					{(column, colIndex) => {
+						const maxWidth = () => columnKeybindWidths()[colIndex()] || 0
+						return (
+							<box flexDirection="column" flexGrow={1} flexBasis={0}>
+								<For each={column}>
+									{(group) => {
+										const headerPad = " ".repeat(maxWidth() + 1)
+										return (
+											<box flexDirection="column" marginBottom={1}>
+												<text fg={colors.purple}>
+													{headerPad}
+													<b>{group.name}</b>
 												</text>
-											)}
-										</For>
-									</box>
-								)}
-							</For>
-						</box>
-					)}
+												<For each={group.commands}>
+													{(cmd) => {
+														const kb = cmd.keybind
+															? keybind.print(cmd.keybind)
+															: ""
+														const padded = kb.padStart(maxWidth())
+														return (
+															<text>
+																<span style={{ fg: colors.primary }}>
+																	{padded}
+																</span>
+																<span style={{ fg: colors.text }}>
+																	{" "}
+																	{cmd.title}
+																</span>
+															</text>
+														)
+													}}
+												</For>
+											</box>
+										)
+									}}
+								</For>
+							</box>
+						)
+					}}
 				</For>
-			</box>
-
-			<box marginTop={1}>
-				<text fg={colors.textMuted}>Press Esc or Enter to close</text>
 			</box>
 		</box>
 	)

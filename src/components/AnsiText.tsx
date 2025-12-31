@@ -7,6 +7,8 @@ interface AnsiTextProps {
 	cols?: number
 	bold?: boolean
 	wrapMode?: "none" | "char" | "word"
+	prefix?: string
+	prefixColor?: string
 }
 
 export function AnsiText(props: AnsiTextProps) {
@@ -34,6 +36,9 @@ export function AnsiText(props: AnsiTextProps) {
 		<For each={data().lines}>
 			{(line) => (
 				<text wrapMode={props.wrapMode ?? "word"}>
+					<Show when={props.prefix}>
+						<span style={{ fg: props.prefixColor }}>{props.prefix}</span>
+					</Show>
 					<Show when={props.bold} fallback={renderSpans(line)}>
 						<b>{renderSpans(line)}</b>
 					</Show>

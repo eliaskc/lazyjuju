@@ -39,19 +39,15 @@ export function StatusBar() {
 			paddingLeft={1}
 			paddingRight={1}
 			flexDirection="row"
-			gap={0}
+			gap={3}
 		>
 			<For each={relevantCommands()}>
-				{(cmd, index) => (
+				{(cmd) => (
 					<text>
-						<span style={{ fg: colors.primary }}>
+						<span style={{ fg: colors.text }}>
 							{cmd.keybind ? keybind.print(cmd.keybind) : ""}
 						</span>
-						<span style={{ fg: colors.textMuted }}> </span>
-						<span style={{ fg: colors.text }}>{cmd.title}</span>
-						<span style={{ fg: colors.textMuted }}>
-							{index() < relevantCommands().length - 1 ? " • " : ""}
-						</span>
+						<span style={{ fg: colors.textMuted }}> {cmd.title}</span>
 					</text>
 				)}
 			</For>

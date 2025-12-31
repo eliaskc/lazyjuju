@@ -132,12 +132,12 @@ export function BookmarksPanel() {
 		const mode = bookmarkViewMode()
 		if (mode === "files") {
 			const commit = selectedBookmarkCommit()
-			return commit ? `[2] Files (${commit.changeId.slice(0, 8)})` : "[2] Files"
+			return commit ? `Files (${commit.changeId.slice(0, 8)})` : "Files"
 		}
 		if (mode === "commits") {
-			return `[2] Commits (${activeBookmarkName()})`
+			return `Commits (${activeBookmarkName()})`
 		}
-		return "[2] Bookmarks"
+		return "Bookmarks"
 	}
 
 	const handleListEnter = () => {
@@ -270,15 +270,11 @@ export function BookmarksPanel() {
 			height="100%"
 			border
 			borderColor={isFocused() ? colors.borderFocused : colors.border}
+			title={`[2]─${title()}`}
 			overflow="hidden"
+			padding={0}
 			gap={0}
 		>
-			<box backgroundColor={colors.backgroundSecondary}>
-				<text fg={isFocused() ? colors.primary : colors.textMuted}>
-					{title()}
-				</text>
-			</box>
-
 			<Switch>
 				<Match when={bookmarkViewMode() === "list"}>
 					<Show when={bookmarksLoading()}>
@@ -306,8 +302,16 @@ export function BookmarksPanel() {
 													isSelected() ? colors.selectionBackground : undefined
 												}
 												overflow="hidden"
+												flexDirection="row"
+												gap={0}
+												height={1}
 											>
-												<text>
+												<text
+													fg={isSelected() ? colors.primary : colors.background}
+												>
+													{isSelected() ? "▌ " : "  "}
+												</text>
+												<text wrapMode="none">
 													<span style={{ fg: colors.primary }}>
 														{bookmark.name}
 													</span>
@@ -350,7 +354,15 @@ export function BookmarksPanel() {
 													isSelected() ? colors.selectionBackground : undefined
 												}
 												overflow="hidden"
+												flexDirection="row"
+												gap={0}
+												height={1}
 											>
+												<text
+													fg={isSelected() ? colors.primary : colors.background}
+												>
+													{isSelected() ? "▌ " : "  "}
+												</text>
 												<text wrapMode="none">
 													<span
 														style={{
@@ -419,7 +431,15 @@ export function BookmarksPanel() {
 													isSelected() ? colors.selectionBackground : undefined
 												}
 												overflow="hidden"
+												flexDirection="row"
+												gap={0}
+												height={1}
 											>
+												<text
+													fg={isSelected() ? colors.primary : colors.background}
+												>
+													{isSelected() ? "▌ " : "  "}
+												</text>
 												<text>
 													<span style={{ fg: colors.textMuted }}>{indent}</span>
 													<span

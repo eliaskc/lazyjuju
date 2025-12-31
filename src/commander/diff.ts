@@ -16,14 +16,7 @@ export async function fetchDiff(
 		env.COLUMNS = String(options.columns)
 	}
 
-	const args = [
-		"diff",
-		"-r",
-		changeId,
-		"--color",
-		"always",
-		"--ignore-working-copy",
-	]
+	const args = ["diff", "-r", changeId, "--git", "--ignore-working-copy"]
 
 	if (options.paths && options.paths.length > 0) {
 		args.push(...options.paths)

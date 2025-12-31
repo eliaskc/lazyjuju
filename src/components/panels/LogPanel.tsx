@@ -21,7 +21,7 @@ export function LogPanel() {
 	const command = useCommand()
 
 	const isFocused = () => focus.is("log")
-	const title = () => (viewMode() === "files" ? "[1] Files" : "[1] Log")
+	const title = () => (viewMode() === "files" ? "Files" : "Log")
 
 	let scrollRef: ScrollBoxRenderable | undefined
 	const [scrollTop, setScrollTop] = createSignal(0)
@@ -98,14 +98,8 @@ export function LogPanel() {
 			height="100%"
 			border
 			borderColor={isFocused() ? colors.borderFocused : colors.border}
-			overflow="hidden"
-			gap={0}
+			title={`[1]─${title()}`}
 		>
-			<box backgroundColor={colors.backgroundSecondary}>
-				<text fg={isFocused() ? colors.primary : colors.textMuted}>
-					{title()}
-				</text>
-			</box>
 			<Show when={loading()}>
 				<text>Loading...</text>
 			</Show>
@@ -123,15 +117,22 @@ export function LogPanel() {
 							const isSelected = () => index() === selectedIndex()
 							return (
 								<For each={commit.lines}>
-									{(line) => (
+									{(line, lineIndex) => (
 										<box
 											backgroundColor={
 												isSelected() ? colors.selectionBackground : undefined
 											}
 											overflow="hidden"
+											flexDirection="row"
+											gap={0}
+											height={1}
 										>
 											<AnsiText
 												content={line}
+												prefix={isSelected() ? "▌ " : "  "}
+												prefixColor={
+													isSelected() ? colors.primary : colors.background
+												}
 												bold={commit.isWorkingCopy}
 												wrapMode="none"
 											/>

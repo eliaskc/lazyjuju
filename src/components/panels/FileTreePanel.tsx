@@ -117,7 +117,7 @@ export function FileTreePanel() {
 
 	const commit = selectedCommit()
 	const title = () =>
-		commit ? `[1] Files (${commit.changeId.slice(0, 8)})` : "[1] Files"
+		commit ? `Files (${commit.changeId.slice(0, 8)})` : "Files"
 
 	return (
 		<box
@@ -126,14 +126,8 @@ export function FileTreePanel() {
 			height="100%"
 			border
 			borderColor={isFocused() ? colors.borderFocused : colors.border}
-			overflow="hidden"
-			gap={0}
+			title={`[1]─${title()}`}
 		>
-			<box backgroundColor={colors.backgroundSecondary}>
-				<text fg={isFocused() ? colors.primary : colors.textMuted}>
-					{title()}
-				</text>
-			</box>
 			<Show when={filesLoading()}>
 				<text fg={colors.textMuted}>Loading files...</text>
 			</Show>
@@ -168,7 +162,13 @@ export function FileTreePanel() {
 										isSelected() ? colors.selectionBackground : undefined
 									}
 									overflow="hidden"
+									flexDirection="row"
+									gap={0}
+									height={1}
 								>
+									<text fg={isSelected() ? colors.primary : colors.background}>
+										{isSelected() ? "▌ " : "  "}
+									</text>
 									<text>
 										<span style={{ fg: colors.textMuted }}>{indent}</span>
 										<span
