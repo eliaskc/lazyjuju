@@ -69,8 +69,33 @@ This project uses Solid.js, NOT React. Key differences:
 
 - **Entry**: `src/index.tsx` - renders root App component
 - **Commander**: `src/commander/` - jj CLI wrappers and output parsers
-- **Components**: `src/components/` - TUI components (planned)
-- **Context**: `src/context/` - state management (planned)
+- **Components**: `src/components/` - TUI components
+- **Context**: `src/context/` - SolidJS context providers (state management)
+
+## Project Context & Plans
+
+The `context/` folder contains project documentation:
+
+### Primary Docs (start here)
+- **`context/STATUS.md`** - Current state: what works, known issues
+- **`context/ROADMAP.md`** - Planned features with priorities (Next Up / Nice-to-Have)
+
+### References (analysis of similar projects)
+- **`context/references/reference-jjui.md`** - jjui (Go) analysis
+- **`context/references/reference-lazyjj.md`** - lazyjj (Rust) analysis
+- **`context/references/reference-opencode.md`** - opencode patterns
+- **`context/references/reference-opentui.md`** - OpenTUI framework notes
+
+### LLM Suggestions (low priority, browse for ideas)
+- **`context/llm-suggestions/index.md`** - AI-generated improvement ideas
+- These carry less weight than ROADMAP items
+
+### Archive (historical reference)
+- **`context/archive/lazyjj-plan.md`** - Original full design spec
+- **`context/archive/implementation-order.md`** - Phase history
+
+### Research
+- **`context/opentui-research.md`** - ANSI rendering and OpenTUI deep dive
 
 ## jj (Jujutsu) Workflow
 

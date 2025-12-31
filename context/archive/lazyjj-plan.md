@@ -174,13 +174,16 @@ __LJ__ghi789__LJ__jkl012__LJ__ ○ fix: bug
 - `Escape` returns to Log view
 - Selecting a file shows its diff in main area
 
-### Bookmarks Panel
+### Bookmarks Panel ✅
 
 - List of local and remote bookmarks
-- Selecting a bookmark shows its log in main area
+- **Drill-down navigation**: Bookmark list → commit log → file tree (morphing panel pattern)
+- Selecting a bookmark shows its commits, selecting a commit shows its files
+- File tree with folder collapse/expand, file status colors (A/M/D)
+- Back navigation with Escape at each level
 - `Enter` on commit in that log → jumps to that commit in main Log panel
 
-**Bookmark Operations:**
+**Bookmark Operations (planned):**
 | Key | Action |
 |-----|--------|
 | `c` | Create bookmark (at selected commit in Log, or prompt if in Bookmarks panel) |
@@ -618,6 +621,19 @@ All steps must pass. Clear error output for agent debugging.
 ---
 
 ## Post-MVP Features
+
+### Immediate Priorities (UI/UX Polish)
+- **Theme system revamp**: Custom themes or use terminal colors
+- **Modal/dialog consistency**: Ensure dialogs feel consistent with the rest of the app
+- **Panel labels inside border**: Move `[1] Log` labels to sit on/inside the border line (like lazygit's title on border)
+- **Panel width tuning**: Make log and bookmark panels slightly wider to fit standard-length log messages
+- **Help modal fixes**:
+  - Fix search input not visually appearing (filtering works)
+  - `?` should toggle (also close) the help modal
+- **Design review**: Overall look and feel pass
+- **Rich commit details**: Show full commit message (subject + body) with `--stat` or `--summary` at top (like lazygit's patch view with file change counts)
+- **Performance audit**: Significant lag when navigating commits in bookmarks tab (diff rendering/ANSI parsing likely culprit). Static analysis first, then profiling.
+- **Mouse support**: Click to focus panels, scroll, double-click for primary action
 
 ### Tier 1 (High Priority)
 - Auto-refresh on filesystem changes

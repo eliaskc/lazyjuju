@@ -289,16 +289,16 @@ bun run src/index.tsx
 **References**:
 - ghostty-opentui: https://github.com/remorses/ghostty-opentui
 - critique (production example): https://github.com/remorses/critique
-- Detailed research: `plans/opentui-research.md`
+- Detailed research: `../opentui-research.md`
 
 ---
 
-## Current State Summary (2025-12-30)
+## Current State Summary (2025-12-31)
 
 ### ✅ What Works
 - Full jj log display with ANSI colors, graph symbols, and metadata
 - Two-panel layout (log left, diff right)
-- Navigation: j/k (move selection), g/G (top/bottom), Tab (switch panels)
+- Navigation: j/k (move selection), Tab (switch panels), 1/2/3 (jump to panel)
 - Diff viewer with full ANSI color support (difftastic, delta, etc. all work!)
 - Commit header with author, date, timezone, empty status
 - Debounced diff loading (smooth navigation even with large diffs)
@@ -315,9 +315,14 @@ bun run src/index.tsx
 - **Dialog system** with backdrop and modal stack
 - **Theme system** with OpenCode-based semantic color tokens
 - **Manual refresh** with `R` key
+- **Bookmarks panel** with drill-down navigation:
+  - Bookmark list → commit log → file tree (morphing panel pattern)
+  - Full file tree with folder collapse/expand
+  - Diff view for selected files
+  - Back navigation with Escape
 
 ### 🎯 Read-Only Mode Complete!
-We have a polished, production-quality read-only jj TUI viewer. All Phase 1-6 goals met!
+We have a polished, production-quality read-only jj TUI viewer. All Phase 1-6 goals met + bookmarks!
 
 ### 🚧 What's Next (Phase 7: Core Operations)
 - `n` - new commit
@@ -326,13 +331,30 @@ We have a polished, production-quality read-only jj TUI viewer. All Phase 1-6 go
 - `s` - squash into parent
 - `a` - abandon commit
 
-### 📦 Post-Prototype Priorities
-1. **Core Operations** (Phase 7): new, edit, describe, squash, abandon
-2. **Modals** (Phase 8): describe modal, confirmation dialogs
-3. **Bookmarks Panel** (Phase 9): bookmark list, bookmark operations
-4. **Command Mode** (Phase 10): `:` command input and execution
-5. **Command Palette** (Phase 11): Ctrl+P searchable command list (trivial with registry)
+### 📦 Upcoming Priorities
+
+#### UI/UX Polish
+- **Theme system revamp**: Custom themes or use terminal colors
+- **Modal/dialog consistency**: Ensure dialogs feel consistent with the rest of the app
+- **Panel labels inside border**: Move `[1] Log` style labels to sit on/inside the border line (like lazygit's title placement on border)
+- **Panel width tuning**: Make log and bookmark panels slightly wider to fit standard-length log messages
+- **Help modal fixes**:
+  - Fix search input not visually appearing (filtering works)
+  - `?` should also close the help modal (toggle behavior)
+- **Design review**: Overall look and feel pass
+
+#### Main Area Enhancements
+- **Rich commit details**: Show full commit message (subject + body) with `--stat` or `--summary` at the top (like lazygit's patch view showing file change counts)
+
+#### Performance
+- **Performance audit**: Significant lag when navigating commits in bookmarks tab
+  - Likely culprit: diff rendering and/or ANSI parsing
+  - Approach: Static analysis first, then profiling/benchmarking
+
+#### Interactivity
+- **Mouse support**: Click to focus panels, scroll, double-click for primary action
 
 ### 🐛 Known Issues
 - Help modal has a small visual gap between border and outer edge (OpenTUI rendering quirk)
+- Search input in help modal doesn't render visually (but filtering works)
 
