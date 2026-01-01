@@ -53,7 +53,6 @@
 
 ### Bugs
 
-- **Diff doesn't update on panel focus change** - When viewing a diff from bookmarks panel (commit or file), switching focus back to log panel doesn't update the diff to show the log's selected commit. Diff should reflect the focused panel's selection.
 - Help modal has small visual gap between border and outer edge (OpenTUI quirk)
 - Search input in help modal doesn't render visually (filtering works though)
 

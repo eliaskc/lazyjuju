@@ -148,8 +148,8 @@ function AppContent() {
 export function App() {
 	return (
 		<ThemeProvider>
-			<SyncProvider>
-				<FocusProvider>
+			<FocusProvider>
+				<SyncProvider>
 					<KeybindProvider>
 						<DialogProvider>
 							<CommandProvider>
@@ -157,8 +157,8 @@ export function App() {
 							</CommandProvider>
 						</DialogProvider>
 					</KeybindProvider>
-				</FocusProvider>
-			</SyncProvider>
+				</SyncProvider>
+			</FocusProvider>
 		</ThemeProvider>
 	)
 }

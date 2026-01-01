@@ -21,6 +21,7 @@ import {
 	flattenTree,
 	getFilePaths,
 } from "../utils/file-tree"
+import { useFocus } from "./focus"
 
 export type ViewMode = "log" | "files"
 export type BookmarkViewMode = "list" | "commits" | "files"
@@ -106,6 +107,7 @@ const SyncContext = createContext<SyncContextValue>()
 
 export function SyncProvider(props: { children: JSX.Element }) {
 	const renderer = useRenderer()
+	const focus = useFocus()
 	const [commits, setCommits] = createSignal<Commit[]>([])
 	const [selectedIndex, setSelectedIndex] = createSignal(0)
 	const [loading, setLoading] = createSignal(false)
@@ -405,18 +407,19 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		const columns = mainAreaWidth()
 		const mode = viewMode()
 		const bmMode = bookmarkViewMode()
+		const focusedPanel = focus.current()
 
 		if (diffDebounceTimer) {
 			clearTimeout(diffDebounceTimer)
 		}
 
-		if (bmMode === "commits") {
+		if (focusedPanel === "bookmarks" && bmMode === "commits") {
 			const commit = selectedBookmarkCommit()
 			if (!commit) return
 			diffDebounceTimer = setTimeout(() => {
 				loadDiff(commit.changeId, columns)
 			}, 100)
-		} else if (bmMode === "files") {
+		} else if (focusedPanel === "bookmarks" && bmMode === "files") {
 			const commit = selectedBookmarkCommit()
 			const file = selectedBookmarkFile()
 			if (!commit || !file) return
