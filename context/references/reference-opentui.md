@@ -281,7 +281,7 @@ function useApp() {
 
 ---
 
-## Key Patterns for lazierjj
+## Key Patterns for lazyjuju
 
 1. **Focus management** - Track focused panel in parent, pass `focused` prop
 2. **Key routing** - Global keys in App, local keys via focused components

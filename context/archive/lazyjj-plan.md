@@ -1,4 +1,4 @@
-# lazierjj - A Modern TUI for Jujutsu
+# lazyjuju - A Modern TUI for Jujutsu
 
 > A polished TUI for [jj (Jujutsu)](https://github.com/martinvonz/jj) built with [OpenTUI](https://github.com/sst/opentui) + SolidJS, inspired by [lazygit](https://github.com/jesseduffield/lazygit)
 
@@ -45,7 +45,7 @@
 | **Framework** | OpenTUI + SolidJS | Production-proven (opencode uses it), more features (Portal, Dynamic), better examples |
 | **Runtime** | Bun | Native TS execution, fast startup, OpenTUI's target runtime |
 | **Language** | TypeScript (strict) | Type safety, ecosystem alignment |
-| **Config format** | TOML | Match jj's config format, read from `[lazierjj]` section in jj config |
+| **Config format** | TOML | Match jj's config format, read from `[lazyjuju]` section in jj config |
 | **Config validation** | Zod | Schema validation with defaults, great error messages for agents |
 | **Diff engine** | jj's configured tool | Shell out to `jj diff`, display ANSI output verbatim |
 | **Linting/Formatting** | Biome | Fast, single tool, instant feedback |
@@ -383,19 +383,19 @@ Used for:
 
 ### Location Priority
 
-1. `[lazierjj]` section in jj's config (`~/.jjconfig.toml` or `.jj/repo/config.toml`)
-2. Standalone `~/.config/lazierjj/config.toml` (fallback, respects XDG_CONFIG_HOME)
+1. `[lazyjuju]` section in jj's config (`~/.jjconfig.toml` or `.jj/repo/config.toml`)
+2. Standalone `~/.config/lazyjuju/config.toml` (fallback, respects XDG_CONFIG_HOME)
 
 ### Example Config
 
 ```toml
 # In ~/.jjconfig.toml
-[lazierjj]
+[lazyjuju]
 # Diff settings - if set, uses jj diff --tool <this>; otherwise jj uses its own config
 diff_tool = "difft"  # optional: "difft", "delta", etc.
 
 # Keybindings (full customization from MVP)
-[lazierjj.keybinds]
+[lazyjuju.keybinds]
 quit = "q"
 new = "n"
 edit = "e"
@@ -419,7 +419,7 @@ yank = "y"
 # ... all keybindings configurable
 
 # UI behavior
-[lazierjj.ui]
+[lazyjuju.ui]
 side_panel_width = 0.35
 ```
 
@@ -443,7 +443,7 @@ We shell out to `jj diff` and display the output in a scrollable viewport. Side-
 
 ### Resolution Order
 
-1. **lazierjj config** - If `diff_tool` is set in `[lazierjj]`, use `jj diff --tool <configured>`
+1. **lazyjuju config** - If `diff_tool` is set in `[lazyjuju]`, use `jj diff --tool <configured>`
 2. **jj default** - Otherwise, run `jj diff` (jj uses its own `ui.diff.tool` config or falls back to `--color-words`)
 
 ### Toggle (`v` key)
@@ -522,7 +522,7 @@ Cycles through: configured tool → `--color-words` → `--git` (unified patch f
 ### Project Structure for Agents
 
 ```
-lazierjj/
+lazyjuju/
 ├── CLAUDE.md              # Symlinked to AGENTS.md - project context for AI agents
 ├── AGENTS.md              # Primary agent instructions file
 ├── src/                   # Small, focused files (~200 LOC max)
@@ -673,7 +673,7 @@ All steps must pass. Clear error output for agent debugging.
 ## File Structure
 
 ```
-lazierjj/
+lazyjuju/
 ├── CLAUDE.md                    # Symlink to AGENTS.md
 ├── AGENTS.md                    # Agent context and instructions
 ├── README.md                    # User-facing documentation

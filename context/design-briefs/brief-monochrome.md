@@ -6,7 +6,7 @@
 
 ## Your Task
 
-Redesign lazierjj with a monochrome palette plus ONE accent color. Everything is grayscale except for a single pop color used strategically for focus, selection, and important actions.
+Redesign lazyjuju with a monochrome palette plus ONE accent color. Everything is grayscale except for a single pop color used strategically for focus, selection, and important actions.
 
 ---
 

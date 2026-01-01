@@ -4,7 +4,7 @@
 
 ```toml
 # In jj config (e.g., ~/.jjconfig.toml)
-[lazierjj.commands]
+[lazyjuju.commands]
 fixup = "jj squash --into @-"
 sync = "jj git fetch && jj rebase -d main@origin"
 ```
@@ -12,7 +12,7 @@ sync = "jj git fetch && jj rebase -d main@origin"
 ## With Placeholder Support (from jjui)
 
 ```toml
-[lazierjj.commands]
+[lazyjuju.commands]
 cherry-pick = "jj new $change_id"
 diff-tool = "jj diff -r $change_id --tool difft"
 ```

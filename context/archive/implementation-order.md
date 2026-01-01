@@ -1,4 +1,4 @@
-# Implementation Order - lazierjj
+# Implementation Order - lazyjuju
 
 > Getting to a runnable prototype as fast as possible
 > 

@@ -6,7 +6,7 @@
 
 ## Your Task
 
-Redesign lazierjj to match the OpenCode aesthetic. The app should feel premium, cohesive, and have a distinctive identity with the signature peach-on-black look.
+Redesign lazyjuju to match the OpenCode aesthetic. The app should feel premium, cohesive, and have a distinctive identity with the signature peach-on-black look.
 
 ---
 

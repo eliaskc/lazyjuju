@@ -2,7 +2,7 @@
 
 > Reference: https://github.com/sst/opencode
 > Tech: TypeScript, SolidJS, OpenTUI
-> Relevance: **HIGH** - Same stack as lazierjj
+> Relevance: **HIGH** - Same stack as lazyjuju
 
 ---
 
@@ -209,7 +209,7 @@ sdk.event.listen((event) => {
 
 ---
 
-## Key Takeaways for lazierjj
+## Key Takeaways for lazyjuju
 
 1. **Theme tokens** - Use ~50 semantic tokens, not raw colors
 2. **OSC 11 detection** - Query terminal for light/dark mode

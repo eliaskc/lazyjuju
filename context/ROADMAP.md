@@ -1,4 +1,4 @@
-# lazierjj - Roadmap
+# lazyjuju - Roadmap
 
 > Features planned for implementation, ordered by priority.
 > 
@@ -13,7 +13,7 @@ These are the definite next priorities. Work on these first.
 
 ### Core Operations
 
-The essential jj operations to make lazierjj actually useful for daily work.
+The essential jj operations to make lazyjuju actually useful for daily work.
 
 | Key | Operation | Behavior |
 |-----|-----------|----------|
@@ -99,7 +99,7 @@ Requires command picker (`Ctrl+P` or `/theme`):
 - Persist selection to config file
 
 **Config persistence**:
-- Store in `~/.config/lazierjj/config.toml` or jj config `[lazierjj]` section
+- Store in `~/.config/lazyjuju/config.toml` or jj config `[lazyjuju]` section
 - Load on startup, default to "opencode"
 
 #### Phase 3: Theme Parity with OpenCode (Future)

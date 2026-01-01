@@ -1,4 +1,4 @@
-# lazierjj Agent Guidelines
+# lazyjuju Agent Guidelines
 
 ## Build/Test Commands
 

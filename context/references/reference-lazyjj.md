@@ -205,7 +205,7 @@ fn test_parse_log() {
 
 ---
 
-## Key Takeaways for lazierjj
+## Key Takeaways for lazyjuju
 
 1. **Use jj's config** - Don't create a separate config file
 2. **Per-tab keybinds** - Each panel has its own event enum

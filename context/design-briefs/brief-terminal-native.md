@@ -6,7 +6,7 @@
 
 ## Your Task
 
-Redesign lazierjj to follow the lazygit/lazyjj aesthetic. The app should disappear into the user's terminal setup, using their colors and feeling like a natural CLI tool.
+Redesign lazyjuju to follow the lazygit/lazyjj aesthetic. The app should disappear into the user's terminal setup, using their colors and feeling like a natural CLI tool.
 
 ---
 

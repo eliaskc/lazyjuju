@@ -186,7 +186,7 @@ func (w *wrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 ---
 
-## Key Takeaways for lazierjj
+## Key Takeaways for lazyjuju
 
 1. **Selector-based palette** - `palette.get("panel selected")` with inheritance
 2. **Nested key modes** - Group keys by context (rebase, bookmark, diff)
