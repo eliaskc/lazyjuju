@@ -10,7 +10,7 @@ import {
 	useContext,
 } from "solid-js"
 import { type Bookmark, fetchBookmarks } from "../commander/bookmarks"
-import { fetchDiff } from "../commander/diff"
+import { streamDiffPTY } from "../commander/diff"
 import { fetchFiles } from "../commander/files"
 import { fetchLog } from "../commander/log"
 import type { Commit, FileChange } from "../commander/types"
@@ -23,6 +23,17 @@ import {
 } from "../utils/file-tree"
 import { useFocus } from "./focus"
 import { useLoading } from "./loading"
+
+const PROFILE = process.env.LAZYJUJU_PROFILE === "1"
+
+function profile(label: string) {
+	if (!PROFILE) return () => {}
+	const start = performance.now()
+	return (extra?: string) => {
+		const ms = (performance.now() - start).toFixed(2)
+		console.error(`[PROFILE] ${label}: ${ms}ms${extra ? ` (${extra})` : ""}`)
+	}
+}
 
 export type ViewMode = "log" | "files"
 export type BookmarkViewMode = "list" | "commits" | "files"
@@ -42,6 +53,7 @@ interface SyncContextValue {
 	diff: () => string | null
 	diffLoading: () => boolean
 	diffError: () => string | null
+	diffLineCount: () => number
 	terminalWidth: () => number
 	terminalHeight: () => number
 	mainAreaWidth: () => number
@@ -117,6 +129,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	const [diff, setDiff] = createSignal<string | null>(null)
 	const [diffLoading, setDiffLoading] = createSignal(false)
 	const [diffError, setDiffError] = createSignal<string | null>(null)
+	const [diffLineCount, setDiffLineCount] = createSignal(0)
 	const [terminalWidth, setTerminalWidth] = createSignal(renderer.width)
 	const [terminalHeight, setTerminalHeight] = createSignal(renderer.height)
 
@@ -404,33 +417,58 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		return null
 	}
 
-	let diffDebounceTimer: ReturnType<typeof setTimeout> | null = null
 	let currentDiffKey: string | null = null
+	let currentDiffStream: { cancel: () => void } | null = null
 
-	const loadDiff = async (
-		changeId: string,
-		columns: number,
-		paths?: string[],
-	) => {
+	const loadDiff = (changeId: string, columns: number, paths?: string[]) => {
+		const endTotal = profile(`loadDiff(${changeId.slice(0, 8)})`)
 		const key = paths?.length ? `${changeId}:${paths.join(",")}` : changeId
+
+		if (currentDiffStream) {
+			currentDiffStream.cancel()
+			currentDiffStream = null
+		}
+
 		currentDiffKey = key
 		setDiffLoading(true)
 		setDiffError(null)
-		try {
-			const result = await fetchDiff(changeId, { columns, paths })
-			if (currentDiffKey === key) {
-				setDiff(result)
-			}
-		} catch (e) {
-			if (currentDiffKey === key) {
-				setDiffError(e instanceof Error ? e.message : "Failed to load diff")
-				setDiff(null)
-			}
-		} finally {
-			if (currentDiffKey === key) {
-				setDiffLoading(false)
-			}
-		}
+
+		let firstUpdate = true
+
+		currentDiffStream = streamDiffPTY(
+			changeId,
+			{
+				columns,
+				paths,
+				cols: columns,
+				rows: terminalHeight(),
+			},
+			{
+				onUpdate: (content: string, lineCount: number, complete: boolean) => {
+					if (currentDiffKey !== key) return
+
+					if (firstUpdate) {
+						profile("  first render trigger")()
+						firstUpdate = false
+					}
+
+					setDiff(content)
+					setDiffLineCount(lineCount)
+
+					if (complete) {
+						setDiffLoading(false)
+						endTotal()
+					}
+				},
+				onError: (error: Error) => {
+					if (currentDiffKey !== key) return
+					setDiffError(error.message)
+					setDiff(null)
+					setDiffLoading(false)
+					endTotal()
+				},
+			},
+		)
 	}
 
 	const computeDiffKey = (changeId: string, paths?: string[]) =>
@@ -470,13 +508,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		const newKey = computeDiffKey(changeId, paths)
 		if (newKey === currentDiffKey) return
 
-		if (diffDebounceTimer) {
-			clearTimeout(diffDebounceTimer)
-		}
-
-		diffDebounceTimer = setTimeout(() => {
-			loadDiff(changeId, columns, paths)
-		}, 100)
+		loadDiff(changeId, columns, paths)
 	})
 
 	const loadLog = async () => {
@@ -555,6 +587,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		diff,
 		diffLoading,
 		diffError,
+		diffLineCount,
 		terminalWidth,
 		terminalHeight,
 		mainAreaWidth,

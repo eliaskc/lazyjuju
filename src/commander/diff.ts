@@ -1,4 +1,20 @@
-import { execute } from "./executor"
+import {
+	execute,
+	executeStreaming,
+	executePTYStreaming,
+	type PTYStreamingOptions,
+} from "./executor"
+
+const PROFILE = process.env.LAZYJUJU_PROFILE === "1"
+
+function profile(label: string) {
+	if (!PROFILE) return () => {}
+	const start = performance.now()
+	return (extra?: string) => {
+		const ms = (performance.now() - start).toFixed(2)
+		console.error(`[PROFILE] ${label}: ${ms}ms${extra ? ` (${extra})` : ""}`)
+	}
+}
 
 export interface FetchDiffOptions {
 	cwd?: string
@@ -10,6 +26,8 @@ export async function fetchDiff(
 	changeId: string,
 	options: FetchDiffOptions = {},
 ): Promise<string> {
+	const endTotal = profile(`fetchDiff(${changeId.slice(0, 8)})`)
+
 	const env: Record<string, string> = {}
 
 	if (options.columns) {
@@ -35,5 +53,134 @@ export async function fetchDiff(
 		throw new Error(`jj diff failed: ${result.stderr}`)
 	}
 
+	endTotal()
 	return result.stdout
+}
+
+export interface StreamDiffCallbacks {
+	onUpdate: (content: string, lineCount: number, complete: boolean) => void
+	onError: (error: Error) => void
+}
+
+export function streamDiff(
+	changeId: string,
+	options: FetchDiffOptions,
+	callbacks: StreamDiffCallbacks,
+): { cancel: () => void } {
+	const endTotal = profile(`streamDiff(${changeId.slice(0, 8)})`)
+
+	const env: Record<string, string> = {}
+
+	if (options.columns) {
+		env.COLUMNS = String(options.columns)
+	}
+
+	const args = [
+		"diff",
+		"-r",
+		changeId,
+		"--color",
+		"always",
+		"--ignore-working-copy",
+	]
+
+	if (options.paths && options.paths.length > 0) {
+		args.push(...options.paths)
+	}
+
+	let firstUpdate = true
+	const endFirstChunk = profile("  first chunk")
+
+	return executeStreaming(
+		args,
+		{ cwd: options.cwd, env },
+		{
+			onChunk: (content, lineCount) => {
+				if (firstUpdate) {
+					endFirstChunk(`${lineCount} lines`)
+					firstUpdate = false
+				}
+				callbacks.onUpdate(content, lineCount, false)
+			},
+			onComplete: (result) => {
+				endTotal()
+				if (result.success) {
+					callbacks.onUpdate(
+						result.stdout,
+						result.stdout.split("\n").length,
+						true,
+					)
+				} else {
+					callbacks.onError(new Error(`jj diff failed: ${result.stderr}`))
+				}
+			},
+			onError: callbacks.onError,
+		},
+	)
+}
+
+export interface StreamDiffPTYOptions extends FetchDiffOptions {
+	cols?: number
+	rows?: number
+}
+
+export function streamDiffPTY(
+	changeId: string,
+	options: StreamDiffPTYOptions,
+	callbacks: StreamDiffCallbacks,
+): { cancel: () => void } {
+	const endTotal = profile(`streamDiffPTY(${changeId.slice(0, 8)})`)
+
+	const env: Record<string, string> = {}
+
+	if (options.columns) {
+		env.COLUMNS = String(options.columns)
+	}
+
+	const args = [
+		"diff",
+		"-r",
+		changeId,
+		"--color",
+		"always",
+		"--no-pager",
+		"--ignore-working-copy",
+	]
+
+	if (options.paths && options.paths.length > 0) {
+		args.push(...options.paths)
+	}
+
+	let firstUpdate = true
+	const endFirstChunk = profile("  PTY first chunk")
+
+	const ptyOptions: PTYStreamingOptions = {
+		cwd: options.cwd,
+		env,
+		cols: options.cols,
+		rows: options.rows,
+	}
+
+	return executePTYStreaming(args, ptyOptions, {
+		onChunk: (content, lineCount) => {
+			if (firstUpdate) {
+				endFirstChunk(`${lineCount} lines`)
+				firstUpdate = false
+			}
+			callbacks.onUpdate(content, lineCount, false)
+		},
+		onComplete: (result) => {
+			endTotal()
+			if (result.success) {
+				callbacks.onUpdate(
+					result.stdout,
+					result.stdout.split("\n").length,
+					true,
+				)
+			} else {
+				callbacks.onError(new Error(`jj diff failed: ${result.stderr}`))
+			}
+		},
+		onError: callbacks.onError,
+	})
 }

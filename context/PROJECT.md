@@ -133,6 +133,17 @@ Each corner prop accepts `JSX.Element | string`. Internally wraps content in `po
 - [ ] Phase 2: Theme switching via command palette or config
 - [ ] Phase 3: More themes (tokyonight, catppuccin, gruvbox, nord)
 
+## Interactive Splitting
+
+- [ ] Split mode entry (`S` on commit)
+- [ ] File-level Keep/Split marking
+- [ ] Hunk-level splitting (split-pane view)
+- [ ] Line-level selection (future)
+
+Lazygit-style interactive `jj split` — mark files/hunks to keep in current commit vs. split to new commit. Two-pane view for hunk mode with cursor navigation, Space to move hunks between panes.
+
+→ [Detailed plan](./plans/interactive-splitting.md)
+
 ## Release & Distribution
 
 - [ ] bunx / npx execution
@@ -140,6 +151,7 @@ Each corner prop accepts `JSX.Element | string`. Internally wraps content in `po
 - [ ] npm publishing
 - [ ] GitHub Actions release workflow
 - [ ] CLI alias — short command like `ljj`, `lj`, or `juju`
+- [ ] Auto-updater with self-update capability
 
 → [Detailed plan](./plans/release-flows.md)
 
@@ -164,9 +176,17 @@ Each corner prop accepts `JSX.Element | string`. Internally wraps content in `po
 
 ### Performance
 
-- Some lag when navigating commits quickly (diff rendering / ANSI parsing)
+All major performance issues have been resolved:
+
+- **Fixed:** Large diff rendering (50k+ lines) — PTY streaming + lazy loading → [details](./plans/diff-virtualization.md)
 - **Fixed:** Oplog lazy loading (initial 50, loads more on scroll near bottom)
 - **Fixed:** Diff reload flash, log/bookmarks flash, spinner flash
+- **Fixed:** Large diff lazy loading (initial 500 lines, loads 500 more when scrolling near bottom)
+
+**Benchmarking:**
+- `bun test tests/bench/` runs performance benchmarks
+- Results written to `bench-results.json` (gitignored)
+- Threshold assertions catch major regressions
 
 ### UX Polish
 

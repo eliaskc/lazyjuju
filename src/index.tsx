@@ -1,6 +1,10 @@
 import { ConsolePosition } from "@opentui/core"
-import { render } from "@opentui/solid"
+import { extend, render } from "@opentui/solid"
+import { GhosttyTerminalRenderable } from "ghostty-opentui/terminal-buffer"
 import { App } from "./App"
+
+// Register ghostty-terminal component for ANSI rendering
+extend({ "ghostty-terminal": GhosttyTerminalRenderable })
 
 render(() => <App />, {
 	consoleOptions: {

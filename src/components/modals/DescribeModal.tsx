@@ -1,4 +1,8 @@
-import { type InputRenderable, RGBA } from "@opentui/core"
+import {
+	type InputRenderable,
+	RGBA,
+	type TextareaRenderable,
+} from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createSignal, onMount } from "solid-js"
 import { useDialog } from "../../context/dialog"
@@ -21,16 +25,21 @@ export function DescribeModal(props: DescribeModalProps) {
 	)
 
 	let subjectRef: InputRenderable | undefined
-	let bodyRef: InputRenderable | undefined
+	let bodyRef: TextareaRenderable | undefined
 
-	const focusAtEnd = (ref: InputRenderable | undefined) => {
+	const focusInputAtEnd = (ref: InputRenderable | undefined) => {
 		if (!ref) return
 		ref.focus()
 		ref.cursorPosition = ref.value.length
 	}
 
+	const focusTextarea = (ref: TextareaRenderable | undefined) => {
+		if (!ref) return
+		ref.focus()
+	}
+
 	onMount(() => {
-		setTimeout(() => focusAtEnd(subjectRef), 1)
+		setTimeout(() => focusInputAtEnd(subjectRef), 1)
 	})
 
 	const handleSave = () => {
@@ -43,10 +52,10 @@ export function DescribeModal(props: DescribeModalProps) {
 			evt.preventDefault()
 			if (focusedField() === "subject") {
 				setFocusedField("body")
-				focusAtEnd(bodyRef)
+				focusTextarea(bodyRef)
 			} else {
 				setFocusedField("subject")
-				focusAtEnd(subjectRef)
+				focusInputAtEnd(subjectRef)
 			}
 		}
 	})
@@ -94,10 +103,14 @@ export function DescribeModal(props: DescribeModalProps) {
 				padding={0}
 				title="Body"
 			>
-				<input
-					ref={bodyRef}
-					value={props.initialBody}
-					onInput={(value) => setBody(value)}
+				<textarea
+					ref={(r) => {
+						bodyRef = r
+					}}
+					initialValue={props.initialBody}
+					onContentChange={() => {
+						if (bodyRef) setBody(bodyRef.plainText)
+					}}
 					cursorColor={colors().primary}
 					textColor={colors().text}
 					focusedTextColor={colors().text}
