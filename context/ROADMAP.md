@@ -92,6 +92,8 @@ Some lag when navigating commits quickly.
 
 **Fixed:**
 - ✅ Diff reload on focus switch — now skips if content unchanged (major perceived lag reduction)
+- ✅ Log/Bookmarks panels use stale-while-revalidate (no flash on refresh)
+- ✅ Status bar spinner debounced (150ms) to avoid flash on fast operations
 
 **Remaining suspected causes:**
 - Diff rendering (ANSI parsing via ghostty-opentui)
@@ -101,6 +103,9 @@ Some lag when navigating commits quickly.
 1. Profile with `bun --inspect` or console timing
 2. Identify hot paths (ANSI parsing? rendering?)
 3. Consider: memoization, virtualization, or async loading patterns
+
+**Deferred until perf fixed:**
+- MainArea (diff panel) stale-while-revalidate — keep old diff visible while loading new one
 
 **Success criteria:** Navigation feels instant (<50ms perceived lag)
 

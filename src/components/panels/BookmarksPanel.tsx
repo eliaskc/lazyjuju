@@ -14,6 +14,7 @@ import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
 import { useFocus } from "../../context/focus"
+import { useLoading } from "../../context/loading"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { Panel } from "../Panel"
@@ -58,11 +59,15 @@ export function BookmarksPanel() {
 	const command = useCommand()
 	const commandLog = useCommandLog()
 	const dialog = useDialog()
+	const globalLoading = useLoading()
 	const { colors } = useTheme()
 	const { loadLog, loadBookmarks } = useSync()
 
-	const runOperation = async (op: () => Promise<OperationResult>) => {
-		const result = await op()
+	const runOperation = async (
+		text: string,
+		op: () => Promise<OperationResult>,
+	) => {
+		const result = await globalLoading.run(text, op)
 		commandLog.addEntry(result)
 		if (result.success) {
 			loadLog()
@@ -281,7 +286,8 @@ export function BookmarksPanel() {
 					panel: "bookmarks",
 					onSelect: () => {
 						const commit = selectedBookmarkCommit()
-						if (commit) runOperation(() => jjNew(commit.changeId))
+						if (commit)
+							runOperation("Creating...", () => jjNew(commit.changeId))
 					},
 				},
 				{
@@ -293,7 +299,8 @@ export function BookmarksPanel() {
 					panel: "bookmarks",
 					onSelect: () => {
 						const commit = selectedBookmarkCommit()
-						if (commit) runOperation(() => jjEdit(commit.changeId))
+						if (commit)
+							runOperation("Editing...", () => jjEdit(commit.changeId))
 					},
 				},
 				{
@@ -312,7 +319,7 @@ export function BookmarksPanel() {
 								message: "Parent is immutable. Squash anyway?",
 							})
 							if (confirmed) {
-								await runOperation(() =>
+								await runOperation("Squashing...", () =>
 									jjSquash(commit.changeId, { ignoreImmutable: true }),
 								)
 							}
@@ -353,7 +360,7 @@ export function BookmarksPanel() {
 									initialBody={desc.body}
 									onSave={(subject, body) => {
 										const message = body ? `${subject}\n\n${body}` : subject
-										runOperation(() =>
+										runOperation("Describing...", () =>
 											jjDescribe(commit.changeId, message, { ignoreImmutable }),
 										)
 									}}
@@ -377,7 +384,9 @@ export function BookmarksPanel() {
 							message: `Abandon change ${commit.changeId.slice(0, 8)}?`,
 						})
 						if (confirmed) {
-							await runOperation(() => jjAbandon(commit.changeId))
+							await runOperation("Abandoning...", () =>
+								jjAbandon(commit.changeId),
+							)
 						}
 					},
 				},
@@ -422,49 +431,49 @@ export function BookmarksPanel() {
 		<Panel title={title()} hotkey="2" focused={isFocused()}>
 			<Switch>
 				<Match when={bookmarkViewMode() === "list"}>
-					<Show when={bookmarksLoading()}>
+					<Show when={bookmarksLoading() && localBookmarks().length === 0}>
 						<text fg={colors().textMuted}>Loading bookmarks...</text>
 					</Show>
-					<Show when={bookmarksError()}>
+					<Show when={bookmarksError() && localBookmarks().length === 0}>
 						<text fg={colors().error}>Error: {bookmarksError()}</text>
 					</Show>
-					<Show when={!bookmarksLoading() && !bookmarksError()}>
-						<Show
-							when={localBookmarks().length > 0}
-							fallback={<text fg={colors().textMuted}>No bookmarks</text>}
+					<Show
+						when={localBookmarks().length > 0}
+						fallback={
+							!bookmarksLoading() && !bookmarksError() ? (
+								<text fg={colors().textMuted}>No bookmarks</text>
+							) : null
+						}
+					>
+						<scrollbox
+							ref={listScrollRef}
+							flexGrow={1}
+							scrollbarOptions={{ visible: false }}
 						>
-							<scrollbox
-								ref={listScrollRef}
-								flexGrow={1}
-								scrollbarOptions={{ visible: false }}
-							>
-								<For each={localBookmarks()}>
-									{(bookmark, index) => {
-										const isSelected = () => index() === selectedBookmarkIndex()
-										return (
-											<box
-												backgroundColor={
-													isSelected()
-														? colors().selectionBackground
-														: undefined
-												}
-												overflow="hidden"
-											>
-												<text>
-													<span style={{ fg: colors().primary }}>
-														{bookmark.name}
-													</span>
-													<span style={{ fg: colors().textMuted }}>
-														{" "}
-														{bookmark.changeId.slice(0, 8)}
-													</span>
-												</text>
-											</box>
-										)
-									}}
-								</For>
-							</scrollbox>
-						</Show>
+							<For each={localBookmarks()}>
+								{(bookmark, index) => {
+									const isSelected = () => index() === selectedBookmarkIndex()
+									return (
+										<box
+											backgroundColor={
+												isSelected() ? colors().selectionBackground : undefined
+											}
+											overflow="hidden"
+										>
+											<text>
+												<span style={{ fg: colors().primary }}>
+													{bookmark.name}
+												</span>
+												<span style={{ fg: colors().textMuted }}>
+													{" "}
+													{bookmark.changeId.slice(0, 8)}
+												</span>
+											</text>
+										</box>
+									)
+								}}
+							</For>
+						</scrollbox>
 					</Show>
 				</Match>
 

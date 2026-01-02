@@ -1,14 +1,44 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import { useCommand } from "../context/command"
 import { useFocus } from "../context/focus"
 import { useKeybind } from "../context/keybind"
+import { useLoading } from "../context/loading"
 import { useTheme } from "../context/theme"
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 export function StatusBar() {
 	const command = useCommand()
 	const focus = useFocus()
 	const keybind = useKeybind()
+	const loading = useLoading()
 	const { colors, style } = useTheme()
+
+	const [spinnerFrame, setSpinnerFrame] = createSignal(0)
+
+	let spinnerInterval: ReturnType<typeof setInterval> | null = null
+	const startSpinner = () => {
+		if (spinnerInterval) return
+		spinnerInterval = setInterval(() => {
+			setSpinnerFrame((f) => (f + 1) % SPINNER_FRAMES.length)
+		}, 80)
+	}
+	const stopSpinner = () => {
+		if (spinnerInterval) {
+			clearInterval(spinnerInterval)
+			spinnerInterval = null
+		}
+	}
+
+	createMemo(() => {
+		if (loading.isLoading()) {
+			startSpinner()
+		} else {
+			stopSpinner()
+		}
+	})
+
+	onCleanup(() => stopSpinner())
 
 	const relevantCommands = createMemo(() => {
 		const all = command.all()
@@ -50,6 +80,17 @@ export function StatusBar() {
 			flexDirection="row"
 			gap={gap()}
 		>
+			<Show when={loading.isLoading()}>
+				<text>
+					<span style={{ fg: colors().warning }}>
+						{SPINNER_FRAMES[spinnerFrame()]}
+					</span>{" "}
+					<span style={{ fg: colors().text }}>{loading.loadingText()}</span>
+					<Show when={separator()}>
+						<span style={{ fg: colors().textMuted }}>{` ${separator()} `}</span>
+					</Show>
+				</text>
+			</Show>
 			<For each={relevantCommands()}>
 				{(cmd, index) => (
 					<text>

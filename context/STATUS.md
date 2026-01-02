@@ -76,6 +76,7 @@ All operations work in both Log panel and Bookmarks commits view.
 ### Performance
 
 - ~~Flashing when switching focus between panels~~ Fixed: skip diff reload if content unchanged
+- ~~Log/Bookmarks panels flash on refresh~~ Fixed: stale-while-revalidate pattern + debounced spinner
 - Some lag when navigating commits quickly (diff rendering / ANSI parsing)
   - See [ROADMAP.md#performance-investigation](./ROADMAP.md#performance-investigation) for investigation plan
 

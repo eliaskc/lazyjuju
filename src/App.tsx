@@ -11,6 +11,7 @@ import { CommandLogProvider } from "./context/commandlog"
 import { DialogContainer, DialogProvider, useDialog } from "./context/dialog"
 import { FocusProvider, useFocus } from "./context/focus"
 import { KeybindProvider } from "./context/keybind"
+import { LoadingProvider } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider } from "./context/theme"
 
@@ -150,17 +151,19 @@ export function App() {
 	return (
 		<ThemeProvider>
 			<FocusProvider>
-				<SyncProvider>
-					<KeybindProvider>
-						<CommandLogProvider>
-							<DialogProvider>
-								<CommandProvider>
-									<AppContent />
-								</CommandProvider>
-							</DialogProvider>
-						</CommandLogProvider>
-					</KeybindProvider>
-				</SyncProvider>
+				<LoadingProvider>
+					<SyncProvider>
+						<KeybindProvider>
+							<CommandLogProvider>
+								<DialogProvider>
+									<CommandProvider>
+										<AppContent />
+									</CommandProvider>
+								</DialogProvider>
+							</CommandLogProvider>
+						</KeybindProvider>
+					</SyncProvider>
+				</LoadingProvider>
 			</FocusProvider>
 		</ThemeProvider>
 	)

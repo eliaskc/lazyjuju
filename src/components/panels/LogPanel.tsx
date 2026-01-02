@@ -14,6 +14,7 @@ import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
 import { useFocus } from "../../context/focus"
+import { useLoading } from "../../context/loading"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { AnsiText } from "../AnsiText"
@@ -38,13 +39,17 @@ export function LogPanel() {
 	const command = useCommand()
 	const commandLog = useCommandLog()
 	const dialog = useDialog()
+	const globalLoading = useLoading()
 	const { colors } = useTheme()
 
 	const isFocused = () => focus.isPanel("log")
 	const title = () => (viewMode() === "files" ? "Files" : "Log")
 
-	const runOperation = async (op: () => Promise<OperationResult>) => {
-		const result = await op()
+	const runOperation = async (
+		text: string,
+		op: () => Promise<OperationResult>,
+	) => {
+		const result = await globalLoading.run(text, op)
 		commandLog.addEntry(result)
 		if (result.success) {
 			loadLog()
@@ -132,7 +137,7 @@ export function LogPanel() {
 			panel: "log",
 			onSelect: () => {
 				const commit = selectedCommit()
-				if (commit) runOperation(() => jjNew(commit.changeId))
+				if (commit) runOperation("Creating...", () => jjNew(commit.changeId))
 			},
 		},
 		{
@@ -144,7 +149,7 @@ export function LogPanel() {
 			panel: "log",
 			onSelect: () => {
 				const commit = selectedCommit()
-				if (commit) runOperation(() => jjEdit(commit.changeId))
+				if (commit) runOperation("Editing...", () => jjEdit(commit.changeId))
 			},
 		},
 		{
@@ -163,7 +168,7 @@ export function LogPanel() {
 						message: "Parent is immutable. Squash anyway?",
 					})
 					if (confirmed) {
-						await runOperation(() =>
+						await runOperation("Squashing...", () =>
 							jjSquash(commit.changeId, { ignoreImmutable: true }),
 						)
 					}
@@ -204,7 +209,7 @@ export function LogPanel() {
 							initialBody={desc.body}
 							onSave={(subject, body) => {
 								const message = body ? `${subject}\n\n${body}` : subject
-								runOperation(() =>
+								runOperation("Describing...", () =>
 									jjDescribe(commit.changeId, message, { ignoreImmutable }),
 								)
 							}}
@@ -228,7 +233,7 @@ export function LogPanel() {
 					message: `Abandon change ${commit.changeId.slice(0, 8)}?`,
 				})
 				if (confirmed) {
-					await runOperation(() => jjAbandon(commit.changeId))
+					await runOperation("Abandoning...", () => jjAbandon(commit.changeId))
 				}
 			},
 		},
@@ -236,13 +241,13 @@ export function LogPanel() {
 
 	return (
 		<Panel title={title()} hotkey="1" focused={isFocused()}>
-			<Show when={loading()}>
+			<Show when={loading() && commits().length === 0}>
 				<text>Loading...</text>
 			</Show>
-			<Show when={error()}>
+			<Show when={error() && commits().length === 0}>
 				<text>Error: {error()}</text>
 			</Show>
-			<Show when={!loading() && !error()}>
+			<Show when={commits().length > 0}>
 				<scrollbox
 					ref={scrollRef}
 					flexGrow={1}

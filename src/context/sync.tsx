@@ -22,6 +22,7 @@ import {
 	getFilePaths,
 } from "../utils/file-tree"
 import { useFocus } from "./focus"
+import { useLoading } from "./loading"
 
 export type ViewMode = "log" | "files"
 export type BookmarkViewMode = "list" | "commits" | "files"
@@ -108,6 +109,7 @@ const SyncContext = createContext<SyncContextValue>()
 export function SyncProvider(props: { children: JSX.Element }) {
 	const renderer = useRenderer()
 	const focus = useFocus()
+	const globalLoading = useLoading()
 	const [commits, setCommits] = createSignal<Commit[]>([])
 	const [selectedIndex, setSelectedIndex] = createSignal(0)
 	const [loading, setLoading] = createSignal(false)
@@ -370,18 +372,21 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	}
 
 	const loadBookmarks = async () => {
-		setBookmarksLoading(true)
+		const isInitialLoad = bookmarks().length === 0
+		if (isInitialLoad) setBookmarksLoading(true)
 		setBookmarksError(null)
 		try {
-			const result = await fetchBookmarks({ allRemotes: true })
-			setBookmarks(result)
-			setSelectedBookmarkIndex(0)
+			await globalLoading.run("Fetching...", async () => {
+				const result = await fetchBookmarks({ allRemotes: true })
+				setBookmarks(result)
+				if (isInitialLoad) setSelectedBookmarkIndex(0)
+			})
 		} catch (e) {
 			setBookmarksError(
 				e instanceof Error ? e.message : "Failed to load bookmarks",
 			)
 		} finally {
-			setBookmarksLoading(false)
+			if (isInitialLoad) setBookmarksLoading(false)
 		}
 	}
 
@@ -473,16 +478,19 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	})
 
 	const loadLog = async () => {
-		setLoading(true)
+		const isInitialLoad = commits().length === 0
+		if (isInitialLoad) setLoading(true)
 		setError(null)
 		try {
-			const result = await fetchLog()
-			setCommits(result)
-			setSelectedIndex(0)
+			await globalLoading.run("Fetching...", async () => {
+				const result = await fetchLog()
+				setCommits(result)
+				if (isInitialLoad) setSelectedIndex(0)
+			})
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to load log")
 		} finally {
-			setLoading(false)
+			if (isInitialLoad) setLoading(false)
 		}
 	}
 
