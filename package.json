@@ -1,15 +1,15 @@
 {
 	"name": "kajji",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "A terminal UI for Jujutsu: the rudder for your jj",
 	"type": "module",
 	"engines": {
 		"bun": ">=1.0.0"
 	},
 	"bin": {
-		"kajji": "./bin/kajji.js"
+		"kajji": "./bin/kajji"
 	},
-	"files": ["bin", "src"],
+	"files": ["bin", "script", "src"],
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/index.tsx",
 		"test": "bun test",
@@ -27,8 +27,8 @@
 	"dependencies": {
 		"@babel/core": "^7.28.5",
 		"@babel/preset-typescript": "^7.28.5",
-		"@opentui/core": "^0.1.66",
-		"@opentui/solid": "^0.1.66",
+		"@opentui/core": "^0.1.68",
+		"@opentui/solid": "^0.1.68",
 		"babel-preset-solid": "1.9.9",
 		"fuzzysort": "^3.1.0",
 		"ghostty-opentui": "^1.3.11",
