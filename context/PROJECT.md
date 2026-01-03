@@ -60,7 +60,7 @@ All operations work in both Log panel and Bookmarks commits view.
 - [x] Bold working copy indicator
 - [x] Auto-hiding scrollbar
 - [x] Smart diff loading — debounced + skips reload when content unchanged
-- [ ] Auto-refresh — watch filesystem, refresh on changes
+- [x] Auto-refresh — focus-based + polling (2s interval checking jj op log ID)
 
 ## Text Editing (in modals)
 

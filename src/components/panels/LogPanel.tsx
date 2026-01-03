@@ -47,8 +47,7 @@ export function LogPanel() {
 		selectPrev,
 		enterFilesView,
 		viewMode,
-		loadLog,
-		loadBookmarks,
+		refresh,
 	} = useSync()
 	const focus = useFocus()
 	const command = useCommand()
@@ -117,8 +116,7 @@ export function LogPanel() {
 		const result = await globalLoading.run(text, op)
 		commandLog.addEntry(result)
 		if (result.success) {
-			loadLog()
-			loadBookmarks()
+			refresh()
 			loadOpLog()
 		}
 	}
@@ -340,8 +338,7 @@ export function LogPanel() {
 				} else {
 					commandLog.addEntry(result)
 					if (result.success) {
-						loadLog()
-						loadBookmarks()
+						refresh()
 						loadOpLog()
 					}
 				}

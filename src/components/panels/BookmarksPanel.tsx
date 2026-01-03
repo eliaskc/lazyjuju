@@ -61,7 +61,7 @@ export function BookmarksPanel() {
 	const dialog = useDialog()
 	const globalLoading = useLoading()
 	const { colors } = useTheme()
-	const { loadLog, loadBookmarks } = useSync()
+	const { refresh } = useSync()
 
 	const runOperation = async (
 		text: string,
@@ -70,8 +70,7 @@ export function BookmarksPanel() {
 		const result = await globalLoading.run(text, op)
 		commandLog.addEntry(result)
 		if (result.success) {
-			loadLog()
-			loadBookmarks()
+			refresh()
 		}
 	}
 
@@ -326,8 +325,7 @@ export function BookmarksPanel() {
 						} else {
 							commandLog.addEntry(result)
 							if (result.success) {
-								loadLog()
-								loadBookmarks()
+								refresh()
 							}
 						}
 					},

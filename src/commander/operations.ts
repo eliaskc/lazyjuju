@@ -147,6 +147,19 @@ export async function fetchOpLog(limit?: number): Promise<string[]> {
 	return result.stdout.split("\n")
 }
 
+export async function fetchOpLogId(): Promise<string> {
+	const result = await execute([
+		"op",
+		"log",
+		"--limit",
+		"1",
+		"--no-graph",
+		"-T",
+		"self.id()",
+	])
+	return result.success ? result.stdout.trim() : ""
+}
+
 export async function jjUndo(): Promise<OperationResult> {
 	const args = ["undo"]
 	const result = await execute(args)

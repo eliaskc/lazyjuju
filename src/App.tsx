@@ -27,7 +27,7 @@ function TopPanel() {
 
 function AppContent() {
 	const renderer = useRenderer()
-	const { loadLog, loadBookmarks } = useSync()
+	const { loadLog, loadBookmarks, refresh } = useSync()
 	const focus = useFocus()
 	const command = useCommand()
 	const dialog = useDialog()
@@ -129,10 +129,7 @@ function AppContent() {
 			keybind: "refresh",
 			context: "global",
 			type: "action",
-			onSelect: () => {
-				loadLog()
-				loadBookmarks()
-			},
+			onSelect: () => refresh(),
 		},
 	])
 
