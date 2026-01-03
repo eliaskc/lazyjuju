@@ -160,9 +160,7 @@ function CommitHeader(props: {
 			<text>
 				{"Author: "}
 				<span style={{ fg: colors().secondary }}>
-					{props.commit.author} {"<"}
-					{props.commit.authorEmail}
-					{">"}
+					{`${props.commit.author} <${props.commit.authorEmail}>`}
 				</span>
 			</text>
 			<text>
