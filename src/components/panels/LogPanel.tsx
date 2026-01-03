@@ -19,6 +19,7 @@ import {
 	jjNew,
 	jjOpRestore,
 	jjRedo,
+	jjRestore,
 	jjShowDescription,
 	jjSquash,
 	jjUndo,
@@ -34,6 +35,7 @@ import { useTheme } from "../../context/theme"
 import type { Context } from "../../context/types"
 import { createDoubleClickDetector } from "../../utils/double-click"
 import { AnsiText } from "../AnsiText"
+import { FileTreeList } from "../FileTreeList"
 import { Panel } from "../Panel"
 import { BookmarkNameModal } from "../modals/BookmarkNameModal"
 import { DescribeModal } from "../modals/DescribeModal"
@@ -57,8 +59,18 @@ export function LogPanel() {
 		selectNext,
 		selectPrev,
 		enterFilesView,
+		exitFilesView,
 		viewMode,
 		refresh,
+		flatFiles,
+		selectedFileIndex,
+		setSelectedFileIndex,
+		filesLoading,
+		filesError,
+		collapsedPaths,
+		toggleFolder,
+		selectNextFile,
+		selectPrevFile,
 	} = useSync()
 	const focus = useFocus()
 	const command = useCommand()
@@ -213,6 +225,46 @@ export function LogPanel() {
 			setOpLogScrollTop(newScrollTop)
 		}
 	})
+
+	let filesScrollRef: ScrollBoxRenderable | undefined
+	const [filesScrollTop, setFilesScrollTop] = createSignal(0)
+
+	createEffect(() => {
+		const index = selectedFileIndex()
+		if (!filesScrollRef || flatFiles().length === 0) return
+
+		const margin = 2
+		const refAny = filesScrollRef as unknown as Record<string, unknown>
+		const viewportHeight =
+			(typeof refAny.height === "number" ? refAny.height : null) ??
+			(typeof refAny.rows === "number" ? refAny.rows : null) ??
+			10
+		const currentScrollTop = filesScrollTop()
+
+		const visibleStart = currentScrollTop
+		const visibleEnd = currentScrollTop + viewportHeight - 1
+		const safeStart = visibleStart + margin
+		const safeEnd = visibleEnd - margin
+
+		let newScrollTop = currentScrollTop
+		if (index < safeStart) {
+			newScrollTop = Math.max(0, index - margin)
+		} else if (index > safeEnd) {
+			newScrollTop = Math.max(0, index - viewportHeight + margin + 1)
+		}
+
+		if (newScrollTop !== currentScrollTop) {
+			filesScrollRef.scrollTo(newScrollTop)
+			setFilesScrollTop(newScrollTop)
+		}
+	})
+
+	const handleFileEnter = () => {
+		const file = flatFiles()[selectedFileIndex()]
+		if (file?.node.isDirectory) {
+			toggleFolder(file.node.path)
+		}
+	}
 
 	const selectPrevOpLog = () => {
 		setOpLogSelectedIndex((i) => Math.max(0, i - 1))
@@ -483,6 +535,66 @@ export function LogPanel() {
 				)
 			},
 		},
+		{
+			id: "log.revisions.files.next",
+			title: "Next file",
+			keybind: "nav_down",
+			context: "log.revisions.files",
+			type: "navigation",
+			panel: "log",
+			hidden: true,
+			onSelect: selectNextFile,
+		},
+		{
+			id: "log.revisions.files.prev",
+			title: "Previous file",
+			keybind: "nav_up",
+			context: "log.revisions.files",
+			type: "navigation",
+			panel: "log",
+			hidden: true,
+			onSelect: selectPrevFile,
+		},
+		{
+			id: "log.revisions.files.toggle",
+			title: "Toggle folder",
+			keybind: "enter",
+			context: "log.revisions.files",
+			type: "action",
+			panel: "log",
+			hidden: true,
+			onSelect: handleFileEnter,
+		},
+		{
+			id: "log.revisions.files.back",
+			title: "Back to revisions",
+			keybind: "escape",
+			context: "log.revisions.files",
+			type: "view",
+			panel: "log",
+			hidden: true,
+			onSelect: exitFilesView,
+		},
+		{
+			id: "log.revisions.files.restore",
+			title: "Restore",
+			keybind: "jj_restore",
+			context: "log.revisions.files",
+			type: "action",
+			panel: "log",
+			onSelect: async () => {
+				const file = flatFiles()[selectedFileIndex()]
+				if (!file) return
+				const node = file.node
+				const pathType = node.isDirectory ? "folder" : "file"
+				const confirmed = await dialog.confirm({
+					message: `Restore ${pathType} "${node.path}"? This will discard changes.`,
+				})
+				if (confirmed) {
+					await runOperation("Restoring...", () => jjRestore([node.path]))
+				}
+			},
+		},
 	])
 
 	createEffect(() => {
@@ -581,9 +693,43 @@ export function LogPanel() {
 		</>
 	)
 
+	const renderFilesContent = () => {
+		const commit = selectedCommit()
+		return (
+			<>
+				<Show when={filesLoading()}>
+					<text fg={colors().textMuted}>Loading files...</text>
+				</Show>
+				<Show when={filesError()}>
+					<text fg={colors().error}>Error: {filesError()}</text>
+				</Show>
+				<Show when={!filesLoading() && !filesError()}>
+					<scrollbox
+						ref={filesScrollRef}
+						flexGrow={1}
+						scrollbarOptions={{ visible: false }}
+					>
+						<FileTreeList
+							files={flatFiles}
+							selectedIndex={selectedFileIndex}
+							setSelectedIndex={setSelectedFileIndex}
+							collapsedPaths={collapsedPaths}
+							toggleFolder={toggleFolder}
+						/>
+					</scrollbox>
+				</Show>
+			</>
+		)
+	}
+
+	const filesTitle = () => {
+		const commit = selectedCommit()
+		return commit ? `Files (${commit.changeId.slice(0, 8)})` : "Files"
+	}
+
 	return (
 		<Panel
-			title={title()}
+			title={isFilesView() ? filesTitle() : title()}
 			tabs={tabs()}
 			activeTab={activeTab()}
 			onTabChange={switchTab}
@@ -591,10 +737,11 @@ export function LogPanel() {
 			hotkey="1"
 			focused={isFocused()}
 		>
-			<Show when={activeTab() === "revisions" || isFilesView()}>
+			<Show when={isFilesView()}>{renderFilesContent()}</Show>
+			<Show when={!isFilesView() && activeTab() === "revisions"}>
 				{renderLogContent()}
 			</Show>
-			<Show when={activeTab() === "oplog" && !isFilesView()}>
+			<Show when={!isFilesView() && activeTab() === "oplog"}>
 				{renderOpLogContent()}
 			</Show>
 		</Panel>

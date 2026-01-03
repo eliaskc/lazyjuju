@@ -13,6 +13,7 @@ import {
 	jjDescribe,
 	jjEdit,
 	jjNew,
+	jjRestore,
 	jjShowDescription,
 	jjSquash,
 } from "../../commander/operations"
@@ -24,17 +25,10 @@ import { useLoading } from "../../context/loading"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { createDoubleClickDetector } from "../../utils/double-click"
+import { FileTreeList } from "../FileTreeList"
 import { Panel } from "../Panel"
 import { BookmarkNameModal } from "../modals/BookmarkNameModal"
 import { DescribeModal } from "../modals/DescribeModal"
-
-const STATUS_CHARS: Record<string, string> = {
-	added: "A",
-	modified: "M",
-	deleted: "D",
-	renamed: "R",
-	copied: "C",
-}
 
 export function BookmarksPanel() {
 	const {
@@ -85,14 +79,6 @@ export function BookmarksPanel() {
 			refresh()
 		}
 	}
-
-	const statusColors = () => ({
-		added: colors().success,
-		modified: colors().warning,
-		deleted: colors().error,
-		renamed: colors().info,
-		copied: colors().info,
-	})
 
 	const isFocused = () => focus.isPanel("refs")
 	const localBookmarks = () => bookmarks().filter((b) => b.isLocal)
@@ -242,6 +228,26 @@ export function BookmarksPanel() {
 					panel: "refs",
 					hidden: true,
 					onSelect: exitBookmarkView,
+				},
+				{
+					id: "refs.bookmarks.revisions.files.restore",
+					title: "Restore",
+					keybind: "jj_restore",
+					context: "refs.bookmarks.revisions.files",
+					type: "action",
+					panel: "refs",
+					onSelect: async () => {
+						const file = bookmarkFlatFiles()[selectedBookmarkFileIndex()]
+						if (!file) return
+						const node = file.node
+						const pathType = node.isDirectory ? "folder" : "file"
+						const confirmed = await dialog.confirm({
+							message: `Restore ${pathType} "${node.path}"? This will discard changes.`,
+						})
+						if (confirmed) {
+							await runOperation("Restoring...", () => jjRestore([node.path]))
+						}
+					},
 				},
 			]
 		}
@@ -662,91 +668,13 @@ export function BookmarksPanel() {
 								flexGrow={1}
 								scrollbarOptions={{ visible: false }}
 							>
-								<For each={bookmarkFlatFiles()}>
-									{(item, index) => {
-										const isSelected = () =>
-											index() === selectedBookmarkFileIndex()
-										const node = item.node
-										const indent = "  ".repeat(item.visualDepth)
-										const isCollapsed = bookmarkCollapsedPaths().has(node.path)
-
-										const icon = node.isDirectory
-											? isCollapsed
-												? "▶"
-												: "▼"
-											: " "
-
-										const statusChar = node.status
-											? (STATUS_CHARS[node.status] ?? " ")
-											: " "
-										const statusColor = node.status
-											? (statusColors()[
-													node.status as keyof ReturnType<typeof statusColors>
-												] ?? colors().text)
-											: colors().text
-
-										const handleDoubleClick = createDoubleClickDetector(() => {
-											if (node.isDirectory) {
-												toggleBookmarkFolder(node.path)
-											} else {
-												focus.setPanel("detail")
-											}
-										})
-
-										const handleMouseDown = (e: {
-											stopPropagation: () => void
-										}) => {
-											e.stopPropagation()
-											setSelectedBookmarkFileIndex(index())
-											if (node.isDirectory) {
-												toggleBookmarkFolder(node.path)
-											} else {
-												handleDoubleClick()
-											}
-										}
-
-										return (
-											<box
-												backgroundColor={
-													isSelected()
-														? colors().selectionBackground
-														: undefined
-												}
-												overflow="hidden"
-												onMouseDown={handleMouseDown}
-											>
-												<text>
-													<span style={{ fg: colors().textMuted }}>
-														{indent}
-													</span>
-													<span
-														style={{
-															fg: node.isDirectory
-																? colors().info
-																: colors().textMuted,
-														}}
-													>
-														{icon}{" "}
-													</span>
-													<Show when={!node.isDirectory}>
-														<span style={{ fg: statusColor }}>
-															{statusChar}{" "}
-														</span>
-													</Show>
-													<span
-														style={{
-															fg: node.isDirectory
-																? colors().info
-																: colors().text,
-														}}
-													>
-														{node.name}
-													</span>
-												</text>
-											</box>
-										)
-									}}
-								</For>
+								<FileTreeList
+									files={bookmarkFlatFiles}
+									selectedIndex={selectedBookmarkFileIndex}
+									setSelectedIndex={setSelectedBookmarkFileIndex}
+									collapsedPaths={bookmarkCollapsedPaths}
+									toggleFolder={toggleBookmarkFolder}
+								/>
 							</scrollbox>
 						</Show>
 					</Show>

@@ -45,9 +45,14 @@ export const { use: useCommand, provider: CommandProvider } =
 			})
 
 			useKeyboard((evt) => {
+				if (evt.defaultPrevented) return
+
 				const dialogOpen = dialog.isOpen()
 				const activeCtx = focus.activeContext()
 				const activePanel = focus.panel()
+
+				let mostSpecificMatch: CommandOption | null = null
+				let highestContextSpecificity = -1
 
 				for (const cmd of allCommands()) {
 					if (dialogOpen && cmd.keybind !== "help") {
@@ -64,10 +69,20 @@ export const { use: useCommand, provider: CommandProvider } =
 					}
 
 					if (cmd.keybind && keybind.match(cmd.keybind, evt)) {
-						evt.preventDefault()
-						cmd.onSelect()
-						return
+						const contextSpecificity =
+							cmd.context === activeCtx
+								? Number.MAX_SAFE_INTEGER
+								: cmd.context.length
+						if (contextSpecificity > highestContextSpecificity) {
+							mostSpecificMatch = cmd
+							highestContextSpecificity = contextSpecificity
+						}
 					}
+				}
+
+				if (mostSpecificMatch) {
+					evt.preventDefault()
+					mostSpecificMatch.onSelect()
 				}
 			})
 

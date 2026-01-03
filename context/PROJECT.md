@@ -58,6 +58,19 @@
 
 All operations work in both Log panel and Bookmarks commits view.
 
+## Copy Menu (lazygit-style)
+
+- [ ] `y` — open copy menu on selected commit
+  - [ ] Change ID (short, e.g., `abcd1234`)
+  - [ ] Commit ID (full git hash)
+  - [ ] Description subject (first line)
+  - [ ] Description (full message with body)
+  - [ ] Diff (full diff output)
+  - [ ] Author
+  - [ ] Commit URL (if remote linked, e.g., GitHub permalink)
+- [ ] Menu with keyboard shortcuts for each option (like lazygit)
+- [ ] Works in Log panel and Bookmarks commits view
+
 ## Infrastructure
 
 - [x] Keybind system — registry architecture with config support ready

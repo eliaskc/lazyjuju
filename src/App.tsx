@@ -1,10 +1,9 @@
 import { useRenderer } from "@opentui/solid"
-import { Show, onMount } from "solid-js"
+import { onMount } from "solid-js"
 import { jjGitFetch, jjGitPush } from "./commander/operations"
 import { Layout } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
 import { BookmarksPanel } from "./components/panels/BookmarksPanel"
-import { FileTreePanel } from "./components/panels/FileTreePanel"
 import { LogPanel } from "./components/panels/LogPanel"
 import { MainArea } from "./components/panels/MainArea"
 import { CommandProvider, useCommand } from "./context/command"
@@ -15,16 +14,6 @@ import { KeybindProvider } from "./context/keybind"
 import { LoadingProvider, useLoading } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider } from "./context/theme"
-
-function TopPanel() {
-	const { viewMode } = useSync()
-
-	return (
-		<Show when={viewMode() === "files"} fallback={<LogPanel />}>
-			<FileTreePanel />
-		</Show>
-	)
-}
 
 function AppContent() {
 	const renderer = useRenderer()
@@ -201,7 +190,7 @@ function AppContent() {
 	return (
 		<DialogContainer>
 			<Layout
-				top={<TopPanel />}
+				top={<LogPanel />}
 				bottom={<BookmarksPanel />}
 				right={<MainArea />}
 			/>
