@@ -1,6 +1,12 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js"
 import {
+	jjBookmarkCreate,
+	jjBookmarkDelete,
+	jjBookmarkForget,
+	jjBookmarkRename,
+} from "../../commander/bookmarks"
+import {
 	type OperationResult,
 	isImmutableError,
 	jjAbandon,
@@ -18,6 +24,7 @@ import { useLoading } from "../../context/loading"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { Panel } from "../Panel"
+import { BookmarkNameModal } from "../modals/BookmarkNameModal"
 import { DescribeModal } from "../modals/DescribeModal"
 
 const STATUS_CHARS: Record<string, string> = {
@@ -32,6 +39,7 @@ export function BookmarksPanel() {
 	const {
 		bookmarks,
 		selectedBookmarkIndex,
+		selectedBookmark,
 		bookmarksLoading,
 		bookmarksError,
 		selectNextBookmark,
@@ -421,6 +429,96 @@ export function BookmarksPanel() {
 				panel: "refs",
 				hidden: true,
 				onSelect: handleListEnter,
+			},
+			{
+				id: "refs.bookmarks.create",
+				title: "Create bookmark",
+				keybind: "bookmark_create",
+				context: "refs.bookmarks",
+				type: "action",
+				panel: "refs",
+				onSelect: () => {
+					dialog.open(
+						() => (
+							<BookmarkNameModal
+								title="Create Bookmark"
+								placeholder="bookmark-name"
+								onSave={(name) => {
+									runOperation("Creating bookmark...", () =>
+										jjBookmarkCreate(name),
+									)
+								}}
+							/>
+						),
+						{ id: "bookmark-create" },
+					)
+				},
+			},
+			{
+				id: "refs.bookmarks.delete",
+				title: "Delete bookmark",
+				keybind: "bookmark_delete",
+				context: "refs.bookmarks",
+				type: "action",
+				panel: "refs",
+				onSelect: async () => {
+					const bookmark = selectedBookmark()
+					if (!bookmark) return
+					const confirmed = await dialog.confirm({
+						message: `Delete bookmark "${bookmark.name}"?`,
+					})
+					if (confirmed) {
+						await runOperation("Deleting bookmark...", () =>
+							jjBookmarkDelete(bookmark.name),
+						)
+					}
+				},
+			},
+			{
+				id: "refs.bookmarks.rename",
+				title: "Rename bookmark",
+				keybind: "bookmark_rename",
+				context: "refs.bookmarks",
+				type: "action",
+				panel: "refs",
+				onSelect: () => {
+					const bookmark = selectedBookmark()
+					if (!bookmark) return
+					dialog.open(
+						() => (
+							<BookmarkNameModal
+								title="Rename Bookmark"
+								initialValue={bookmark.name}
+								onSave={(newName) => {
+									runOperation("Renaming bookmark...", () =>
+										jjBookmarkRename(bookmark.name, newName),
+									)
+								}}
+							/>
+						),
+						{ id: "bookmark-rename" },
+					)
+				},
+			},
+			{
+				id: "refs.bookmarks.forget",
+				title: "Forget bookmark",
+				keybind: "bookmark_forget",
+				context: "refs.bookmarks",
+				type: "action",
+				panel: "refs",
+				onSelect: async () => {
+					const bookmark = selectedBookmark()
+					if (!bookmark) return
+					const confirmed = await dialog.confirm({
+						message: `Forget bookmark "${bookmark.name}"? (local only)`,
+					})
+					if (confirmed) {
+						await runOperation("Forgetting bookmark...", () =>
+							jjBookmarkForget(bookmark.name),
+						)
+					}
+				},
 			},
 		]
 	})

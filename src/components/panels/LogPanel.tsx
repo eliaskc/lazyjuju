@@ -1,5 +1,6 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { For, Show, createEffect, createSignal, onMount } from "solid-js"
+import { jjBookmarkCreate } from "../../commander/bookmarks"
 import {
 	type OpLogEntry,
 	type OperationResult,
@@ -26,6 +27,7 @@ import { useTheme } from "../../context/theme"
 import type { Context } from "../../context/types"
 import { AnsiText } from "../AnsiText"
 import { Panel } from "../Panel"
+import { BookmarkNameModal } from "../modals/BookmarkNameModal"
 import { DescribeModal } from "../modals/DescribeModal"
 import { UndoModal } from "../modals/UndoModal"
 
@@ -398,6 +400,32 @@ export function LogPanel() {
 				if (confirmed) {
 					await runOperation("Abandoning...", () => jjAbandon(commit.changeId))
 				}
+			},
+		},
+		{
+			id: "log.revisions.bookmark",
+			title: "Create bookmark",
+			keybind: "bookmark_set",
+			context: "log.revisions",
+			type: "action",
+			panel: "log",
+			onSelect: () => {
+				const commit = selectedCommit()
+				if (!commit) return
+				dialog.open(
+					() => (
+						<BookmarkNameModal
+							title={`Create Bookmark at ${commit.changeId.slice(0, 8)}`}
+							placeholder="bookmark-name"
+							onSave={(name) => {
+								runOperation("Creating bookmark...", () =>
+									jjBookmarkCreate(name, { revision: commit.changeId }),
+								)
+							}}
+						/>
+					),
+					{ id: "bookmark-create" },
+				)
 			},
 		},
 		{

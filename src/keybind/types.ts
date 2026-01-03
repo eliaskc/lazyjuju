@@ -35,6 +35,11 @@ export type KeybindConfigKey =
 	| "jj_git_fetch_all"
 	| "jj_git_push"
 	| "jj_git_push_all"
+	| "bookmark_create"
+	| "bookmark_delete"
+	| "bookmark_rename"
+	| "bookmark_forget"
+	| "bookmark_set"
 
 export type KeybindConfig = Record<KeybindConfigKey, string>
 
@@ -68,4 +73,9 @@ export const DEFAULT_KEYBINDS: KeybindConfig = {
 	jj_git_fetch_all: "F",
 	jj_git_push: "p",
 	jj_git_push_all: "P",
+	bookmark_create: "c",
+	bookmark_delete: "d",
+	bookmark_rename: "r",
+	bookmark_forget: "x",
+	bookmark_set: "b",
 }

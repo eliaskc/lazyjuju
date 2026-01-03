@@ -1,4 +1,5 @@
 import { execute } from "./executor"
+import type { OperationResult } from "./operations"
 
 export interface Bookmark {
 	name: string
@@ -68,4 +69,61 @@ export function parseBookmarkOutput(output: string): Bookmark[] {
 	}
 
 	return bookmarks
+}
+
+export async function jjBookmarkCreate(
+	name: string,
+	options?: { revision?: string },
+): Promise<OperationResult> {
+	const args = ["bookmark", "create", name]
+	if (options?.revision) {
+		args.push("-r", options.revision)
+	}
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjBookmarkDelete(name: string): Promise<OperationResult> {
+	const args = ["bookmark", "delete", name]
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjBookmarkRename(
+	oldName: string,
+	newName: string,
+): Promise<OperationResult> {
+	const args = ["bookmark", "rename", oldName, newName]
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjBookmarkForget(name: string): Promise<OperationResult> {
+	const args = ["bookmark", "forget", name]
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjBookmarkSet(
+	name: string,
+	revision: string,
+): Promise<OperationResult> {
+	const args = ["bookmark", "set", name, "-r", revision]
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
 }
