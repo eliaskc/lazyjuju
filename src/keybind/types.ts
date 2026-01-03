@@ -31,6 +31,10 @@ export type KeybindConfigKey =
 	| "jj_undo"
 	| "jj_redo"
 	| "jj_restore"
+	| "jj_git_fetch"
+	| "jj_git_fetch_all"
+	| "jj_git_push"
+	| "jj_git_push_all"
 
 export type KeybindConfig = Record<KeybindConfigKey, string>
 
@@ -60,4 +64,8 @@ export const DEFAULT_KEYBINDS: KeybindConfig = {
 	jj_undo: "u",
 	jj_redo: "U",
 	jj_restore: "r",
+	jj_git_fetch: "f",
+	jj_git_fetch_all: "F",
+	jj_git_push: "p",
+	jj_git_push_all: "P",
 }

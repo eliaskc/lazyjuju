@@ -201,6 +201,34 @@ export async function jjOpRestore(
 	}
 }
 
+export async function jjGitFetch(options?: {
+	allRemotes?: boolean
+}): Promise<OperationResult> {
+	const args = ["git", "fetch"]
+	if (options?.allRemotes) {
+		args.push("--all-remotes")
+	}
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjGitPush(options?: {
+	all?: boolean
+}): Promise<OperationResult> {
+	const args = ["git", "push"]
+	if (options?.all) {
+		args.push("--all")
+	}
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
 export interface DiffStats {
 	files: { path: string; insertions: number; deletions: number }[]
 	totalFiles: number

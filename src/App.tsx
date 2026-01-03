@@ -1,5 +1,6 @@
 import { useRenderer } from "@opentui/solid"
 import { Show, onMount } from "solid-js"
+import { jjGitFetch, jjGitPush } from "./commander/operations"
 import { Layout } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
 import { BookmarksPanel } from "./components/panels/BookmarksPanel"
@@ -7,11 +8,11 @@ import { FileTreePanel } from "./components/panels/FileTreePanel"
 import { LogPanel } from "./components/panels/LogPanel"
 import { MainArea } from "./components/panels/MainArea"
 import { CommandProvider, useCommand } from "./context/command"
-import { CommandLogProvider } from "./context/commandlog"
+import { CommandLogProvider, useCommandLog } from "./context/commandlog"
 import { DialogContainer, DialogProvider, useDialog } from "./context/dialog"
 import { FocusProvider, useFocus } from "./context/focus"
 import { KeybindProvider } from "./context/keybind"
-import { LoadingProvider } from "./context/loading"
+import { LoadingProvider, useLoading } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider } from "./context/theme"
 
@@ -31,6 +32,8 @@ function AppContent() {
 	const focus = useFocus()
 	const command = useCommand()
 	const dialog = useDialog()
+	const commandLog = useCommandLog()
+	const globalLoading = useLoading()
 
 	onMount(() => {
 		loadLog()
@@ -130,6 +133,68 @@ function AppContent() {
 			context: "global",
 			type: "action",
 			onSelect: () => refresh(),
+		},
+		{
+			id: "global.git_fetch",
+			title: "Git Fetch",
+			keybind: "jj_git_fetch",
+			context: "global",
+			type: "action",
+			onSelect: async () => {
+				const result = await globalLoading.run("Fetching...", () =>
+					jjGitFetch(),
+				)
+				commandLog.addEntry(result)
+				if (result.success) {
+					refresh()
+				}
+			},
+		},
+		{
+			id: "global.git_fetch_all",
+			title: "Git Fetch All",
+			keybind: "jj_git_fetch_all",
+			context: "global",
+			type: "action",
+			onSelect: async () => {
+				const result = await globalLoading.run("Fetching all...", () =>
+					jjGitFetch({ allRemotes: true }),
+				)
+				commandLog.addEntry(result)
+				if (result.success) {
+					refresh()
+				}
+			},
+		},
+		{
+			id: "global.git_push",
+			title: "Git Push",
+			keybind: "jj_git_push",
+			context: "global",
+			type: "action",
+			onSelect: async () => {
+				const result = await globalLoading.run("Pushing...", () => jjGitPush())
+				commandLog.addEntry(result)
+				if (result.success) {
+					refresh()
+				}
+			},
+		},
+		{
+			id: "global.git_push_all",
+			title: "Git Push All",
+			keybind: "jj_git_push_all",
+			context: "global",
+			type: "action",
+			onSelect: async () => {
+				const result = await globalLoading.run("Pushing all...", () =>
+					jjGitPush({ all: true }),
+				)
+				commandLog.addEntry(result)
+				if (result.success) {
+					refresh()
+				}
+			},
 		},
 	])
 
