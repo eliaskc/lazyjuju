@@ -48,13 +48,13 @@ const GROUP_ORDER: ContextGroup[] = [
 ]
 
 const GROUP_LABELS: Record<ContextGroup, string> = {
-	navigation: "Navigation",
-	revisions: "Revisions",
-	files: "Files",
-	bookmarks: "Bookmarks",
-	oplog: "Oplog",
-	detail: "Detail",
-	global: "Global",
+	navigation: "navigation",
+	revisions: "revisions",
+	files: "files",
+	bookmarks: "bookmarks",
+	oplog: "oplog",
+	detail: "detail",
+	global: "global",
 }
 
 const NAVIGATION_KEYBINDS = new Set([

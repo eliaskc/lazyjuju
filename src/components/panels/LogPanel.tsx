@@ -306,7 +306,7 @@ export function LogPanel() {
 	command.register(() => [
 		{
 			id: "log.oplog.next",
-			title: "Next operation",
+			title: "next operation",
 			keybind: "nav_down",
 			context: "log.oplog",
 			type: "navigation",
@@ -316,7 +316,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.oplog.prev",
-			title: "Previous operation",
+			title: "previous operation",
 			keybind: "nav_up",
 			context: "log.oplog",
 			type: "navigation",
@@ -326,7 +326,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.next",
-			title: "Next revision",
+			title: "next revision",
 			keybind: "nav_down",
 			context: "log.revisions",
 			type: "navigation",
@@ -336,7 +336,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.prev",
-			title: "Previous revision",
+			title: "previous revision",
 			keybind: "nav_up",
 			context: "log.revisions",
 			type: "navigation",
@@ -346,7 +346,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.view_files",
-			title: "View files",
+			title: "view files",
 			keybind: "enter",
 			context: "log.revisions",
 			type: "view",
@@ -356,7 +356,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.new",
-			title: "New",
+			title: "new",
 			keybind: "jj_new",
 			context: "log.revisions",
 			type: "action",
@@ -368,7 +368,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.edit",
-			title: "Edit",
+			title: "edit",
 			keybind: "jj_edit",
 			context: "log.revisions",
 			type: "action",
@@ -380,7 +380,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.squash",
-			title: "Squash",
+			title: "squash",
 			keybind: "jj_squash",
 			context: "log.revisions",
 			type: "action",
@@ -409,7 +409,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.describe",
-			title: "Describe",
+			title: "describe",
 			keybind: "jj_describe",
 			context: "log.revisions",
 			type: "action",
@@ -447,7 +447,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.abandon",
-			title: "Abandon",
+			title: "abandon",
 			keybind: "jj_abandon",
 			context: "log.revisions",
 			type: "action",
@@ -465,7 +465,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.bookmark",
-			title: "Create bookmark",
+			title: "create bookmark",
 			keybind: "bookmark_set",
 			context: "log.revisions",
 			type: "action",
@@ -491,7 +491,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.undo",
-			title: "Undo",
+			title: "undo",
 			keybind: "jj_undo",
 			context: "log.revisions",
 			type: "action",
@@ -500,7 +500,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.revisions.redo",
-			title: "Redo",
+			title: "redo",
 			keybind: "jj_redo",
 			context: "log.revisions",
 			type: "action",
@@ -509,7 +509,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.oplog.restore",
-			title: "Restore",
+			title: "restore",
 			keybind: "jj_restore",
 			context: "log.oplog",
 			type: "action",
@@ -537,7 +537,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.files.next",
-			title: "Next file",
+			title: "next file",
 			keybind: "nav_down",
 			context: "log.files",
 			type: "navigation",
@@ -547,7 +547,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.files.prev",
-			title: "Previous file",
+			title: "previous file",
 			keybind: "nav_up",
 			context: "log.files",
 			type: "navigation",
@@ -557,7 +557,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.files.toggle",
-			title: "Toggle folder",
+			title: "toggle folder",
 			keybind: "enter",
 			context: "log.files",
 			type: "action",
@@ -567,7 +567,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.files.back",
-			title: "Back to revisions",
+			title: "back",
 			keybind: "escape",
 			context: "log.files",
 			type: "view",
@@ -577,7 +577,7 @@ export function LogPanel() {
 		},
 		{
 			id: "log.files.restore",
-			title: "Restore",
+			title: "restore",
 			keybind: "jj_restore",
 			context: "log.files",
 			type: "action",

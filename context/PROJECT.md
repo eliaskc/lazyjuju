@@ -31,12 +31,12 @@
 - [x] File tree with folder collapse/expand
 - [x] File status colors (A/M/D)
 - [x] Diff view for selected files
-- [ ] Bookmark operations (Phase 1 — low effort)
-  - [ ] `c` — create bookmark at @ (modal for name)
-  - [ ] `d` — delete bookmark (confirmation dialog)
-  - [ ] `r` — rename bookmark (modal for new name)
-  - [ ] `x` — forget bookmark (local only, no remote propagation)
-  - [ ] `b` in Log panel — create/set bookmark on selected commit (popup)
+- [x] Bookmark operations (Phase 1 — low effort)
+  - [x] `c` — create bookmark at @ (modal for name)
+  - [x] `d` — delete bookmark (confirmation dialog)
+  - [x] `r` — rename bookmark (modal for new name)
+  - [x] `x` — forget bookmark (local only, no remote propagation)
+  - [x] `b` — create bookmark on selected commit (works in Log and Bookmarks commits view)
 - [ ] Bookmark operations (Phase 2 — medium effort)
   - [ ] `m` — move bookmark to different commit (revset picker)
   - [ ] `t`/`T` — track/untrack remote bookmark
@@ -75,11 +75,11 @@ All operations work in both Log panel and Bookmarks commits view.
 
 - [x] Keybind system — registry architecture with config support ready
 - [x] Command registry — panel/context/type taxonomy
-- [x] Focus tracking — hierarchical context system (e.g., `log.revisions.files`) with prefix matching
+- [x] Focus tracking — sibling mode system (e.g., `log.revisions`, `log.files`) without inheritance
 - [x] Dialog system — modal stack with backdrop, theme-aware overlay
 - [x] Theme system — dual-theme support (lazygit, opencode)
-- [x] Status bar — context-aware keybinding hints
-- [x] Command palette (`?`) — grouped by context hierarchy, fuzzy search, Enter executes
+- [x] Status bar — exact context match only (shows current mode + globals)
+- [x] Command palette (`?`) — semantic grouping (revisions, files, bookmarks), fuzzy search, Enter executes
 - [ ] Configuration — user config file, theme selection, custom keybinds → [plan](./plans/configuration.md)
 
 ## Utilities
@@ -275,11 +275,12 @@ All major performance issues have been resolved:
 - [ ] Log/bookmark panels slightly wider
 - [ ] Selected bookmark should match working copy on load
 - [ ] Active bookmark indication when navigating
-- [x] Remove "Change" prefix from command titles (e.g., "New" not "New change")
+- [x] All command titles lowercase (e.g., "new" not "New")
+- [x] Simplified command titles in context (e.g., "create" not "Create bookmark" in bookmarks context)
 - [ ] Hide tab switching `[`/`]` from status bar, add to help modal Navigation section
   - Group with other general nav commands (j/k, ctrl+u/d) that apply across contexts
   - Avoid duplicating commands that appear in multiple contexts
-- [x] Command grouping by context hierarchy in help modal (Navigation section for global commands)
+- [x] Semantic command grouping in help modal (revisions, files, bookmarks, oplog)
 
 ### Technical Debt
 

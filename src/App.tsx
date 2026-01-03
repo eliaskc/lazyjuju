@@ -41,7 +41,7 @@ function AppContent() {
 	command.register(() => [
 		{
 			id: "global.quit",
-			title: "Quit",
+			title: "quit",
 			keybind: "quit",
 			context: "global",
 			type: "action",
@@ -54,7 +54,7 @@ function AppContent() {
 			? [
 					{
 						id: "global.toggle_console",
-						title: "Toggle Console",
+						title: "toggle console",
 						keybind: "toggle_console" as const,
 						context: "global" as const,
 						type: "action" as const,
@@ -64,7 +64,7 @@ function AppContent() {
 			: []),
 		{
 			id: "global.focus_next",
-			title: "Focus Next Panel",
+			title: "focus next panel",
 			keybind: "focus_next",
 			context: "global",
 			type: "navigation",
@@ -73,7 +73,7 @@ function AppContent() {
 		},
 		{
 			id: "global.focus_prev",
-			title: "Focus Previous Panel",
+			title: "focus previous panel",
 			keybind: "focus_prev",
 			context: "global",
 			type: "navigation",
@@ -82,7 +82,7 @@ function AppContent() {
 		},
 		{
 			id: "global.focus_panel_1",
-			title: "Focus Log Panel",
+			title: "focus log panel",
 			keybind: "focus_panel_1",
 			context: "global",
 			type: "navigation",
@@ -91,7 +91,7 @@ function AppContent() {
 		},
 		{
 			id: "global.focus_panel_2",
-			title: "Focus Refs Panel",
+			title: "focus refs panel",
 			keybind: "focus_panel_2",
 			context: "global",
 			type: "navigation",
@@ -100,7 +100,7 @@ function AppContent() {
 		},
 		{
 			id: "global.focus_panel_3",
-			title: "Focus Detail Panel",
+			title: "focus detail panel",
 			keybind: "focus_panel_3",
 			context: "global",
 			type: "navigation",
@@ -109,7 +109,7 @@ function AppContent() {
 		},
 		{
 			id: "global.help",
-			title: "Help",
+			title: "help",
 			keybind: "help",
 			context: "global",
 			type: "action",
@@ -117,7 +117,7 @@ function AppContent() {
 		},
 		{
 			id: "global.refresh",
-			title: "Refresh",
+			title: "refresh",
 			keybind: "refresh",
 			context: "global",
 			type: "action",
@@ -125,7 +125,7 @@ function AppContent() {
 		},
 		{
 			id: "global.git_fetch",
-			title: "Git Fetch",
+			title: "git fetch",
 			keybind: "jj_git_fetch",
 			context: "global",
 			type: "action",
@@ -141,7 +141,7 @@ function AppContent() {
 		},
 		{
 			id: "global.git_fetch_all",
-			title: "Git Fetch All",
+			title: "git fetch all",
 			keybind: "jj_git_fetch_all",
 			context: "global",
 			type: "action",
@@ -157,7 +157,7 @@ function AppContent() {
 		},
 		{
 			id: "global.git_push",
-			title: "Git Push",
+			title: "git push",
 			keybind: "jj_git_push",
 			context: "global",
 			type: "action",
@@ -171,7 +171,7 @@ function AppContent() {
 		},
 		{
 			id: "global.git_push_all",
-			title: "Git Push All",
+			title: "git push all",
 			keybind: "jj_git_push_all",
 			context: "global",
 			type: "action",

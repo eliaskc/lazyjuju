@@ -32,6 +32,7 @@ import { DescribeModal } from "../modals/DescribeModal"
 
 export function BookmarksPanel() {
 	const {
+		commits,
 		bookmarks,
 		selectedBookmarkIndex,
 		setSelectedBookmarkIndex,
@@ -191,7 +192,7 @@ export function BookmarksPanel() {
 			return [
 				{
 					id: "refs.files.next",
-					title: "Next file",
+					title: "next file",
 					keybind: "nav_down",
 					context: "refs.files",
 					type: "navigation",
@@ -201,7 +202,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.files.prev",
-					title: "Previous file",
+					title: "previous file",
 					keybind: "nav_up",
 					context: "refs.files",
 					type: "navigation",
@@ -211,7 +212,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.files.toggle",
-					title: "Toggle folder",
+					title: "toggle folder",
 					keybind: "enter",
 					context: "refs.files",
 					type: "action",
@@ -221,7 +222,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.files.back",
-					title: "Back to revisions",
+					title: "back",
 					keybind: "escape",
 					context: "refs.files",
 					type: "view",
@@ -231,7 +232,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.files.restore",
-					title: "Restore",
+					title: "restore",
 					keybind: "jj_restore",
 					context: "refs.files",
 					type: "action",
@@ -256,7 +257,7 @@ export function BookmarksPanel() {
 			return [
 				{
 					id: "refs.revisions.next",
-					title: "Next revision",
+					title: "next revision",
 					keybind: "nav_down",
 					context: "refs.revisions",
 					type: "navigation",
@@ -266,7 +267,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.prev",
-					title: "Previous revision",
+					title: "previous revision",
 					keybind: "nav_up",
 					context: "refs.revisions",
 					type: "navigation",
@@ -276,7 +277,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.view_files",
-					title: "View files",
+					title: "view files",
 					keybind: "enter",
 					context: "refs.revisions",
 					type: "view",
@@ -286,7 +287,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.back",
-					title: "Back to bookmarks",
+					title: "back",
 					keybind: "escape",
 					context: "refs.revisions",
 					type: "view",
@@ -296,7 +297,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.new",
-					title: "New",
+					title: "new",
 					keybind: "jj_new",
 					context: "refs.revisions",
 					type: "action",
@@ -309,7 +310,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.edit",
-					title: "Edit",
+					title: "edit",
 					keybind: "jj_edit",
 					context: "refs.revisions",
 					type: "action",
@@ -322,7 +323,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.squash",
-					title: "Squash",
+					title: "squash",
 					keybind: "jj_squash",
 					context: "refs.revisions",
 					type: "action",
@@ -350,7 +351,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.describe",
-					title: "Describe",
+					title: "describe",
 					keybind: "jj_describe",
 					context: "refs.revisions",
 					type: "action",
@@ -388,7 +389,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.abandon",
-					title: "Abandon",
+					title: "abandon",
 					keybind: "jj_abandon",
 					context: "refs.revisions",
 					type: "action",
@@ -408,7 +409,7 @@ export function BookmarksPanel() {
 				},
 				{
 					id: "refs.revisions.bookmark",
-					title: "Create bookmark",
+					title: "create bookmark",
 					keybind: "bookmark_set",
 					context: "refs.revisions",
 					type: "action",
@@ -438,7 +439,7 @@ export function BookmarksPanel() {
 		return [
 			{
 				id: "refs.bookmarks.next",
-				title: "Next bookmark",
+				title: "next",
 				keybind: "nav_down",
 				context: "refs.bookmarks",
 				type: "navigation",
@@ -448,7 +449,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.prev",
-				title: "Previous bookmark",
+				title: "previous",
 				keybind: "nav_up",
 				context: "refs.bookmarks",
 				type: "navigation",
@@ -458,7 +459,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.view_revisions",
-				title: "View revisions",
+				title: "view revisions",
 				keybind: "enter",
 				context: "refs.bookmarks",
 				type: "view",
@@ -468,7 +469,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.create",
-				title: "Create bookmark",
+				title: "create",
 				keybind: "bookmark_create",
 				context: "refs.bookmarks",
 				type: "action",
@@ -492,7 +493,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.delete",
-				title: "Delete bookmark",
+				title: "delete",
 				keybind: "bookmark_delete",
 				context: "refs.bookmarks",
 				type: "action",
@@ -512,7 +513,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.rename",
-				title: "Rename bookmark",
+				title: "rename",
 				keybind: "bookmark_rename",
 				context: "refs.bookmarks",
 				type: "action",
@@ -538,7 +539,7 @@ export function BookmarksPanel() {
 			},
 			{
 				id: "refs.bookmarks.forget",
-				title: "Forget bookmark",
+				title: "forget",
 				keybind: "bookmark_forget",
 				context: "refs.bookmarks",
 				type: "action",
