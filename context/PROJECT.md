@@ -83,7 +83,6 @@ All operations work in both Log panel and Bookmarks commits view.
 ## Utilities
 
 - [x] `ctrl+r` — manual refresh (changed from `R` to avoid conflict with restore)
-- [x] `Ctrl+Y` — copy selection to clipboard
 - [x] Bold working copy indicator
 - [x] Auto-hiding scrollbar
 - [x] Smart diff loading — debounced + skips reload when content unchanged
@@ -250,15 +249,14 @@ Lazygit-style interactive `jj split` — mark files/hunks to keep in current com
 
 ## Git Remote Operations
 
-- [ ] `f` — git fetch (default remote)
-- [ ] `F` — git fetch all remotes
-- [ ] `p` — push change + create PR (jj-native, works on any commit)
+- [x] `f` — git fetch (default remote)
+- [x] `F` — git fetch all remotes
+- [x] `p` — git push change (jj-native, works on any commit)
   - Runs `jj git push --change <selected>` (auto-creates bookmark from change ID)
-  - Runs `gh pr create --head <auto-bookmark>`
-  - No bookmark naming required — jj handles it
-- [ ] `P` — push all tracked bookmarks
+- [x] `P` — push all tracked bookmarks
+- [ ] PR creation after push (`gh pr create` integration)
 
-**jj-native approach:** Change ID is the identity, bookmark is just transport. No naming ceremony — select commit, press `p`, PR exists.
+**jj-native approach:** Change ID is the identity, bookmark is just transport. No naming ceremony — select commit, press `p`, done.
 
 **Note:** jj's push is safe by default (like `git push --force-with-lease`). No force flag needed.
 
@@ -275,6 +273,7 @@ Lazygit-style interactive `jj split` — mark files/hunks to keep in current com
 
 ### Bugs
 
+- **HIGH:** Divergent change IDs break operations — need to detect and fall back to commit ID
 - Help modal has small visual gap between border and outer edge (OpenTUI quirk)
 - Search input in help modal doesn't render visually (filtering works though)
 - Spaces not rendering in BorderBox corner overlays
@@ -307,6 +306,7 @@ All major performance issues have been resolved:
 
 - Add unit tests for core operations
 - Verify all jj errors shown in command log
+- Display more jj output in command log (e.g., "moved bookmark sideways" on push)
 - Review dialog API patterns — consider consolidating
 
 ---

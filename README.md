@@ -2,30 +2,32 @@
 
 > The rudder for your jj
 
-A simple terminal UI for (Jujutsu)](https://github.com/martinvonz/jj), inspired by [lazygit](https://github.com/jesseduffield/lazygit). Built with [OpenTUI](https://github.com/sst/opentui) and [SolidJS](https://www.solidjs.com/).
-
-> Disclaimer: almost all code in this project has been written by coding agents (primarily Claude through [OpenCode](https://github.com/sst/opencode)).
+A simple terminal UI for [Jujutsu](https://github.com/martinvonz/jj), inspired by [lazygit](https://github.com/jesseduffield/lazygit). Built with [OpenTUI](https://github.com/sst/opentui) and [SolidJS](https://www.solidjs.com/).
 
 <!-- TODO: demo GIF -->
 
-While learning jj I found myself coming back to lazygit to view diffs and traverse the changes I'd made quickly and easily, which has become increasingly important to me with the rise of coding agents. While there are better and more feature-rich jj TUIs, I found none quite gave me a painfree experience for this primary use case.
+While learning jj I found myself coming back to lazygit to view diffs and traverse the changes I'd made quickly and easily, which has become increasingly important to me with the rise of coding agents. While there are existing jj TUIs, none quite scratched that lazygit itch.
 
-kajji is my attempt to bring the simplicity and polish of lazygit to jj, while also letting me experiment with using coding agents to a greater extent, building a TUI for the first time and getting more familiar with jj in the process.
+Kajji is my attempt to bring the simplicity and polish of lazygit to jj, while also leveraging coding agents effectively and building a TUI for the first time.
+
+> Disclaimer: almost all code in this project has been written by coding agents (primarily Claude Opus 4.5 through [OpenCode](https://github.com/sst/opencode)).
 
 ## Principles
 
-- **Polish & simplicity** — Do less, but do it well.
-- **Intuitive UX** — Sensible defaults, consistent patterns.
-- **Snappy** — If it feels slow, it's a bug.
+- **Polish & simplicity** - Do less, but do it well.
+- **Intuitive UX** - Sensible defaults, consistent patterns.
+- **Snappy** - If it feels slow, it's a bug.
 
 ## Features
 
-- **Full-color diffs** - Works with your configured diff tool (difftastic, delta, etc.)
-- **Commit log** - Navigate jj's graph with vim-style keybindings
-- **Bookmarks panel** - Browse bookmarks with drill-down into commits and files
-- **File tree** - Collapsible folders, file status colors (A/M/D)
-- **Theming** - Multiple themes (lazygit-style, opencode-style) with terminal adaptation
-- **Searchable help** - Press `?` for all keybindings, with fuzzy search
+- **Full-color diffs** — works with difftastic, delta, or your configured diff tool
+- **Commit log** — navigate jj's graph with vim-style keybindings
+- **Bookmarks panel** — drill down into commits and files
+- **Collapsible file tree** — with status colors (A/M/D)
+- **Operation log** — view and restore from jj op history
+- **Git operations** — fetch and push
+- **Undo/redo** — with confirmation showing what will change
+- **Help palette** — press `?` for all keybindings with fuzzy search
 
 ## Installation
 
@@ -62,48 +64,52 @@ Run `kajji` in any jj repository:
 kajji
 ```
 
-### Navigation
+### Keybindings
 
-| Key         | Action                             |
-| ----------- | ---------------------------------- |
-| `j` / `k`   | Move down / up                     |
-| `Tab`       | Cycle focus between panels         |
-| `1` `2` `3` | Jump to panel directly             |
-| `Enter`     | Drill into commit (show file tree) |
-| `Escape`    | Back / close modal                 |
-
-### Actions
-
-| Key      | Action                      |
-| -------- | --------------------------- |
-| `?`      | Show help                   |
-| `Ctrl+Y` | Copy selection to clipboard |
-| `q`      | Quit                        |
+| Key | Action |
+| --- | ------ |
+| `j` / `k` | Move down / up |
+| `Tab` | Cycle focus between panels |
+| `Enter` | Drill into commit / file |
+| `Escape` | Back / close modal |
+| `?` | Show help with fuzzy search |
+| `q` | Quit |
 
 ### Operations
 
-| Key | Action             |
-| --- | ------------------ |
-| `n` | New change         |
-| `e` | Edit change        |
-| `d` | Describe change    |
+| Key | Action |
+| --- | ------ |
+| `n` | New change |
+| `e` | Edit change |
+| `d` | Describe change |
 | `s` | Squash into parent |
-| `a` | Abandon change     |
+| `a` | Abandon change |
+| `u` / `U` | Undo / redo |
+| `f` / `F` | Git fetch / fetch all |
+| `p` / `P` | Git push / push all |
 
-## Roadmap
+### Bookmarks
 
-**Coming soon:**
+| Key | Action |
+| --- | ------ |
+| `c` | Create bookmark |
+| `d` | Delete bookmark |
+| `r` | Rename bookmark |
+| `b` | Create bookmark on commit |
 
-- Search and filter (`/`)
-- Command mode (`:`)
-- GitHub integration (create PR, open in browser)
-- Configuration (user config file, theme selection)
+## Next up
+
+- Multi-select for batch rebase and squash
+- Search and filter (log, bookmarks, files)
+- Workspaces tab (monitor agent commits across workspaces)
+
+## Exploring
+
+- Interactive `jj split` (file/hunk selection)
+- Stacked PR creation and overview
+- Configuration (user config file, theme switching)
 
 See [PROJECT](./context/PROJECT.md) for the full plan.
-
-## Configuration
-
-> Configuration support is coming. See [configuration plan](./context/plans/configuration.md).
 
 ## Built With
 

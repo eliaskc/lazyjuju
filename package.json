@@ -12,7 +12,6 @@
 	"files": ["bin", "src"],
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/index.tsx",
-		"build": "bun build --compile src/index.tsx --outfile kajji",
 		"test": "bun test",
 		"check": "tsc --noEmit",
 		"lint": "biome check .",

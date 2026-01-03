@@ -16,18 +16,13 @@ Follow the Boy Scout rule:
 
 ## OpenTUI Documentation
 
-Before working on TUI component tasks, read the OpenTUI Solid docs:
+Before working on TUI component tasks, check the OpenTUI repo:
+- **Docs**: https://github.com/sst/opentui/tree/main/packages/solid
+- **Examples**: https://github.com/sst/opentui/tree/main/packages/solid/examples
+
+Or fetch directly:
 ```bash
 curl -s https://raw.githubusercontent.com/sst/opentui/refs/heads/main/packages/solid/README.md
-```
-
-For examples, use gitchamber:
-```bash
-# List all Solid examples
-curl -s "https://gitchamber.com/repos/sst/opentui/main/files?glob=packages/solid/examples/**"
-
-# Read specific example (e.g., input handling)
-curl -s "https://gitchamber.com/repos/sst/opentui/main/files/packages/solid/examples/components/input-demo.tsx?glob=**/*.tsx"
 ```
 
 ## Code Style
@@ -74,8 +69,32 @@ This project uses Solid.js, NOT React. Key differences:
 
 - **Entry**: `src/index.tsx` - renders root App component
 - **Commander**: `src/commander/` - jj CLI wrappers and output parsers
-- **Components**: `src/components/` - TUI components
+- **Components**: `src/components/` - TUI components (panels, modals)
 - **Context**: `src/context/` - SolidJS context providers (state management)
+- **Keybind**: `src/keybind/` - Keybind registry and parser
+- **Theme**: `src/theme/` - Theme definitions and presets (lazygit, opencode)
+- **Utils**: `src/utils/` - Shared utilities (file tree, double-click detection)
+
+## Testing
+
+- **Unit tests**: `tests/unit/` - mirrors src structure
+- **Benchmarks**: `tests/bench/` - performance tests with threshold assertions
+- Run all: `bun test`
+- Run benchmarks: `bun test tests/bench/`
+
+## Key Patterns
+
+### Focus System (`src/context/focus.tsx`)
+Panels have modes like `log.revisions`, `log.files`, `bookmarks.list`, `bookmarks.commits`. Commands register for specific contexts and only activate when that context matches.
+
+### Command Registry (`src/App.tsx`)
+Commands are registered with `context`, `type`, and `visibility`. The keybind system routes key presses to the appropriate command based on current focus.
+
+### Dialog System (`src/context/dialog.tsx`)
+Modal stack with backdrop overlay. Dialogs push/pop from stack. Theme-aware styling.
+
+### Prefix Injection (Log Parsing)
+We inject unique prefixes into `jj log` template output to reliably parse multi-line entries. See `src/commander/log.ts`.
 
 ## Project Context & Plans
 
@@ -88,18 +107,26 @@ The `context/` folder contains project documentation:
 - **`context/plans/configuration.md`** - Config system design
 - **`context/plans/keybindings.md`** - Context-aware keybinds, status bar visibility
 - **`context/plans/diff-viewing.md`** - Side-by-side diffs, layout modes, difftastic
-- **`context/plans/release-flows.md`** - bunx, Homebrew, npm publishing
+- **`context/plans/diff-virtualization.md`** - Large diff performance (PTY streaming, lazy loading)
+- **`context/plans/multi-select.md`** - Visual mode for batch operations
+- **`context/plans/interactive-splitting.md`** - File/hunk-level jj split
+- **`context/plans/github-stacking.md`** - Stacked PR creation and management
+- **`context/plans/release-flows.md`** - npm, Homebrew, compiled binaries
 
-### References (analysis of similar projects)
-- **`context/references/reference-jjui.md`** - jjui (Go) analysis
-- **`context/references/reference-lazyjj.md`** - lazyjj (Rust) analysis
-- **`context/references/reference-opencode.md`** - opencode patterns
-- **`context/references/reference-opentui.md`** - OpenTUI framework notes
+### References
+When unsure how to implement a jj TUI feature, check these repos and local analyses:
+
+| Project | Repo | Local Analysis |
+|---------|------|----------------|
+| **jjui** (Go) | [idursun/jjui](https://github.com/idursun/jjui) | `context/references/reference-jjui.md` |
+| **lazyjj** (Rust) | [Cretezy/lazyjj](https://github.com/Cretezy/lazyjj) | `context/references/reference-lazyjj.md` |
+| **opencode** (TS) | [sst/opencode](https://github.com/sst/opencode) | `context/references/reference-opencode.md` |
+| **OpenTUI** | [sst/opentui](https://github.com/sst/opentui) | `context/references/reference-opentui.md` |
+| **critique** (TS) | [remorses/critique](https://github.com/remorses/critique) | — |
 
 ### Other
 - **`context/llm-suggestions/`** - AI-generated improvement ideas (low priority)
 - **`context/archive/`** - Historical docs (original spec, phase history)
-- **`context/opentui-research.md`** - ANSI rendering deep dive
 
 ## When to Update Documentation
 
@@ -108,6 +135,7 @@ Keep docs in sync with changes:
 | Trigger | Action |
 |---------|--------|
 | **Implemented a feature** | Check off in `PROJECT.md` |
+| **Major feature completed** | Update `README.md` (features list, keybindings) |
 | **Found a bug** | Add to `PROJECT.md` under "Known Issues" |
 | **New feature/goal** | Add checkbox to `PROJECT.md`, or create `plans/*.md` for complex features |
 | **Design decision made** | Document in relevant `plans/*.md` file |
@@ -124,41 +152,6 @@ This repo uses jj, not git directly:
 - `jj desc -m "msg"` - set commit message
 - `jj new` - create new empty working copy
 - `jj squash` - squash into parent
-
-## Reference Implementations
-
-When unsure how to implement a jj TUI feature, check these repos:
-
-### jjui (Go) - Primary Reference
-- **Repo**: https://github.com/idursun/jjui
-- **Why**: Most mature jj TUI, excellent UX patterns
-- **Key patterns**:
-  - Prefix injection for log parsing (we use this approach)
-  - Panel-based navigation
-  - Command palette
-
-### lazyjj (Rust) - Secondary Reference  
-- **Repo**: https://github.com/Cretezy/lazyjj
-- **Why**: Alternative approaches, lazygit-inspired UI
-- **Key patterns**:
-  - Line-index based parsing (we chose prefix injection instead)
-  - Tab-based panel switching
-
-### opencode (TypeScript/Go)
-- **Repo**: https://github.com/opencode/opencode
-- **Why**: Same tech stack patterns (TypeScript TUI)
-- **Key patterns**:
-  - SolidJS-based TUI architecture
-  - Tool/command patterns
-
-### critique (TypeScript) - OpenTUI Reference
-- **Repo**: https://github.com/remorses/critique
-- **Why**: Production OpenTUI app with ANSI rendering, diff views, themes
-- **Key patterns**:
-  - Uses `ghostty-opentui` for ANSI→styled rendering
-  - Shiki for syntax highlighting
-  - `<scrollbox>` for scrollable content
-  - Responsive layout with `useOnResize`
 
 ## OpenTUI Component Reference
 

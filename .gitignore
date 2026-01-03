@@ -5,8 +5,6 @@ node_modules
 out
 dist
 *.tgz
-kajji
-lazyjuju
 
 # code coverage
 coverage
