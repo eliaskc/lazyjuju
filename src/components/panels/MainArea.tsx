@@ -1,9 +1,18 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import {
+	For,
+	Show,
+	createEffect,
+	createMemo,
+	createSignal,
+	onCleanup,
+	onMount,
+} from "solid-js"
+import type { DiffStats } from "../../commander/operations"
 import type { Commit } from "../../commander/types"
 import { useCommand } from "../../context/command"
 import { useFocus } from "../../context/focus"
-import { useSync } from "../../context/sync"
+import { type CommitDetails, useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { AnsiText } from "../AnsiText"
 import { Panel } from "../Panel"
@@ -12,30 +21,183 @@ const INITIAL_LIMIT = 1000
 const LIMIT_INCREMENT = 200
 const LOAD_THRESHOLD = 200
 
-function CommitHeader(props: { commit: Commit }) {
+function formatTimestamp(timestamp: string): string {
+	// Input: "2026-01-02 14:30:45 -0800"
+	// Output: "Thu Jan 2 14:30:45 2026 -0800"
+	const match = timestamp.match(
+		/(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2}:\d{2}) (.+)/,
+	)
+	if (!match) return timestamp
+
+	const [, year, month, day, time, tz] = match
+	const date = new Date(`${year}-${month}-${day}T${time}`)
+	const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+	const monthNames = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec",
+	]
+	const dayName = dayNames[date.getDay()]
+	const monthName = monthNames[date.getMonth()]
+	const dayNum = date.getDate()
+
+	return `${dayName} ${monthName} ${dayNum} ${time} ${year} ${tz}`
+}
+
+function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 	const { colors } = useTheme()
+	const s = () => props.stats
+
+	const separatorWidth = 3 // " | "
+	const barMargin = 2 // margin on right side
+
+	// Scale +/- counts to fit within available width while preserving ratio
+	const scaleBar = (
+		insertions: number,
+		deletions: number,
+		availableWidth: number,
+	) => {
+		const total = insertions + deletions
+		if (total === 0) return { plus: 0, minus: 0 }
+		if (total <= availableWidth) return { plus: insertions, minus: deletions }
+
+		// Scale down proportionally
+		const scale = availableWidth / total
+		const scaledPlus = Math.round(insertions * scale)
+		const scaledMinus = Math.round(deletions * scale)
+
+		// Ensure at least 1 char if there were any changes
+		const plus = insertions > 0 ? Math.max(1, scaledPlus) : 0
+		const minus = deletions > 0 ? Math.max(1, scaledMinus) : 0
+
+		return { plus, minus }
+	}
+
+	return (
+		<>
+			<text> </text>
+			<For each={s().files}>
+				{(file) => {
+					// Calculate available width for bar based on actual path length
+					const pathLen = file.path.length
+					const availableBarWidth = Math.max(
+						1,
+						props.maxWidth - pathLen - separatorWidth - barMargin,
+					)
+					const bar = scaleBar(
+						file.insertions,
+						file.deletions,
+						availableBarWidth,
+					)
+					return (
+						<text wrapMode="none">
+							{file.path}
+							{" | "}
+							<span style={{ fg: colors().success }}>
+								{"+".repeat(bar.plus)}
+							</span>
+							<span style={{ fg: colors().error }}>
+								{"-".repeat(bar.minus)}
+							</span>
+						</text>
+					)
+				}}
+			</For>
+			<text>
+				{s().totalFiles} file{s().totalFiles !== 1 ? "s" : ""} changed
+				<Show when={s().totalInsertions > 0}>
+					{", "}
+					<span style={{ fg: colors().success }}>
+						{s().totalInsertions} insertion
+						{s().totalInsertions !== 1 ? "s" : ""}(+)
+					</span>
+				</Show>
+				<Show when={s().totalDeletions > 0}>
+					{", "}
+					<span style={{ fg: colors().error }}>
+						{s().totalDeletions} deletion
+						{s().totalDeletions !== 1 ? "s" : ""}(-)
+					</span>
+				</Show>
+			</text>
+			<text fg={colors().textMuted}>{"─".repeat(props.maxWidth)}</text>
+		</>
+	)
+}
+
+function CommitHeader(props: {
+	commit: Commit
+	details: CommitDetails | null
+	maxWidth: number
+}) {
+	const { colors } = useTheme()
+
+	// Stale-while-revalidate: show details as-is (may be stale from previous commit)
+	// until new details arrive. This prevents flash during navigation.
+	const subject = () => props.details?.subject || props.commit.description
+	const stats = () => props.details?.stats
+
+	const bodyLines = createMemo(() => {
+		const b = props.details?.body
+		return b ? b.split("\n") : null
+	})
 
 	return (
 		<box flexDirection="column" flexShrink={0}>
 			<text>
-				{"Change: "}
-				<span style={{ fg: colors().primary }}>{props.commit.changeId}</span>
-			</text>
-			<text>
-				{"Commit: "}
-				<span style={{ fg: colors().primary }}>{props.commit.commitId}</span>
+				<span style={{ fg: colors().warning }}>{props.commit.changeId}</span>{" "}
+				<span style={{ fg: colors().textMuted }}>{props.commit.commitId}</span>
 			</text>
 			<text>
 				{"Author: "}
-				<span style={{ fg: colors().warning }}>{props.commit.author}</span>
-				{` <${props.commit.authorEmail}>`}
+				<span style={{ fg: colors().secondary }}>
+					{props.commit.author} {"<"}
+					{props.commit.authorEmail}
+					{">"}
+				</span>
 			</text>
 			<text>
 				{"Date:   "}
-				<span style={{ fg: colors().success }}>{props.commit.timestamp}</span>
+				<span style={{ fg: colors().secondary }}>
+					{formatTimestamp(props.commit.timestamp)}
+				</span>
 			</text>
 			<text> </text>
-			<AnsiText content={`    ${props.commit.description}`} wrapMode="none" />
+			<box flexDirection="row">
+				<text>{"    "}</text>
+				<AnsiText content={subject()} wrapMode="none" />
+			</box>
+			<Show when={bodyLines()}>
+				{(lines: () => string[]) => (
+					<box flexDirection="column">
+						<text> </text>
+						<For each={lines()}>
+							{(line) => (
+								<text>
+									{"    "}
+									{line}
+								</text>
+							)}
+						</For>
+					</box>
+				)}
+			</Show>
+			<Show when={stats()?.totalFiles ? stats() : undefined}>
+				{(s: () => DiffStats) => (
+					<box flexDirection="column">
+						<FileStats stats={s()} maxWidth={props.maxWidth} />
+					</box>
+				)}
+			</Show>
 			<text> </text>
 		</box>
 	)
@@ -43,7 +205,8 @@ function CommitHeader(props: { commit: Commit }) {
 
 export function MainArea() {
 	const {
-		selectedCommit,
+		activeCommit,
+		commitDetails,
 		diff,
 		diffLoading,
 		diffError,
@@ -63,7 +226,7 @@ export function MainArea() {
 	)
 
 	createEffect(() => {
-		const commit = selectedCommit()
+		const commit = activeCommit()
 		if (commit && commit.changeId !== currentCommitId()) {
 			setCurrentCommitId(commit.changeId)
 			setScrollTop(0)
@@ -167,8 +330,14 @@ export function MainArea() {
 						},
 					}}
 				>
-					<Show when={selectedCommit()}>
-						<CommitHeader commit={selectedCommit()!} />
+					<Show when={activeCommit()}>
+						{(commit: () => Commit) => (
+							<CommitHeader
+								commit={commit()}
+								details={commitDetails()}
+								maxWidth={mainAreaWidth()}
+							/>
+						)}
 					</Show>
 					<Show when={diff()}>
 						<ghostty-terminal

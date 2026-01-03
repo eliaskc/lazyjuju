@@ -1,8 +1,8 @@
 import {
-	execute,
-	executeStreaming,
-	executePTYStreaming,
 	type PTYStreamingOptions,
+	execute,
+	executePTYStreaming,
+	executeStreaming,
 } from "./executor"
 
 const PROFILE = process.env.LAZYJUJU_PROFILE === "1"

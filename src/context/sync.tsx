@@ -13,6 +13,11 @@ import { type Bookmark, fetchBookmarks } from "../commander/bookmarks"
 import { streamDiffPTY } from "../commander/diff"
 import { fetchFiles } from "../commander/files"
 import { fetchLog } from "../commander/log"
+import {
+	type DiffStats,
+	jjDiffStats,
+	jjShowDescription,
+} from "../commander/operations"
 import type { Commit, FileChange } from "../commander/types"
 import {
 	type FileTreeNode,
@@ -38,6 +43,13 @@ function profile(label: string) {
 export type ViewMode = "log" | "files"
 export type BookmarkViewMode = "list" | "commits" | "files"
 
+export interface CommitDetails {
+	changeId: string
+	subject: string
+	body: string
+	stats: DiffStats
+}
+
 interface SyncContextValue {
 	commits: () => Commit[]
 	selectedIndex: () => number
@@ -47,6 +59,8 @@ interface SyncContextValue {
 	selectFirst: () => void
 	selectLast: () => void
 	selectedCommit: () => Commit | undefined
+	activeCommit: () => Commit | undefined
+	commitDetails: () => CommitDetails | null
 	loadLog: () => Promise<void>
 	loading: () => boolean
 	error: () => string | null
@@ -168,6 +182,10 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	>(new Set())
 	const [bookmarkFilesLoading, setBookmarkFilesLoading] = createSignal(false)
 
+	const [commitDetails, setCommitDetails] = createSignal<CommitDetails | null>(
+		null,
+	)
+
 	const flatFiles = createMemo(() => {
 		const tree = fileTree()
 		if (!tree) return []
@@ -222,6 +240,51 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		} else if (currentPanel === "detail") {
 			focus.setActiveContext("detail")
 		}
+	})
+
+	// Determine which commit to show based on context (main log vs bookmark commits)
+	const activeCommit = () => {
+		const focusedPanel = focus.panel()
+		const bmMode = bookmarkViewMode()
+		if (
+			focusedPanel === "refs" &&
+			(bmMode === "commits" || bmMode === "files")
+		) {
+			return selectedBookmarkCommit()
+		}
+		return selectedCommit()
+	}
+
+	// Fetch full commit details when selection changes
+	// Works for both main log and bookmark commits views
+	let currentDetailsChangeId: string | null = null
+	createEffect(() => {
+		const commit = activeCommit()
+
+		if (!commit) {
+			setCommitDetails(null)
+			currentDetailsChangeId = null
+			return
+		}
+
+		if (commit.changeId === currentDetailsChangeId) return
+		currentDetailsChangeId = commit.changeId
+
+		// Fetch both in parallel (keep stale data until new arrives)
+		const changeId = commit.changeId
+		Promise.all([jjShowDescription(changeId), jjDiffStats(changeId)]).then(
+			([desc, stats]) => {
+				// Only update if still the current commit
+				if (currentDetailsChangeId === changeId) {
+					setCommitDetails({
+						changeId,
+						subject: desc.subject,
+						body: desc.body,
+						stats,
+					})
+				}
+			},
+		)
 	})
 
 	const selectPrev = () => {
@@ -581,6 +644,8 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		selectFirst,
 		selectLast,
 		selectedCommit,
+		activeCommit,
+		commitDetails,
 		loadLog,
 		loading,
 		error,

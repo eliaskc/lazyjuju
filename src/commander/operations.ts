@@ -105,7 +105,19 @@ export async function jjDescribe(
 export async function jjShowDescription(
 	revision: string,
 ): Promise<{ subject: string; body: string }> {
-	const result = await execute([
+	const styledTemplate = `if(empty, label("empty", "(empty) "), "") ++ if(description.first_line(), description.first_line(), label("description placeholder", "(no description set)"))`
+	const subjectResult = await execute([
+		"log",
+		"-r",
+		revision,
+		"--no-graph",
+		"--color",
+		"always",
+		"-T",
+		styledTemplate,
+	])
+
+	const bodyResult = await execute([
 		"log",
 		"-r",
 		revision,
@@ -114,14 +126,14 @@ export async function jjShowDescription(
 		'description ++ "\\n"',
 	])
 
-	if (!result.success) {
-		return { subject: "", body: "" }
-	}
+	const subject = subjectResult.success ? subjectResult.stdout.trim() : ""
 
-	const description = result.stdout.trim()
-	const lines = description.split("\n")
-	const subject = lines[0] || ""
-	const body = lines.slice(1).join("\n").trim()
+	let body = ""
+	if (bodyResult.success) {
+		const description = bodyResult.stdout.trim()
+		const lines = description.split("\n")
+		body = lines.slice(1).join("\n").trim()
+	}
 
 	return { subject, body }
 }
@@ -174,4 +186,53 @@ export async function jjOpRestore(
 		...result,
 		command: `jj op restore ${operationId}`,
 	}
+}
+
+export interface DiffStats {
+	files: { path: string; insertions: number; deletions: number }[]
+	totalFiles: number
+	totalInsertions: number
+	totalDeletions: number
+}
+
+export async function jjDiffStats(revision: string): Promise<DiffStats> {
+	const result = await execute(["diff", "--stat", "-r", revision])
+
+	if (!result.success) {
+		return { files: [], totalFiles: 0, totalInsertions: 0, totalDeletions: 0 }
+	}
+
+	const lines = result.stdout.trim().split("\n")
+	const files: DiffStats["files"] = []
+	let totalFiles = 0
+	let totalInsertions = 0
+	let totalDeletions = 0
+
+	for (const line of lines) {
+		// Summary line: "14 files changed, 1448 insertions(+), 56 deletions(-)"
+		const summaryMatch = line.match(
+			/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
+		)
+		if (summaryMatch) {
+			totalFiles = Number.parseInt(summaryMatch[1] ?? "0", 10)
+			totalInsertions = summaryMatch[2]
+				? Number.parseInt(summaryMatch[2], 10)
+				: 0
+			totalDeletions = summaryMatch[3]
+				? Number.parseInt(summaryMatch[3], 10)
+				: 0
+			continue
+		}
+
+		// File line: "src/foo.ts | 12 ++++----"
+		const fileMatch = line.match(/^(.+?)\s+\|\s+(\d+)\s+([+-]*)/)
+		if (fileMatch) {
+			const path = (fileMatch[1] ?? "").trim()
+			const plusCount = (fileMatch[3]?.match(/\+/g) || []).length
+			const minusCount = (fileMatch[3]?.match(/-/g) || []).length
+			files.push({ path, insertions: plusCount, deletions: minusCount })
+		}
+	}
+
+	return { files, totalFiles, totalInsertions, totalDeletions }
 }
