@@ -1,5 +1,6 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { For, Show, createEffect, createSignal } from "solid-js"
+import { type OperationResult, jjRestore } from "../../commander/operations"
 import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
@@ -141,6 +142,26 @@ export function FileTreePanel() {
 			panel: "log",
 			hidden: true,
 			onSelect: exitFilesView,
+		},
+		{
+			id: "log.revisions.files.restore",
+			title: "Restore",
+			keybind: "jj_restore",
+			context: "log.revisions.files",
+			type: "action",
+			panel: "log",
+			onSelect: async () => {
+				const file = flatFiles()[selectedFileIndex()]
+				if (!file) return
+				const node = file.node
+				const pathType = node.isDirectory ? "folder" : "file"
+				const confirmed = await dialog.confirm({
+					message: `Restore ${pathType} "${node.path}"? This will discard changes.`,
+				})
+				if (confirmed) {
+					await runOperation("Restoring...", () => jjRestore([node.path]))
+				}
+			},
 		},
 	])
 

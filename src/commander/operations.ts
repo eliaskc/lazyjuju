@@ -229,6 +229,22 @@ export async function jjGitPush(options?: {
 	}
 }
 
+export async function jjRestore(
+	paths: string[],
+	revision?: string,
+): Promise<OperationResult> {
+	const args = ["restore"]
+	if (revision) {
+		args.push("-r", revision)
+	}
+	args.push(...paths)
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
 export interface DiffStats {
 	files: { path: string; insertions: number; deletions: number }[]
 	totalFiles: number
