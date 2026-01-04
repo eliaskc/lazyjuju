@@ -1,4 +1,5 @@
 import type { JSX } from "solid-js"
+import { useLayout } from "../context/layout"
 import { useTheme } from "../context/theme"
 import { StatusBar } from "./StatusBar"
 import { CommandLogPanel } from "./panels/CommandLogPanel"
@@ -11,6 +12,7 @@ interface LayoutProps {
 
 export function Layout(props: LayoutProps) {
 	const { colors, style } = useTheme()
+	const { layoutRatio } = useLayout()
 
 	return (
 		<box
@@ -24,7 +26,7 @@ export function Layout(props: LayoutProps) {
 		>
 			<box flexGrow={1} flexDirection="row" width="100%" gap={0}>
 				<box
-					flexGrow={1}
+					flexGrow={layoutRatio().left}
 					flexBasis={0}
 					height="100%"
 					flexDirection="column"
@@ -37,7 +39,12 @@ export function Layout(props: LayoutProps) {
 						{props.bottom}
 					</box>
 				</box>
-				<box flexGrow={2} flexBasis={0} height="100%" flexDirection="column">
+				<box
+					flexGrow={layoutRatio().right}
+					flexBasis={0}
+					height="100%"
+					flexDirection="column"
+				>
 					<box flexGrow={1}>{props.right}</box>
 					<CommandLogPanel />
 				</box>

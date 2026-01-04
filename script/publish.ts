@@ -3,7 +3,6 @@
  * Usage: bun run script/publish.ts [--tag <tag>] [--dry-run]
  */
 
-import { $ } from "bun"
 import {
 	cpSync,
 	existsSync,
@@ -12,6 +11,7 @@ import {
 	writeFileSync,
 } from "node:fs"
 import { join } from "node:path"
+import { $ } from "bun"
 
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"))
 const version = pkg.version

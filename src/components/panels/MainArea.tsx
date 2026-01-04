@@ -12,6 +12,7 @@ import type { DiffStats } from "../../commander/operations"
 import type { Commit } from "../../commander/types"
 import { useCommand } from "../../context/command"
 import { useFocus } from "../../context/focus"
+import { useLayout } from "../../context/layout"
 import { type CommitDetails, useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { AnsiText } from "../AnsiText"
@@ -209,8 +210,8 @@ export function MainArea() {
 		diffLoading,
 		diffError,
 		diffLineCount,
-		mainAreaWidth,
 	} = useSync()
+	const { mainAreaWidth } = useLayout()
 	const { colors } = useTheme()
 	const focus = useFocus()
 	const command = useCommand()

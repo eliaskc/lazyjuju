@@ -4,7 +4,7 @@ const SINGLE_LINE_KEYBINDINGS = [
 	{ name: "return", action: "submit" as const },
 	{ name: "enter", action: "submit" as const },
 ]
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useKeyboard } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import {
 	type Accessor,
@@ -13,8 +13,6 @@ import {
 	createEffect,
 	createMemo,
 	createSignal,
-	onCleanup,
-	onMount,
 } from "solid-js"
 import {
 	type CommandOption,
@@ -24,6 +22,7 @@ import {
 import { useDialog } from "../../context/dialog"
 import { useFocus } from "../../context/focus"
 import { useKeybind } from "../../context/keybind"
+import { useLayout } from "../../context/layout"
 import { useTheme } from "../../context/theme"
 import type { KeybindConfigKey } from "../../keybind"
 
@@ -99,27 +98,18 @@ function contextMatches(
 	return activeContext.startsWith(`${commandContext}.`)
 }
 
-const NARROW_THRESHOLD = 100
-
 export function HelpModal() {
-	const renderer = useRenderer()
 	const command = useCommand()
 	const keybind = useKeybind()
 	const dialog = useDialog()
 	const focus = useFocus()
+	const layout = useLayout()
 	const { colors, style } = useTheme()
 	const [filter, setFilter] = createSignal("")
 	const [selectedIndex, setSelectedIndex] = createSignal(-1)
-	const [terminalWidth, setTerminalWidth] = createSignal(renderer.width)
 	let searchInputRef: TextareaRenderable | undefined
 
-	onMount(() => {
-		const handleResize = (width: number) => setTerminalWidth(width)
-		renderer.on("resize", handleResize)
-		onCleanup(() => renderer.off("resize", handleResize))
-	})
-
-	const columnCount = () => (terminalWidth() < NARROW_THRESHOLD ? 1 : 3)
+	const columnCount = () => (layout.isNarrow() ? 1 : 3)
 
 	type SearchableCommand = CommandOption & { keybindStr: string }
 

@@ -33,6 +33,7 @@ import {
 	getFilePaths,
 } from "../utils/file-tree"
 import { useFocus } from "./focus"
+import { useLayout } from "./layout"
 import { useLoading } from "./loading"
 
 const PROFILE = process.env.KAJJI_PROFILE === "1"
@@ -74,9 +75,6 @@ interface SyncContextValue {
 	diffLoading: () => boolean
 	diffError: () => string | null
 	diffLineCount: () => number
-	terminalWidth: () => number
-	terminalHeight: () => number
-	mainAreaWidth: () => number
 
 	viewMode: () => ViewMode
 	fileTree: () => FileTreeNode | null
@@ -144,6 +142,7 @@ const SyncContext = createContext<SyncContextValue>()
 export function SyncProvider(props: { children: JSX.Element }) {
 	const renderer = useRenderer()
 	const focus = useFocus()
+	const layout = useLayout()
 	const globalLoading = useLoading()
 	const [commits, setCommits] = createSignal<Commit[]>([])
 	const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -153,8 +152,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	const [diffLoading, setDiffLoading] = createSignal(false)
 	const [diffError, setDiffError] = createSignal<string | null>(null)
 	const [diffLineCount, setDiffLineCount] = createSignal(0)
-	const [terminalWidth, setTerminalWidth] = createSignal(renderer.width)
-	const [terminalHeight, setTerminalHeight] = createSignal(renderer.height)
 
 	const [viewMode, setViewMode] = createSignal<ViewMode>("log")
 	const [files, setFiles] = createSignal<FileChange[]>([])
@@ -214,22 +211,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		bookmarkCommits()[selectedBookmarkCommitIndex()]
 	const selectedBookmarkFile = () =>
 		bookmarkFlatFiles()[selectedBookmarkFileIndex()]
-
-	const mainAreaWidth = () => {
-		const width = terminalWidth()
-		const mainAreaRatio = 2 / 3
-		const borderWidth = 2
-		return Math.floor(width * mainAreaRatio) - borderWidth
-	}
-
-	onMount(() => {
-		const handleResize = (width: number, height: number) => {
-			setTerminalWidth(width)
-			setTerminalHeight(height)
-		}
-		renderer.on("resize", handleResize)
-		onCleanup(() => renderer.off("resize", handleResize))
-	})
 
 	let lastOpLogId: string | null = null
 	let isRefreshing = false
@@ -641,7 +622,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 				columns,
 				paths,
 				cols: columns,
-				rows: terminalHeight(),
+				rows: layout.terminalHeight(),
 			},
 			{
 				onUpdate: (content: string, lineCount: number, complete: boolean) => {
@@ -681,7 +662,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	}
 
 	createEffect(() => {
-		const columns = mainAreaWidth()
+		const columns = layout.mainAreaWidth()
 		const mode = viewMode()
 		const bmMode = bookmarkViewMode()
 		const focusedPanel = focus.panel()
@@ -795,9 +776,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		diffLoading,
 		diffError,
 		diffLineCount,
-		terminalWidth,
-		terminalHeight,
-		mainAreaWidth,
 
 		viewMode,
 		fileTree,

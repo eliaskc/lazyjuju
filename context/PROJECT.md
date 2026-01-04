@@ -381,6 +381,7 @@ All major performance issues have been resolved:
 - Verify all jj errors shown in command log
 - Display more jj output in command log (e.g., "moved bookmark sideways" on push)
 - Review dialog API patterns — consider consolidating
+- Decompose sync.tsx into focused contexts → [plan](./plans/sync-decomposition.md)
 
 ---
 
