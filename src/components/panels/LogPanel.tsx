@@ -18,6 +18,7 @@ import {
 	jjEdit,
 	jjNew,
 	jjOpRestore,
+	jjRebase,
 	jjRedo,
 	jjRestore,
 	jjShowDescription,
@@ -39,6 +40,7 @@ import { FileTreeList } from "../FileTreeList"
 import { Panel } from "../Panel"
 import { BookmarkNameModal } from "../modals/BookmarkNameModal"
 import { DescribeModal } from "../modals/DescribeModal"
+import { RevisionPickerModal } from "../modals/RevisionPickerModal"
 import { UndoModal } from "../modals/UndoModal"
 
 type LogTab = "revisions" | "oplog"
@@ -431,6 +433,51 @@ export function LogPanel() {
 			},
 		},
 		{
+			id: "log.revisions.rebase",
+			title: "rebase",
+			keybind: "jj_rebase",
+			context: "log.revisions",
+			type: "action",
+			panel: "log",
+			onSelect: () => {
+				const commit = selectedCommit()
+				if (!commit) return
+				dialog.open(
+					() => (
+						<RevisionPickerModal
+							title={`Rebase ${commit.changeId.slice(0, 8)} onto`}
+							commits={commits()}
+							defaultRevision={commit.changeId}
+							onSelect={async (destination) => {
+								const result = await jjRebase(commit.changeId, destination)
+								if (isImmutableError(result)) {
+									const confirmed = await dialog.confirm({
+										message: "Target is immutable. Rebase anyway?",
+									})
+									if (confirmed) {
+										await runOperation("Rebasing...", () =>
+											jjRebase(commit.changeId, destination, {
+												ignoreImmutable: true,
+											}),
+										)
+									}
+								} else {
+									commandLog.addEntry(result)
+									if (result.success) {
+										refresh()
+										loadOpLog()
+									}
+								}
+							}}
+						/>
+					),
+					{
+						id: "rebase",
+						hints: [{ key: "enter", label: "confirm" }],
+					},
+				)
+			},
+		},
 			id: "log.revisions.describe",
 			title: "describe",
 			keybind: "jj_describe",

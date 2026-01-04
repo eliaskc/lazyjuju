@@ -92,6 +92,22 @@ export function isImmutableError(result: OperationResult): boolean {
 	)
 }
 
+export async function jjRebase(
+	revision: string,
+	destination: string,
+	options?: { ignoreImmutable?: boolean },
+): Promise<OperationResult> {
+	const args = ["rebase", "-r", revision, "-d", destination]
+	if (options?.ignoreImmutable) {
+		args.push("--ignore-immutable")
+	}
+	const result = await execute(args)
+	return {
+		...result,
+		command: `jj ${args.join(" ")}`,
+	}
+}
+
 export async function jjDescribe(
 	revision: string,
 	message: string,

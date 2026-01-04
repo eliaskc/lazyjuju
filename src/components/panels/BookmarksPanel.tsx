@@ -14,6 +14,7 @@ import {
 	jjDescribe,
 	jjEdit,
 	jjNew,
+	jjRebase,
 	jjRestore,
 	jjShowDescription,
 	jjSquash,
@@ -367,6 +368,50 @@ export function BookmarksPanel() {
 					},
 				},
 				{
+					id: "refs.revisions.rebase",
+					title: "rebase",
+					keybind: "jj_rebase",
+					context: "refs.revisions",
+					type: "action",
+					panel: "refs",
+					onSelect: () => {
+						const commit = selectedBookmarkCommit()
+						if (!commit) return
+						dialog.open(
+							() => (
+								<RevisionPickerModal
+									title={`Rebase ${commit.changeId.slice(0, 8)} onto`}
+									commits={commits()}
+									defaultRevision={commit.changeId}
+									onSelect={async (destination) => {
+										const result = await jjRebase(commit.changeId, destination)
+										if (isImmutableError(result)) {
+											const confirmed = await dialog.confirm({
+												message: "Target is immutable. Rebase anyway?",
+											})
+											if (confirmed) {
+												await runOperation("Rebasing...", () =>
+													jjRebase(commit.changeId, destination, {
+														ignoreImmutable: true,
+													}),
+												)
+											}
+										} else {
+											commandLog.addEntry(result)
+											if (result.success) {
+												refresh()
+											}
+										}
+									}}
+								/>
+							),
+							{
+								id: "rebase",
+								hints: [{ key: "enter", label: "confirm" }],
+							},
+						)
+					},
+				},
 					id: "refs.revisions.describe",
 					title: "describe",
 					keybind: "jj_describe",
