@@ -669,6 +669,7 @@ export function BookmarksPanel() {
 							<For each={localBookmarks()}>
 								{(bookmark, index) => {
 									const isSelected = () => index() === selectedBookmarkIndex()
+									const showSelection = () => isSelected() && isFocused()
 									const handleDoubleClick = createDoubleClickDetector(() => {
 										enterBookmarkCommitsView()
 									})
@@ -679,7 +680,9 @@ export function BookmarksPanel() {
 									return (
 										<box
 											backgroundColor={
-												isSelected() ? colors().selectionBackground : undefined
+												showSelection()
+													? colors().selectionBackground
+													: undefined
 											}
 											overflow="hidden"
 											onMouseDown={handleMouseDown}
@@ -719,6 +722,7 @@ export function BookmarksPanel() {
 									{(commit, index) => {
 										const isSelected = () =>
 											index() === selectedBookmarkCommitIndex()
+										const showSelection = () => isSelected() && isFocused()
 										const icon = commit.isWorkingCopy ? "◆" : "○"
 										const handleDoubleClick = createDoubleClickDetector(() => {
 											enterBookmarkFilesView()
@@ -730,7 +734,7 @@ export function BookmarksPanel() {
 										return (
 											<box
 												backgroundColor={
-													isSelected()
+													showSelection()
 														? colors().selectionBackground
 														: undefined
 												}
@@ -784,6 +788,7 @@ export function BookmarksPanel() {
 									setSelectedIndex={setSelectedBookmarkFileIndex}
 									collapsedPaths={bookmarkCollapsedPaths}
 									toggleFolder={toggleBookmarkFolder}
+									isFocused={isFocused}
 								/>
 							</scrollbox>
 						</Show>

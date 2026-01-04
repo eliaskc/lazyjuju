@@ -18,6 +18,7 @@ export interface FileTreeListProps {
 	setSelectedIndex: (index: number) => void
 	collapsedPaths: () => Set<string>
 	toggleFolder: (path: string) => void
+	isFocused?: () => boolean
 }
 
 export function FileTreeList(props: FileTreeListProps) {
@@ -69,10 +70,13 @@ export function FileTreeList(props: FileTreeListProps) {
 					}
 				}
 
+				const showSelection = () =>
+					isSelected() && (props.isFocused?.() ?? true)
+
 				return (
 					<box
 						backgroundColor={
-							isSelected() ? colors().selectionBackground : undefined
+							showSelection() ? colors().selectionBackground : undefined
 						}
 						overflow="hidden"
 						onMouseDown={handleMouseDown}

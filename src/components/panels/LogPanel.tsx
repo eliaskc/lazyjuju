@@ -686,13 +686,14 @@ export function LogPanel() {
 								setSelectedIndex(index())
 								handleClick()
 							}
+							const showSelection = () => isSelected() && isFocused()
 							return (
 								<box onMouseDown={handleMouseDown}>
 									<For each={commit.lines}>
 										{(line) => (
 											<box
 												backgroundColor={
-													isSelected()
+													showSelection()
 														? colors().selectionBackground
 														: undefined
 												}
@@ -729,12 +730,15 @@ export function LogPanel() {
 					<For each={opLogEntries()}>
 						{(entry, index) => {
 							const isSelected = () => index() === opLogSelectedIndex()
+							const showSelection = () => isSelected() && isFocused()
 							return (
 								<For each={entry.lines}>
 									{(line) => (
 										<box
 											backgroundColor={
-												isSelected() ? colors().selectionBackground : undefined
+												showSelection()
+													? colors().selectionBackground
+													: undefined
 											}
 											overflow="hidden"
 										>
@@ -772,6 +776,7 @@ export function LogPanel() {
 							setSelectedIndex={setSelectedFileIndex}
 							collapsedPaths={collapsedPaths}
 							toggleFolder={toggleFolder}
+							isFocused={isFocused}
 						/>
 					</scrollbox>
 				</Show>

@@ -118,6 +118,16 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
 **Bugs:**
 - [x] Describe modal pre-fill text is garbled/corrupted
 
+## Next Up
+
+Priority queue after pre-release polish:
+
+1. **Fix HIGH bugs** (see Known Issues below)
+   - [ ] Divergent change IDs break operations
+   - [ ] Diff doesn't re-render on refresh
+2. **Basic rebase** — `r` to rebase selected commit onto target (revset picker)
+3. **Basic split** — `S` to invoke `jj split` on selected commit (opens in `$EDITOR`)
+
 ## Workspaces
 
 > kajji is a jj power tool, not an agent orchestrator. Agents are just another way commits appear.
@@ -336,7 +346,7 @@ All major performance issues have been resolved:
 - [ ] Log/bookmark panels slightly wider
 - [ ] Selected bookmark should match working copy on load
 - [ ] Active bookmark indication when navigating
-- [ ] Disable selection highlight in unfocused panels
+- [x] Disable selection highlight in unfocused panels
 - [ ] Revisit keybind consistency between revisions and bookmarks panels — e.g., `n` for create bookmark (matches "new"), `d` for rename (matches "describe"). May not be needed once unfocused highlight is disabled.
 - [x] All command titles lowercase (e.g., "new" not "New")
 - [x] Simplified command titles in context (e.g., "create" not "Create bookmark" in bookmarks context)
