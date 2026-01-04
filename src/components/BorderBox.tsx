@@ -104,7 +104,7 @@ export function BorderBox(props: BorderBoxProps) {
 
 			<box
 				flexDirection={props.flexDirection ?? "column"}
-				flexGrow={props.flexGrow}
+				flexGrow={1}
 				border={props.border}
 				borderStyle={props.borderStyle}
 				borderColor={props.borderColor}
