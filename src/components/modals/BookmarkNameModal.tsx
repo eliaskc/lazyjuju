@@ -4,6 +4,7 @@ import { Show, createSignal, onMount } from "solid-js"
 import type { Commit } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
+import { BorderBox } from "../BorderBox"
 import { RevisionPicker } from "../RevisionPicker"
 
 const SINGLE_LINE_KEYBINDINGS = [
@@ -103,10 +104,16 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 
 	const pickerHeight = () => props.height ?? 10
 
+	const nameTitleColor = () =>
+		focusedField() === "name" || !hasRevisionPicker()
+			? colors().borderFocused
+			: colors().textMuted
+	const revisionTitleColor = () =>
+		focusedField() === "picker" ? colors().borderFocused : colors().textMuted
+
 	return (
 		<box flexDirection="column" width={props.width ?? "60%"} gap={0}>
-			<box
-				flexDirection="column"
+			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={
@@ -116,8 +123,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 				}
 				backgroundColor={colors().background}
 				height={3}
-				padding={0}
-				title={props.title}
+				topLeft={<text fg={nameTitleColor()}>{props.title}</text>}
 			>
 				<textarea
 					ref={(r) => {
@@ -141,7 +147,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 					focusedBackgroundColor={RGBA.fromInts(0, 0, 0, 0)}
 					flexGrow={1}
 				/>
-			</box>
+			</BorderBox>
 
 			<Show when={error()}>
 				<box
@@ -157,8 +163,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 			</Show>
 
 			<Show when={hasRevisionPicker()}>
-				<box
-					flexDirection="column"
+				<BorderBox
 					border
 					borderStyle={style().panel.borderStyle}
 					borderColor={
@@ -168,8 +173,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 					}
 					backgroundColor={colors().background}
 					height={pickerHeight()}
-					padding={0}
-					title="Revision"
+					topLeft={<text fg={revisionTitleColor()}>Revision</text>}
 				>
 					<RevisionPicker
 						commits={props.commits ?? []}
@@ -178,7 +182,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 						onSelect={handleRevisionSelect}
 						height={pickerHeight() - 2}
 					/>
-				</box>
+				</BorderBox>
 			</Show>
 		</box>
 	)

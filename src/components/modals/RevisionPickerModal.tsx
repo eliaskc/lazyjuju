@@ -3,6 +3,7 @@ import { createSignal } from "solid-js"
 import type { Commit } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
+import { BorderBox } from "../BorderBox"
 import { RevisionPicker } from "../RevisionPicker"
 
 interface RevisionPickerModalProps {
@@ -47,15 +48,13 @@ export function RevisionPickerModal(props: RevisionPickerModalProps) {
 
 	return (
 		<box flexDirection="column" width={props.width ?? "60%"} gap={0}>
-			<box
-				flexDirection="column"
+			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={colors().borderFocused}
 				backgroundColor={colors().background}
 				height={pickerHeight()}
-				padding={0}
-				title={props.title}
+				topLeft={<text fg={colors().borderFocused}>{props.title}</text>}
 			>
 				<RevisionPicker
 					commits={props.commits}
@@ -64,7 +63,7 @@ export function RevisionPickerModal(props: RevisionPickerModalProps) {
 					onSelect={handleRevisionSelect}
 					height={pickerHeight() - 2}
 				/>
-			</box>
+			</BorderBox>
 		</box>
 	)
 }

@@ -4,6 +4,7 @@ import type { Bookmark } from "../../commander/bookmarks"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
 import { BookmarkPicker } from "../BookmarkPicker"
+import { BorderBox } from "../BorderBox"
 
 interface BookmarkPickerModalProps {
 	title: string
@@ -49,15 +50,13 @@ export function BookmarkPickerModal(props: BookmarkPickerModalProps) {
 
 	return (
 		<box flexDirection="column" width={props.width ?? "60%"} gap={0}>
-			<box
-				flexDirection="column"
+			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={colors().borderFocused}
 				backgroundColor={colors().background}
 				height={pickerHeight()}
-				padding={0}
-				title={props.title}
+				topLeft={<text fg={colors().borderFocused}>{props.title}</text>}
 			>
 				<BookmarkPicker
 					bookmarks={props.bookmarks}
@@ -66,7 +65,7 @@ export function BookmarkPickerModal(props: BookmarkPickerModalProps) {
 					onSelect={handleBookmarkSelect}
 					height={pickerHeight() - 2}
 				/>
-			</box>
+			</BorderBox>
 		</box>
 	)
 }

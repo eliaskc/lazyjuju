@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/solid"
 import { createSignal, onMount } from "solid-js"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
+import { BorderBox } from "../BorderBox"
 
 const SINGLE_LINE_KEYBINDINGS = [
 	{ name: "return", action: "submit" as const },
@@ -61,10 +62,14 @@ export function DescribeModal(props: DescribeModalProps) {
 
 	const charCount = () => subject().length
 
+	const subjectTitleColor = () =>
+		focusedField() === "subject" ? colors().borderFocused : colors().textMuted
+	const bodyTitleColor = () =>
+		focusedField() === "body" ? colors().borderFocused : colors().textMuted
+
 	return (
 		<box flexDirection="column" width="60%" gap={0}>
-			<box
-				flexDirection="column"
+			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={
@@ -74,8 +79,9 @@ export function DescribeModal(props: DescribeModalProps) {
 				}
 				backgroundColor={colors().background}
 				height={3}
-				padding={0}
-				title={`Subject─[${charCount()}]`}
+				topLeft={
+					<text fg={subjectTitleColor()}>{`Subject─[${charCount()}]`}</text>
+				}
 			>
 				<textarea
 					ref={(r) => {
@@ -95,10 +101,9 @@ export function DescribeModal(props: DescribeModalProps) {
 					focusedBackgroundColor={RGBA.fromInts(0, 0, 0, 0)}
 					width="100%"
 				/>
-			</box>
+			</BorderBox>
 
-			<box
-				flexDirection="column"
+			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={
@@ -106,8 +111,7 @@ export function DescribeModal(props: DescribeModalProps) {
 				}
 				backgroundColor={colors().background}
 				height={10}
-				padding={0}
-				title="Body"
+				topLeft={<text fg={bodyTitleColor()}>Body</text>}
 			>
 				<textarea
 					ref={(r) => {
@@ -123,7 +127,7 @@ export function DescribeModal(props: DescribeModalProps) {
 					focusedBackgroundColor={RGBA.fromInts(0, 0, 0, 0)}
 					flexGrow={1}
 				/>
-			</box>
+			</BorderBox>
 		</box>
 	)
 }

@@ -1,10 +1,11 @@
 import { RGBA, type TextareaRenderable } from "@opentui/core"
+import { useKeyboard } from "@opentui/solid"
+import { BorderBox } from "../BorderBox"
 
 const SINGLE_LINE_KEYBINDINGS = [
 	{ name: "return", action: "submit" as const },
 	{ name: "enter", action: "submit" as const },
 ]
-import { useKeyboard } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import {
 	type Accessor,
@@ -278,8 +279,7 @@ export function HelpModal() {
 	}
 
 	return (
-		<box
-			flexDirection="column"
+		<BorderBox
 			border
 			borderStyle={style().panel.borderStyle}
 			borderColor={colors().borderFocused}
@@ -287,7 +287,7 @@ export function HelpModal() {
 			padding={1}
 			width="80%"
 			height="80%"
-			title="[esc / ?]─Commands"
+			topLeft={<text fg={colors().borderFocused}>[esc / ?]─Commands</text>}
 		>
 			<box flexDirection="row" marginBottom={2} paddingLeft={4}>
 				<textarea
@@ -375,6 +375,6 @@ export function HelpModal() {
 					)}
 				</For>
 			</box>
-		</box>
+		</BorderBox>
 	)
 }
