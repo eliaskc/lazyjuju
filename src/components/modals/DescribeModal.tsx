@@ -1,12 +1,13 @@
-import {
-	type InputRenderable,
-	RGBA,
-	type TextareaRenderable,
-} from "@opentui/core"
+import { RGBA, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { createSignal, onMount } from "solid-js"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
+
+const SINGLE_LINE_KEYBINDINGS = [
+	{ name: "return", action: "submit" as const },
+	{ name: "enter", action: "submit" as const },
+]
 
 interface DescribeModalProps {
 	initialSubject: string
@@ -24,14 +25,8 @@ export function DescribeModal(props: DescribeModalProps) {
 		"subject",
 	)
 
-	let subjectRef: InputRenderable | undefined
+	let subjectRef: TextareaRenderable | undefined
 	let bodyRef: TextareaRenderable | undefined
-
-	const focusInputAtEnd = (ref: InputRenderable | undefined) => {
-		if (!ref) return
-		ref.focus()
-		ref.cursorPosition = ref.value.length
-	}
 
 	const focusTextareaAtEnd = (ref: TextareaRenderable | undefined) => {
 		if (!ref) return
@@ -40,7 +35,10 @@ export function DescribeModal(props: DescribeModalProps) {
 	}
 
 	onMount(() => {
-		setTimeout(() => focusInputAtEnd(subjectRef), 1)
+		setTimeout(() => {
+			subjectRef?.requestRender?.()
+			focusTextareaAtEnd(subjectRef)
+		}, 1)
 	})
 
 	const handleSave = () => {
@@ -56,7 +54,7 @@ export function DescribeModal(props: DescribeModalProps) {
 				focusTextareaAtEnd(bodyRef)
 			} else {
 				setFocusedField("subject")
-				focusInputAtEnd(subjectRef)
+				focusTextareaAtEnd(subjectRef)
 			}
 		}
 	})
@@ -79,16 +77,23 @@ export function DescribeModal(props: DescribeModalProps) {
 				padding={0}
 				title={`Subject─[${charCount()}]`}
 			>
-				<input
-					ref={subjectRef}
-					value={props.initialSubject}
-					onInput={(value) => setSubject(value)}
+				<textarea
+					ref={(r) => {
+						subjectRef = r
+					}}
+					initialValue={props.initialSubject}
+					onContentChange={() => {
+						if (subjectRef) setSubject(subjectRef.plainText)
+					}}
 					onSubmit={handleSave}
+					keyBindings={SINGLE_LINE_KEYBINDINGS}
+					wrapMode="none"
+					scrollMargin={0}
 					cursorColor={colors().primary}
 					textColor={colors().text}
 					focusedTextColor={colors().text}
 					focusedBackgroundColor={RGBA.fromInts(0, 0, 0, 0)}
-					flexGrow={1}
+					width="100%"
 				/>
 			</box>
 

@@ -1,10 +1,15 @@
-import { type InputRenderable, RGBA } from "@opentui/core"
+import { RGBA, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { Show, createSignal, onMount } from "solid-js"
 import type { Commit } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
 import { RevisionPicker } from "../RevisionPicker"
+
+const SINGLE_LINE_KEYBINDINGS = [
+	{ name: "return", action: "submit" as const },
+	{ name: "enter", action: "submit" as const },
+]
 
 interface BookmarkNameModalProps {
 	title: string
@@ -32,16 +37,19 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 		"name",
 	)
 
-	let inputRef: InputRenderable | undefined
+	let inputRef: TextareaRenderable | undefined
 
-	const focusInputAtEnd = (ref: InputRenderable | undefined) => {
+	const focusInputAtEnd = (ref: TextareaRenderable | undefined) => {
 		if (!ref) return
 		ref.focus()
-		ref.cursorPosition = ref.value.length
+		ref.gotoBufferEnd()
 	}
 
 	onMount(() => {
-		setTimeout(() => focusInputAtEnd(inputRef), 1)
+		setTimeout(() => {
+			inputRef?.requestRender?.()
+			focusInputAtEnd(inputRef)
+		}, 1)
 	})
 
 	const generatedName = () => {
@@ -111,15 +119,22 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 				padding={0}
 				title={props.title}
 			>
-				<input
-					ref={inputRef}
-					value={props.initialValue ?? ""}
+				<textarea
+					ref={(r) => {
+						inputRef = r
+					}}
+					initialValue={props.initialValue ?? ""}
 					placeholder={generatedName()}
-					onInput={(value) => {
-						setName(value)
-						setError(null)
+					onContentChange={() => {
+						if (inputRef) {
+							setName(inputRef.plainText)
+							setError(null)
+						}
 					}}
 					onSubmit={handleSave}
+					keyBindings={SINGLE_LINE_KEYBINDINGS}
+					wrapMode="none"
+					scrollMargin={0}
 					cursorColor={colors().primary}
 					textColor={colors().text}
 					focusedTextColor={colors().text}

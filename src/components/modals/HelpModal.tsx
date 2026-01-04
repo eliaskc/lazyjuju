@@ -1,4 +1,9 @@
-import { type InputRenderable, RGBA } from "@opentui/core"
+import { RGBA, type TextareaRenderable } from "@opentui/core"
+
+const SINGLE_LINE_KEYBINDINGS = [
+	{ name: "return", action: "submit" as const },
+	{ name: "enter", action: "submit" as const },
+]
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import {
@@ -106,6 +111,7 @@ export function HelpModal() {
 	const [filter, setFilter] = createSignal("")
 	const [selectedIndex, setSelectedIndex] = createSignal(-1)
 	const [terminalWidth, setTerminalWidth] = createSignal(renderer.width)
+	let searchInputRef: TextareaRenderable | undefined
 
 	onMount(() => {
 		const handleResize = (width: number) => setTerminalWidth(width)
@@ -294,10 +300,21 @@ export function HelpModal() {
 			title="[esc / ?]─Commands"
 		>
 			<box flexDirection="row" marginBottom={2} paddingLeft={4}>
-				<input
-					ref={(r: InputRenderable) => setTimeout(() => r.focus(), 1)}
-					onInput={(value) => setFilter(value)}
+				<textarea
+					ref={(r) => {
+						searchInputRef = r
+						setTimeout(() => {
+							r.requestRender?.()
+							r.focus()
+						}, 1)
+					}}
+					onContentChange={() => {
+						if (searchInputRef) setFilter(searchInputRef.plainText)
+					}}
 					onSubmit={() => executeSelected()}
+					keyBindings={SINGLE_LINE_KEYBINDINGS}
+					wrapMode="none"
+					scrollMargin={0}
 					placeholder="Search"
 					flexGrow={1}
 					cursorColor={colors().primary}
