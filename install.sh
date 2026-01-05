@@ -176,7 +176,17 @@ if [ -n "${GITHUB_ACTIONS:-}" ]; then
 fi
 
 echo ""
-echo -e "${GREEN}kajji installed successfully!${NC}"
+echo -e "${GREEN}"
+cat << 'EOF'
+██╗  ██╗ █████╗      ██╗     ██╗██╗
+██║ ██╔╝██╔══██╗     ██║     ██║██║
+█████╔╝ ███████║     ██║     ██║██║
+██╔═██╗ ██╔══██║██   ██║██   ██║██║
+██║  ██╗██║  ██║╚█████╔╝╚█████╔╝██║
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚════╝  ╚════╝ ╚═╝
+EOF
+echo -e "${NC}"
+echo -e "${GREEN}Installed successfully!${NC}"
 echo ""
 echo -e "${MUTED}To get started:${NC}"
 echo "  cd <jj-repo>"

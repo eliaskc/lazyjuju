@@ -1,5 +1,14 @@
 # kajji
 
+```
+██╗  ██╗ █████╗      ██╗     ██╗██╗
+██║ ██╔╝██╔══██╗     ██║     ██║██║
+█████╔╝ ███████║     ██║     ██║██║
+██╔═██╗ ██╔══██║██   ██║██   ██║██║
+██║  ██╗██║  ██║╚█████╔╝╚█████╔╝██║
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚════╝  ╚════╝ ╚═╝
+```
+
 > The rudder for your jj
 
 A simple terminal UI for [Jujutsu](https://github.com/martinvonz/jj), inspired by [lazygit](https://github.com/jesseduffield/lazygit). Built with [OpenTUI](https://github.com/sst/opentui) and [SolidJS](https://www.solidjs.com/).
