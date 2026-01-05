@@ -10,8 +10,8 @@
 - [x] Diff viewer — full ANSI color support (difftastic, delta, etc.)
 - [x] Two-panel layout — log/bookmarks left, diff/detail right
 - [x] Commit header — author, date, timezone, empty status, description
+- [x] Rich commit details — full message (subject + body) + file stats
 - [ ] Commit header indicators — bookmarks, workspace, git HEAD, remote tracking
-- [ ] Rich commit details — full message + file stats
 
 ## Navigation
 
@@ -343,6 +343,7 @@ Revsets are jj's query language for selecting commits (e.g., `trunk()..@`, `auth
 
 ### Bugs
 
+- Commit header (subject, body, file stats) doesn't update on auto-refresh — only updates when navigating to a different commit
 - Help modal has small visual gap between border and outer edge (OpenTUI quirk)
 - Search input in help modal doesn't render visually (filtering works though)
 - Spaces not rendering in BorderBox corner overlays
@@ -375,6 +376,7 @@ All major performance issues have been resolved:
 
 ### UX Polish
 
+- [ ] Change edit keybind from `e` to `Space` for revisions (more ergonomic)
 - [ ] Status bar truncation indicator — show `...` when context commands are truncated due to narrow terminal
 - [ ] List position indicator — show "X of Y" on panel borders for scrollable lists (revisions, files, bookmarks, commits, oplog). Like lazygit. Decide: always show vs. only when overflow.
 - [ ] Log/bookmark panels slightly wider
