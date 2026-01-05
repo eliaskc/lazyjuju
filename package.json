@@ -1,6 +1,6 @@
 {
 	"name": "kajji",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "A terminal UI for Jujutsu: the rudder for your jj",
 	"type": "module",
 	"engines": {
@@ -9,7 +9,11 @@
 	"bin": {
 		"kajji": "./bin/kajji"
 	},
-	"files": ["bin", "script", "src"],
+	"files": [
+		"bin",
+		"script",
+		"src"
+	],
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/index.tsx",
 		"test": "bun test",
