@@ -5,7 +5,7 @@
 ```bash
 /changelog                           # generate CHANGELOG.md
 # review CHANGELOG.md
-bun run script/release.ts [version]  # does everything else
+bun run script/release.ts <version>  # does everything else
 ```
 
 ## Step-by-Step
@@ -26,10 +26,10 @@ Edit CHANGELOG.md if needed.
 ### 3. Release
 
 ```bash
-bun run script/release.ts [version]
+bun run script/release.ts <version>
 ```
 
-Version can be: `patch`, `minor`, `major`, or explicit like `0.2.0`. Auto-detects from commits if not specified.
+Version is required: `patch`, `minor`, `major`, or explicit like `0.2.0`. This forces you to verify the version matches CHANGELOG.md.
 
 The script:
 - Checks for uncommitted changes (exits if dirty)

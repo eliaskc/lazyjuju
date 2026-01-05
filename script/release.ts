@@ -1,12 +1,12 @@
 /**
  * Release script for kajji
  *
- * Usage: bun run script/release.ts [version]
+ * Usage: bun run script/release.ts <version>
  *
- * version: patch | minor | major | x.y.z (optional, auto-detects from commits)
+ * version: patch | minor | major | x.y.z (required)
  *
  * Prerequisites:
- * - No uncommitted changes
+ * - No uncommitted changes (except CHANGELOG.md)
  * - HEAD matches origin/main
  * - CHANGELOG.md updated (use /changelog skill first)
  *
@@ -82,29 +82,10 @@ if (!latestTag) {
 console.log(`Current version: ${currentVersion}`)
 console.log(`Latest tag: ${latestTag}\n`)
 
-const commitLog = run(`git log ${latestTag}..HEAD --format='%s%n%b---'`, {
-	canFail: true,
-})
-if (!commitLog || commitLog === "---") {
-	console.error("Error: No commits since last tag.")
-	process.exit(1)
-}
-
 if (!existsSync("CHANGELOG.md")) {
 	console.error("Error: CHANGELOG.md not found.")
 	console.error("Generate it first with the /changelog skill.")
 	process.exit(1)
-}
-
-function detectBumpType(log: string): "major" | "minor" | "patch" {
-	const lines = log.toLowerCase()
-	if (lines.includes("breaking change") || /^[a-z]+!:/m.test(log)) {
-		return "major"
-	}
-	if (/^feat[:(]/m.test(log)) {
-		return "minor"
-	}
-	return "patch"
 }
 
 function bumpVersion(
@@ -125,25 +106,23 @@ function bumpVersion(
 const args = process.argv.slice(2)
 const versionArg = args[0]
 
-let newVersion: string
-let bumpType: "major" | "minor" | "patch"
+if (!versionArg) {
+	console.error("Usage: bun run script/release.ts <version>")
+	console.error("version: patch | minor | major | x.y.z")
+	process.exit(1)
+}
 
-if (versionArg) {
-	if (["major", "minor", "patch"].includes(versionArg)) {
-		bumpType = versionArg as "major" | "minor" | "patch"
-		newVersion = bumpVersion(currentVersion, bumpType)
-	} else if (/^\d+\.\d+\.\d+$/.test(versionArg)) {
-		newVersion = versionArg
-		bumpType = "patch"
-	} else {
-		console.error(`Invalid version argument: ${versionArg}`)
-		console.error("Use: patch | minor | major | x.y.z")
-		process.exit(1)
-	}
-} else {
-	bumpType = detectBumpType(commitLog)
+let newVersion: string
+
+if (["major", "minor", "patch"].includes(versionArg)) {
+	const bumpType = versionArg as "major" | "minor" | "patch"
 	newVersion = bumpVersion(currentVersion, bumpType)
-	console.log(`Auto-detected bump type: ${bumpType}`)
+} else if (/^\d+\.\d+\.\d+$/.test(versionArg)) {
+	newVersion = versionArg
+} else {
+	console.error(`Invalid version argument: ${versionArg}`)
+	console.error("Use: patch | minor | major | x.y.z")
+	process.exit(1)
 }
 
 console.log(`New version: ${newVersion}\n`)
