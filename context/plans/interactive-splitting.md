@@ -2,18 +2,66 @@
 
 **Status**: Planning  
 **Priority**: Medium  
-**Goal**: Lazygit-style interactive `jj split` with hunk-level granularity
+**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phase 3 (PR Review)
 
 ---
 
 ## Concept
 
-Split the current commit into two commits by selecting which changes stay vs. move to a new commit. Two interaction modes:
+Split the current commit into two commits by selecting which changes stay vs. move to a new commit.
 
-1. **File mode** (default) — Mark whole files to keep or split off
-2. **Hunk mode** — Enter a file to select individual hunks/lines
+**Key insight:** Unlike lazygit (which has two panes for staged/unstaged because git has a staging area), jj has no staging area. We use a **single-view with selection markers** approach.
 
-This replaces shelling out to `jj split --interactive` with a native TUI experience.
+---
+
+## Single-View Selection Model
+
+Instead of moving hunks between two panes, mark hunks in place:
+
+```
+┌─ Split abc123 ─────────────────────────────────────────────────────┐
+│                                                                    │
+│ src/auth.ts                                                        │
+│                                                                    │
+│ @@ -10,6 +10,8 @@ function validate()                    [KEEP]    │
+│    function validate(input) {                                      │
+│ +    if (!input) throw new Error('required')                       │
+│ +    if (typeof input !== 'string') throw new Error('type')        │
+│    }                                                               │
+│                                                                    │
+│ @@ -25,4 +27,6 @@ function process()               ► [SPLIT]    │
+│    function process(data) {                                        │
+│ -    return data                                                   │
+│ +    const validated = validate(data)                              │
+│ +    return transform(validated)                                   │
+│    }                                                               │
+│                                                                    │
+│ Space: toggle | j/k: navigate | Enter: confirm | Esc: cancel       │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Why single-view:**
+- jj doesn't have incremental staging - split is a single operation
+- Simpler mental model: marking, not moving
+- Same pattern as @pierre/diffs' `diffAcceptRejectHunk()`
+- Consistent with view mode (same renderer)
+
+---
+
+## Why This Comes After PR Review
+
+The custom diff renderer phases are ordered:
+1. Basic rendering
+2. Enhanced viewing
+3. **PR review** ← builds the row mapping / annotation substrate
+4. **Interactive splitting** ← reuses that substrate
+
+PR review forces us to build:
+- Row index with stable anchors (path, side, line)
+- File-at-a-time rendering
+- Hunk navigation
+
+Splitting reuses all of that, just with different visual indicators (Keep/Split badges instead of comment threads).
 
 ---
 
@@ -21,28 +69,58 @@ This replaces shelling out to `jj split --interactive` with a native TUI experie
 
 | Term | Meaning |
 |------|---------|
-| **Keep** | Changes stay in current commit |
+| **Keep** | Changes stay in current commit (default) |
 | **Split** | Changes move to new child commit |
 
-> Note: Avoiding "staged/unstaged" since jj doesn't have a staging area. The UX mirrors lazygit but terminology reflects jj's model.
+> Note: Avoiding "staged/unstaged" since jj doesn't have a staging area.
 
 ---
 
-## File Mode
+## State Management (Stable IDs)
 
-When a commit is selected and user initiates split (`S`):
+**Critical:** Selection state must use stable identifiers, not array indices.
 
-- File tree shows all modified files
-- Each file can be marked: **Keep** (default) or **Split**
-- Main area shows full diff with title indicating state:
-  - `─ Keep in abc123 ─` or `─ Split to new commit ─`
-- `Space` toggles file between Keep/Split
-- `Enter` drills into hunk mode for granular selection
+```typescript
+import { fileId, hunkId, type HunkId } from '../diff/identifiers'
 
-### Visual Indicators
+interface SplitModeState {
+  active: boolean
+  revision: string
+  
+  // Parsed diff data
+  files: FileDiffMetadata[]
+  
+  // Selection state keyed by STABLE hunk ID
+  // (not `${fileIndex}-${hunkIndex}` which breaks with filtering/sorting)
+  hunkSelections: Map<string, 'keep' | 'split'>
+  
+  // Navigation (by stable ID)
+  currentFileId: string | null
+  currentHunkId: string | null
+  mode: 'file' | 'hunk'
+}
+
+// Hunk ID format: `${path}:${deletionStart},${deletionCount}:${additionStart},${additionCount}`
+// This survives file reordering, filtering, etc.
+
+function toggleHunk(state: SplitModeState, id: string): SplitModeState {
+  const current = state.hunkSelections.get(id) ?? 'keep'
+  const newSelections = new Map(state.hunkSelections)
+  newSelections.set(id, current === 'keep' ? 'split' : 'keep')
+  return { ...state, hunkSelections: newSelections }
+}
+```
+
+---
+
+## Interaction Modes
+
+### File Mode (default entry point)
+
+Mark whole files to keep or split:
 
 ```
-─[2]─Files────────────────────
+─[2]─Files───────────────────────
 ▼ /
   ▼ src/
     M  main.ts        [SPLIT]
@@ -50,73 +128,98 @@ When a commit is selected and user initiates split (`S`):
     A  new-file.ts    [KEEP]
 ```
 
-Files marked for split show `[SPLIT]` badge (or different color/icon).
+- `Space` toggles file between Keep/Split
+- `Enter` drills into hunk mode for granular selection
 
----
+### Hunk Mode
 
-## Hunk Mode
-
-Press `Enter` on a file to enter hunk-level splitting:
-
-### Layout
-
-Main area splits into two panes:
+Select individual hunks within a file:
 
 ```
-┌─ Keep in abc123 ──────────────┬─ Split to new commit ──────────┐
-│ @@ -10,6 +10,8 @@             │ @@ -25,4 +25,6 @@              │
-│  function foo() {             │  function bar() {              │
-│    return 1                   │ +  const x = 1                 │
-│ +  // added line              │ +  const y = 2                 │
-│  }                            │  }                             │
-│                               │                                │
-│ ▌@@ -20,3 +22,5 @@  ◄─cursor │                                │
-│  const a = 1                  │                                │
-│ +const b = 2                  │                                │
-└───────────────────────────────┴────────────────────────────────┘
+┌─ src/main.ts ──────────────────────────────────────────────────────┐
+│                                                                    │
+│ @@ -10,6 +10,8 @@ function foo()                     ► [KEEP]    │
+│    function foo() {                                                │
+│ +    // added line 1                                               │
+│ +    // added line 2                                               │
+│    }                                                               │
+│                                                                    │
+│ @@ -25,4 +27,6 @@ function bar()                       [SPLIT]    │
+│    function bar() {                                                │
+│ -    return old                                                    │
+│ +    return new                                                    │
+│    }                                                               │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
-
-### Navigation
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Move cursor between hunks |
-| `J` / `K` | Move cursor between lines within hunk (future) |
-| `Tab` | Switch focus between Keep/Split panes |
-| `Space` | Move hunk at cursor to other pane |
-| `a` | Move all hunks to Split pane |
-| `A` | Move all hunks to Keep pane |
-| `Escape` | Exit hunk mode, return to file tree |
+| `j` / `k` | Navigate hunks |
+| `Space` | Toggle hunk Keep/Split |
+| `a` | Mark all hunks as Split |
+| `A` | Mark all hunks as Keep |
+| `Escape` | Return to file tree |
 
-### Cursor Behavior
+### Line Mode (future)
 
-- Cursor highlights current hunk (distinct background color)
-- When hunk is moved, cursor stays in same pane, moves to next hunk
-- If pane becomes empty, cursor auto-switches to other pane
+Select individual lines within a hunk. More complex, deferred.
+
+---
+
+## Visual Indicators
+
+### Hunk Status Badge
+
+```
+[KEEP]   - Default, stays in current commit (muted color)
+[SPLIT]  - Will move to new commit (accent color)
+```
+
+### Current Selection
+
+```
+► [KEEP]   - Cursor on this hunk
+  [SPLIT]  - Other hunk
+```
+
+### File Status (in file tree)
+
+```
+M  main.ts       [2/3 SPLIT]  - 2 of 3 hunks marked for split
+M  utils.ts      [KEEP]       - All hunks staying
+M  new.ts        [SPLIT]      - All hunks splitting
+```
 
 ---
 
 ## Workflow
 
-1. Select commit in log/bookmarks
-2. Press `S` to enter split mode
-3. File tree shows changed files, main area shows "Split Preview"
-4. Mark files with `Space` or drill into files with `Enter`
-5. In hunk mode: select granular changes, `Escape` to return
-6. Press `Enter` (or `S` again) to confirm and execute split
-7. Modal prompt for new commit description (or use first line of original)
+1. **Select commit** in log/bookmarks
+2. **Press `S`** to enter split mode
+3. **File tree** shows changed files with split status
+4. **Navigate files** with `j`/`k`, toggle with `Space`
+5. **Drill into file** with `Enter` for hunk-level selection
+6. **Toggle hunks** with `Space`, return with `Escape`
+7. **Confirm** with `Enter` (or `S` again)
+8. **Enter description** for new commit in modal
+9. **Execute** `jj split`
 
-### Confirmation Modal
+---
+
+## Confirmation Modal
 
 ```
 ┌─ Split abc123 ──────────────────────────────────────────────────┐
 │                                                                 │
-│  Splitting 2 files (3 hunks) into new commit                    │
+│  Splitting 2 files (3 hunks) to new commit                      │
 │                                                                 │
 │  Description for new commit:                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │ extracted helper functions                                  ││
 │  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  Original commit will keep: 1 file (2 hunks)                    │
 │                                                                 │
 │  [Enter] Confirm    [Escape] Cancel                             │
 └─────────────────────────────────────────────────────────────────┘
@@ -126,62 +229,54 @@ Main area splits into two panes:
 
 ## jj Integration
 
-### Commands Used
+### Execution Strategy
+
+jj's `split` command is file-granular. For hunk-level splitting:
+
+**Option A: File-level only (MVP)**
+
+If all hunks in a file are marked the same way, use file paths:
 
 ```bash
-# Get diff for file
-jj diff -r @- --git <file>
-
-# Execute split with selected paths
-jj split -r <rev> <file1> <file2> ...
-
-# For hunk-level: may need to use jj restore + jj split creatively
-# or leverage jj split --interactive with pre-selected hunks
+jj split -r <rev> <files-to-split...>
 ```
 
-### Hunk-Level Implementation
+**Option B: Patch application (hunk-level)**
 
-jj's `split` command is file-granular. For hunk-level:
+For mixed hunks within a file:
+1. Generate patch for hunks marked as "split"
+2. Apply patch to create the split content
+3. Use `jj restore` + `jj split` combination
 
-**Option A**: Shell out to `jj split -i` with pre-navigation (complex)
+**Option C: Interactive passthrough**
 
-**Option B**: Implement via restore + split sequence:
-1. `jj restore --from @- <paths>` to temporarily remove changes
-2. Manually re-apply selected hunks (patch application)
-3. `jj split` at file level
+Fall back to `jj split -i` with pre-selection (complex).
 
-**Option C**: Generate a patch file and apply selectively (most control)
+**Decision:** Start with Option A (file-level), add Option B later.
 
-> Implementation TBD — file-level splitting is MVP, hunk-level is stretch goal.
+### Commands
 
----
+```bash
+# Get diff for parsing
+jj diff -r <rev> --git --no-color
 
-## State Management
+# Execute file-level split
+jj split -r <rev> <file1> <file2> ...
 
-```typescript
-interface SplitModeState {
-  active: boolean
-  revision: string  // Commit being split
-  fileSelections: Map<string, 'keep' | 'split'>
-  hunkSelections: Map<string, HunkSelection[]>  // Per-file hunk states
-  focusedPane: 'keep' | 'split'
-  cursorPosition: { file: string; hunk: number }
-}
-
-interface HunkSelection {
-  hunkIndex: number
-  target: 'keep' | 'split'
-}
+# Set description for new commit
+jj describe -r <new-rev> -m "message"
 ```
 
 ---
 
 ## Edge Cases
 
-- **Empty split**: If no changes marked for split, show error/warning
-- **All changes split**: Original commit becomes empty — warn user
-- **Conflicts**: If commit has conflicts, disable split (jj constraint)
-- **Working copy**: Can only split the working copy commit (@ or @-)
+| Case | Handling |
+|------|----------|
+| **Empty split** | No hunks marked → show error, stay in split mode |
+| **All split** | All hunks marked → warn that original becomes empty |
+| **Conflicts** | Commit has conflicts → disable split |
+| **Immutable** | Immutable commit → show confirmation for `--ignore-immutable` |
 
 ---
 
@@ -189,14 +284,15 @@ interface HunkSelection {
 
 | Context | Key | Action |
 |---------|-----|--------|
-| Log/Bookmarks | `S` | Enter split mode for selected commit |
+| Log/Bookmarks | `S` | Enter split mode |
 | Split file tree | `Space` | Toggle file Keep/Split |
-| Split file tree | `Enter` | Enter hunk mode for file |
-| Split file tree | `S` / `Enter` | Confirm and execute split |
+| Split file tree | `Enter` | Enter hunk mode |
+| Split file tree | `S` or `Enter` | Confirm split (when ready) |
 | Split file tree | `Escape` | Cancel split mode |
 | Hunk mode | `j` / `k` | Navigate hunks |
-| Hunk mode | `Tab` | Switch panes |
-| Hunk mode | `Space` | Move hunk to other pane |
+| Hunk mode | `Space` | Toggle hunk Keep/Split |
+| Hunk mode | `a` | Mark all Split |
+| Hunk mode | `A` | Mark all Keep |
 | Hunk mode | `Escape` | Return to file tree |
 
 ---
@@ -206,28 +302,58 @@ interface HunkSelection {
 ### Phase 1: File-Level Split (MVP)
 - [ ] Split mode entry (`S` on commit)
 - [ ] File tree with Keep/Split marking
-- [ ] Preview of what will be split
+- [ ] Toggle with `Space`
+- [ ] Confirmation modal with description
 - [ ] Execute `jj split` with selected files
-- [ ] Description modal for new commit
 
-### Phase 2: Hunk-Level Split
-- [ ] Split-pane layout in main area
-- [ ] Hunk parsing from diff output
-- [ ] Cursor navigation within panes
-- [ ] Move hunks between panes
-- [ ] Hunk-level split execution (TBD approach)
+### Phase 2: Hunk-Level Display
+- [ ] Drill into file with `Enter`
+- [ ] Hunk view with Keep/Split badges (reuses PR review row model)
+- [ ] Navigate hunks with `j`/`k`
+- [ ] Toggle hunks with `Space`
 
-### Phase 3: Line-Level Split (Future)
-- [ ] Line-by-line selection within hunks
+### Phase 3: Hunk-Level Execution
+- [ ] Patch generation for mixed-hunk files
+- [ ] Execute hunk-level split
+- [ ] Handle edge cases
+
+### Phase 4: Line-Level (Future)
+- [ ] Line selection within hunks
 - [ ] Visual line highlighting
 - [ ] Partial hunk splitting
 
 ---
 
-## Prior Art
+## Prior Art Comparison
 
-- **lazygit**: Two-pane staged/unstaged with hunk/line selection
-- **jj split --interactive**: Built-in TUI, file-level selection
-- **git add -p**: Hunk-by-hunk staging (CLI-based)
+| Tool | Approach | Why Different |
+|------|----------|---------------|
+| **lazygit** | Two panes (staged/unstaged) | Git has staging area - each pane shows real diff |
+| **jj split -i** | Built-in TUI | File-level selection only |
+| **git add -p** | Hunk-by-hunk prompts | Sequential, not visual |
+| **@pierre/diffs** | accept/reject hunks | Same pattern - marks on single diff |
 
-→ [Back to PROJECT.md](../PROJECT.md)
+kajji's approach is closest to @pierre/diffs: mark hunks in place, execute once.
+
+---
+
+## CLI Integration
+
+→ See [cli.md](./cli.md) for `kajji split` command.
+
+```bash
+# List hunks with addressable IDs
+kajji changes <rev>
+# Output: h1, h2, h3...
+
+# Split specific hunks
+kajji split <rev> --first h1,h3 --first-message "Add validation"
+```
+
+---
+
+## References
+
+- [Custom Diff Renderer](./custom-diff-renderer.md) - Same renderer, split mode enabled
+- [@pierre/diffs](https://github.com/pierrecomputer/pierre/tree/main/packages/diffs) - `diffAcceptRejectHunk()` pattern
+- [lazygit staging](https://github.com/jesseduffield/lazygit/blob/master/pkg/gui/controllers/helpers/staging_helper.go) - Different model (git staging)

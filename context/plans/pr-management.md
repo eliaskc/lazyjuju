@@ -2,9 +2,9 @@
 
 > Full GitHub PR review and management within kajji.
 
-**Status**: Exploratory  
-**Priority**: Low (future exploration)  
-**Depends on**: GitHub stacking (Phase 0-2)
+**Status**: Planning (elevated priority)  
+**Priority**: Medium-High  
+**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phases 1-2
 
 ---
 
@@ -12,14 +12,66 @@
 
 This is exploratory territory. The goal is to evaluate whether kajji should become a PR management tool or stay focused on jj operations. Build for personal use first, see if it adds value or feels like scope creep.
 
-**Risk**: Becoming an "everything TUI" that tries to replace GitHub's web UI entirely. Many tools already do PR management (gh CLI, GitHub web, IDE integrations). kajji's value is jj-native workflows — PR management should complement that, not dominate it.
+**Why PR review before interactive splitting:** PR review forces us to build the structured row model with stable anchors (path, side, line) that splitting will reuse. The annotation infrastructure is the same substrate.
 
-**Possible architectures**:
-- Integrated panels within existing TUI
-- Separate tab (`[jj] [PR]`) where jj contains current TUI
-- Completely separate TUI (`kajji pr` vs `kajji`)
+**Risk**: Becoming an "everything TUI" that tries to replace GitHub's web UI entirely. kajji's value is jj-native workflows — PR management should complement that, not dominate it.
 
-Start small, evaluate fit.
+---
+
+## Core Insight: GitHub Patch Alignment
+
+When reviewing PRs, use GitHub's patch format as the canonical source:
+
+```typescript
+// Fetch PR patches via GitHub API
+const prFiles = await ghApi(`/repos/${owner}/${repo}/pulls/${prNumber}/files`)
+
+for (const file of prFiles) {
+  // file.patch is the same unified diff format @pierre/diffs handles
+  const parsed = parsePatchFiles(file.patch)
+}
+```
+
+**Why this matters:** GitHub's PR file patches are the canonical "diff context" GitHub uses for comment placement. When we parse the same patch text, our `(path, side, line)` mapping matches their expectations exactly.
+
+---
+
+## Line Anchoring for Comments
+
+Comments anchor to specific lines using GitHub's coordinate system:
+
+```typescript
+interface LineAnchor {
+  path: string           // file path
+  side: 'LEFT' | 'RIGHT' // GitHub terminology: LEFT=old file, RIGHT=new file
+  line: number           // line number in that side
+  
+  // For multi-line comments
+  start_line?: number
+  start_side?: 'LEFT' | 'RIGHT'
+}
+
+// When creating a comment via GitHub API:
+// POST /repos/{owner}/{repo}/pulls/{pull_number}/comments
+{
+  body: "comment text",
+  commit_id: "abc123",  // HEAD SHA
+  path: "src/auth.ts",
+  side: "RIGHT",
+  line: 42
+}
+```
+
+This matches the row index built by the custom diff renderer:
+
+```typescript
+interface DiffRow {
+  // ... other fields from custom-diff-renderer.md
+  side: 'LEFT' | 'RIGHT' | null
+  lineNumber?: number
+  fileId: FileId  // path
+}
+```
 
 ---
 
@@ -43,16 +95,29 @@ PRs (open, assigned to me)
   j/k navigate | Enter view | f filter | r refresh
 ```
 
-### PR Detail View
+### PR Detail View (File-at-a-Time)
 
-When drilling into a PR:
+When drilling into a PR, show one file at a time (not full diff):
 
-- **Header**: Title, author, base/head branches, status
-- **Description**: Full PR body (rendered markdown?)
-- **Reviews**: Review status, comments count
-- **CI**: Check status with expandable details
-- **Files**: Changed files list (similar to existing file tree)
-- **Diff**: Full diff view (reuse existing infrastructure)
+- **File picker** on left: changed files list with viewed/unviewed status
+- **File diff** on right: structured rendering of single file
+- **Inline comments**: rendered below their anchor lines
+
+This matches the performance model in custom-diff-renderer.md and natural PR review UX.
+
+```
+┌─ Files (3/12) ──────────┬─ src/auth.ts ─────────────────────────────┐
+│ ✓ src/utils.ts          │ @@ -10,6 +10,8 @@ function validate()      │
+│   src/auth.ts      ◄    │    function validate(input) {            │
+│   src/api/handler.ts    │ -    return true                         │
+│   src/api/routes.ts     │ +    if (!input) throw new Error()       │
+│   ...                   │ +    return isValid(input)               │
+│                         │    }                                     │
+│                         │ ┌─ @alice · 2h ago ────────────────────┐ │
+│                         │ │ Should we validate type here too?    │ │
+│                         │ └──────────────────────────────────────┘ │
+└─────────────────────────┴──────────────────────────────────────────┘
+```
 
 ### PR Actions
 
@@ -78,8 +143,6 @@ Track which files you've viewed in a PR, syncing with GitHub's "viewed" checkbox
 - Persist across sessions (via GitHub API)
 - Filter to show only unviewed files
 
-This helps with large PRs where you review incrementally.
-
 ```
 Files (3/12 viewed)
 
@@ -94,19 +157,56 @@ Files (3/12 viewed)
 
 ## Inline Comments
 
-Add comments on specific lines in the diff:
+### Annotation Data Structure
+
+```typescript
+interface DiffAnnotation {
+  // Anchor (stable, survives view mode changes)
+  anchor: LineAnchor  // { path, side, line }
+  
+  type: 'comment' | 'suggestion' | 'ai-explanation'
+  content: string
+  author?: string
+  createdAt?: Date
+  
+  // GitHub sync
+  prCommentId?: number
+  threadId?: string
+  resolved?: boolean
+  
+  // For replies
+  replyTo?: number  // parent comment ID
+}
+
+// Key for annotation lookup: `${path}:${side}:${line}`
+function annotationKey(anchor: LineAnchor): string {
+  return `${anchor.path}:${anchor.side}:${anchor.line}`
+}
+```
+
+### Visual Rendering
+
+Comments appear inline below the referenced line:
+
+```
+  +    return isValid(input)
+  ┌─ @alice · 2h ago ─────────────────────────────────────────────┐
+  │ Should we validate the input type here too?                   │
+  │                                                               │
+  │ ┌─ @bob · 1h ago ───────────────────────────────────────────┐ │
+  │ │ Good catch, I'll add that.                                │ │
+  │ └───────────────────────────────────────────────────────────┘ │
+  │ [Reply] [Resolve]                                             │
+  └───────────────────────────────────────────────────────────────┘
+     }
+```
+
+### Adding Comments
 
 1. Navigate to line in diff view
 2. Press `c` to open comment modal
 3. Write comment, submit
-4. Comment appears inline in diff
-
-For reviewing:
-- See existing comments inline in diff
-- Reply to comment threads
-- Resolve/unresolve threads
-
-This requires custom diff rendering (see `diff-viewing.md`) rather than relying on jj's native diff output.
+4. Comment syncs to GitHub via API
 
 ---
 
@@ -115,7 +215,7 @@ This requires custom diff rendering (see `diff-viewing.md`) rather than relying 
 Full review cycle without leaving the terminal:
 
 1. Open PR from list
-2. Navigate files, view diffs
+2. Navigate files (file-at-a-time)
 3. Add inline comments as needed
 4. Submit review (approve / request changes / comment only)
 
@@ -136,63 +236,64 @@ Submit Review
 
 ---
 
+## Implementation Phases
+
+**Note:** These phases build on the custom diff renderer phases.
+
+### Phase 0: Research
+- [ ] Evaluate `gh` CLI capabilities for PR operations
+- [ ] Test `gh api` for fetching PR files/patches
+- [ ] Prototype PR list view
+
+### Phase 1: Read-Only (MVP)
+- [ ] PR list with filtering (`gh pr list`)
+- [ ] PR detail view with file picker
+- [ ] File diff viewing (reuse custom diff renderer)
+- [ ] Open in browser
+
+### Phase 2: Viewing Comments
+- [ ] Fetch existing comments via `gh api`
+- [ ] Map comments to line anchors
+- [ ] Render inline in diff view
+- [ ] File viewed/unviewed tracking
+
+### Phase 3: Adding Comments
+- [ ] Comment input modal
+- [ ] Submit comments via `gh api`
+- [ ] Reply to threads
+- [ ] Resolve threads
+
+### Phase 4: Review Actions
+- [ ] Approve / request changes
+- [ ] Submit review with summary
+- [ ] Merge PR (strategy picker)
+- [ ] Toggle draft/ready
+
+---
+
 ## Integration Points
+
+### With Custom Diff Renderer
+
+The diff renderer provides:
+- Row index with `(path, side, line)` coordinates
+- File-at-a-time rendering for performance
+- Hunk navigation
+- Same visual style as jj diffs
 
 ### With Stacking (`github-stacking.md`)
 
 - View stack status in PR list
 - Navigate between stacked PRs
-- See stack context when reviewing (which PR is this building on?)
+- See stack context when reviewing
 
-### With AI (`ai-integration.md`) — Mostly Out of Scope
+### With AI (`ai-integration.md`)
 
-Most AI integration is out of scope. See [AI Integration](./ai-integration.md) for the scope decision.
-
-**If PR management is implemented:** Comment generation with human review *could* be reconsidered, but with healthy skepticism. The UX of "AI drafts, human approves" is complex to get right, and overlaps significantly with GitHub Copilot, Claude Code actions, etc.
-
-### With Custom Diff (`diff-viewing.md`)
-
-- Required for inline comments
-- Enables "viewed" tracking per file
-- Hunk navigation for targeted review
-
----
-
-## Implementation Phases
-
-### Phase 0: Research
-- [ ] Evaluate `gh` CLI capabilities for PR operations
-- [ ] Prototype PR list view
-- [ ] Decide on architecture (integrated vs separate)
-
-### Phase 1: Read-Only
-- [ ] PR list with filtering
-- [ ] PR detail view (description, status, files)
-- [ ] Diff viewing (reuse existing)
-- [ ] Open in browser
-
-### Phase 2: Basic Actions
-- [ ] Approve / request changes
-- [ ] Add general comments
-- [ ] Merge PR
-- [ ] Toggle draft/ready
-
-### Phase 3: Inline Comments
-- [ ] Requires custom diff renderer
-- [ ] Add comments on lines
-- [ ] View existing comments
-- [ ] Reply to threads
-
-### Phase 4: File Sync
-- [ ] Track viewed files
-- [ ] Sync with GitHub API
-- [ ] Persist state
+Mostly out of scope. If implemented: AI explanations anchored to specific lines using the same LineAnchor system.
 
 ---
 
 ## CLI Commands
-
-If PR management moves forward, corresponding CLI commands:
 
 ```bash
 # List PRs
@@ -206,6 +307,9 @@ kajji pr approve <number> [--body "LGTM"]
 kajji pr request-changes <number> --body "Please fix..."
 kajji pr comment <number> --body "Question about..."
 
+# Inline comment (CLI)
+kajji pr comment <number> --path src/auth.ts --line 42 --body "Check this"
+
 # Merge
 kajji pr merge <number> [--squash|--rebase|--merge]
 ```
@@ -218,7 +322,6 @@ All with `--json` for agent consumption.
 
 - How much overlap with existing tools is acceptable?
 - Is the value proposition strong enough vs `gh pr` + browser?
-- Should this be a separate tool/TUI entirely?
 - How to handle review comments that reference code that's changed?
 - Offline support? (probably not — PRs are inherently online)
 
@@ -227,10 +330,10 @@ All with `--json` for agent consumption.
 ## Prior Art
 
 - [gh CLI](https://cli.github.com/) — GitHub's official CLI, does most PR operations
-- [hub](https://github.com/github/hub) — Older GitHub CLI wrapper
 - [lazygit](https://github.com/jesseduffield/lazygit) — Has basic PR viewing
 - [gitui](https://github.com/extrawurst/gitui) — Rust TUI, some PR features
 - [Graphite](https://graphite.dev/) — Full PR management + stacking
+- [@pierre/diffs](https://github.com/pierrecomputer/pierre) — Line selection/annotation patterns
 
 ---
 
@@ -238,5 +341,6 @@ All with `--json` for agent consumption.
 
 *Record key decisions as they're made*
 
-- TBD: Architecture choice (integrated vs separate)
-- TBD: Scope boundaries (what NOT to include)
+- Phase ordering: PR review before interactive splitting (builds annotation substrate first)
+- State keying: Stable anchors (path, side, line), not array indices
+- Rendering: File-at-a-time for performance and natural UX

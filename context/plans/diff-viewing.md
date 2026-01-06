@@ -1,143 +1,220 @@
 # Diff Viewing & Layout
 
-**Status**: Partial (basic diff display works)  
-**Priority**: High
+**Status**: Planning (custom renderer)  
+**Priority**: High  
+**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md)
 
 ---
 
 ## Goals
 
-First-class side-by-side diff support with flexible layouts that adapt to terminal size and user preference.
+First-class diff viewing with:
+1. **Custom rendering** via `@pierre/diffs` for consistent interactive experience
+2. **Flexible layouts** adapting to terminal size
+3. **Escape hatch** to ANSI passthrough for difftastic/delta users
+
+---
+
+## Rendering Approach
+
+### Primary: Custom Renderer
+
+Use `@pierre/diffs` for parsing, build OpenTUI components for display.
+
+**Why custom:**
+- Same rendering in view mode and interactive modes (splitting, PR review)
+- Hunk navigation, selection, annotations
+- Word-level change highlighting
+- Full control over theming
+
+**Input:** `jj diff -r <rev> --git --no-color`
+
+```typescript
+import { parsePatchFiles } from '@pierre/diffs'
+
+const rawDiff = await execute(['diff', '-r', rev, '--git', '--no-color'])
+const patches = parsePatchFiles(rawDiff)
+```
+
+→ See [Custom Diff Renderer](./custom-diff-renderer.md) for full architecture.
+
+### Fallback: ANSI Passthrough
+
+For users who prefer external diff tools (difftastic, delta):
+
+```typescript
+// Toggle with 'd' keybind
+const rawAnsi = await execute(['diff', '-r', rev, '--color', 'always'])
+<ghostty-terminal ansi={rawAnsi} cols={width()} />
+```
+
+**Config:**
+```toml
+[diff]
+renderer = "custom"  # or "passthrough"
+passthrough_tool = "default"  # uses jj's ui.diff.tool, or "difft", "delta"
+```
+
+---
 
 ## Layout Modes
 
 | Mode | Description | Use Case |
 |------|-------------|----------|
-| **Half-width** | Diff in right panel (~60% width) | Default, side-by-side in panel |
-| **Full-width** | Diff expands to full terminal | Better side-by-side view |
-| **Narrow/Unified** | Single-column inline diff | Small terminals, quick scanning |
+| **Half-width** | Diff in right panel (~60% width) | Default |
+| **Full-width** | Diff expands to full terminal | Detailed review |
+| **Unified** | Single-column inline diff | Narrow terminals |
+| **Split** | Side-by-side old/new | Wide terminals |
 
-### Behavior
-
-- **Auto-switch**: When terminal is too narrow for side-by-side, automatically switch to unified
-- **Manual toggle**: Keybind to cycle modes (e.g., `v` or `+`/`-`)
-- **Persist preference**: Remember last used mode in config
-
-### Width Thresholds
-
-```
-< 80 cols   → Force unified (side-by-side unreadable)
-80-120 cols → Default to unified, allow side-by-side
-> 120 cols  → Default to side-by-side
-```
-
-User can override via config.
-
-## Diff Tool Integration
-
-Priority order:
-
-1. **User's jj config** — If `ui.diff.tool` is set in jj config, respect it
-2. **kajji config** — If `[diff].tool` is set, use that
-3. **Native difftastic** — Default to difftastic if available (best side-by-side)
-4. **Fallback** — `jj diff --color-words` if nothing else available
-
-### Difftastic Integration
-
-Difftastic is ideal for side-by-side because:
-- Structural diffing (understands code syntax)
-- Built-in side-by-side layout
-- Respects `COLUMNS` env var
-
-```bash
-# Check if difftastic available
-which difft
-
-# Run with correct width
-COLUMNS=80 jj diff --tool difft
-```
-
-### Passing Width to Diff Tools
-
-Before running any diff command:
-1. Calculate available width (panel width or full terminal)
-2. Set `COLUMNS` environment variable
-3. Some tools also accept `--width` flag
-
-## Keybindings
+### Panel Sizing
 
 | Key | Action |
 |-----|--------|
-| `v` | Cycle: side-by-side → unified → side-by-side |
 | `+` | Expand diff panel (half → full width) |
 | `-` | Collapse diff panel (full → half width) |
 | `=` | Reset to default width |
 
-## Implementation Notes
-
-### Current State
-
-- Diff renders in right panel with ANSI colors
-- Uses whatever jj outputs with `--color always`
-- No layout switching yet
-
-### Required Changes
-
-1. Track layout mode in state (half/full/unified)
-2. Add keybind handlers for mode switching
-3. Detect terminal width changes (`useOnResize`)
-4. Pass correct `COLUMNS` to jj diff
-5. Add horizontal scroll for wide side-by-side diffs
-
-### Panel Expansion
-
-When expanding to full-width:
-- Hide left panels temporarily
-- Diff takes 100% width
-- Press `-` or `Escape` to return to normal layout
-
-## Tasks
-
-- [ ] Add layout mode state (half/full/unified)
-- [ ] Implement `v` toggle keybind
-- [ ] Implement `+`/`-` panel expand/collapse
-- [ ] Auto-detect difftastic availability
-- [ ] Pass COLUMNS to diff commands
-- [ ] Add horizontal scroll for wide diffs
-- [ ] Add width threshold config options
-- [ ] Persist layout preference
-
----
-
-## Future: Hunk Navigation
-
-> Requires custom diff rendering.
-
-When kajji has its own diff renderer (not just displaying jj's output), enable:
-
-### Hunk Navigation
-
-Navigate between hunks in a diff:
+### View Style (within panel)
 
 | Key | Action |
 |-----|--------|
-| `[` / `]` | Previous / next hunk |
-| `n` / `N` | Next / previous hunk (alternative) |
-| `{` / `}` | Previous / next file |
+| `v` | Cycle: unified → split → unified |
 
-Jump between files by jumping between hunks — when you hit the last hunk in a file, next hunk goes to the first hunk of the next file.
+### Auto-Switching
 
-### Implementation Notes
-
-- Requires tracking hunk boundaries in custom renderer
-- Could enable hunk-level staging/splitting (see `interactive-splitting.md`)
+```
+< 100 cols  → Force unified
+100-140     → Default unified, allow split
+> 140 cols  → Default split
+```
 
 ---
 
-## Out of Scope: AI Hunk Selection
+## Navigation
 
-~~Selection for AI Context~~ — marking hunks to ask AI about is **out of scope**.
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll lines |
+| `[` / `]` | Previous / next hunk |
+| `{` / `}` | Previous / next file |
+| `n` / `N` | Next / previous change line |
+| `g` / `G` | First / last position |
+| `Ctrl+d/u` | Half-page scroll |
 
-This was considered but requires too much UX investment (selection UI + AI query modal) for uncertain value. External agents (Claude Code, Cursor) already provide change explanation via their own interfaces.
+---
 
-See [AI Integration](./ai-integration.md) for the scope decision on AI features.
+## Visual Features
+
+### File Headers
+
+```
+┌─ src/auth.ts ───────────────────────────────────────────────────────┐
+│ M  src/auth.ts                                            +15 -3    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Hunk Headers
+
+```
+@@ -10,6 +10,8 @@ function validate()
+```
+
+### Word-Level Highlighting
+
+Within changed lines, highlight the specific characters that changed:
+
+```
+-    return true
++    return isValid(input)
+           ^^^^^^^^^^^^^^ highlighted
+```
+
+Uses `diff` package's `diffWords()`.
+
+### Current Hunk Indicator
+
+```
+  @@ -10,6 +10,8 @@ function validate()
+     function validate(input) {
+  -    return true
+▌ +    return isValid(input)    ◄ cursor here
+     }
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Replace ANSI with Custom
+- [ ] Add `@pierre/diffs` dependency
+- [ ] Create unified view renderer
+- [ ] Basic file/hunk headers
+- [ ] Toggle to passthrough with `d`
+
+### Phase 2: Enhanced Viewing
+- [ ] Split (side-by-side) view
+- [ ] Auto-switch based on width
+- [ ] Word-level highlighting
+- [ ] Syntax highlighting
+
+### Phase 3: Navigation
+- [ ] Hunk navigation (`[`/`]`)
+- [ ] File navigation (`{`/`}`)
+- [ ] Current hunk indicator
+
+### Phase 4: Panel Sizing
+- [ ] `+`/`-` panel expand/collapse
+- [ ] Persist preference
+- [ ] Horizontal scroll for wide diffs
+
+---
+
+## Config Options
+
+```toml
+[diff]
+# Renderer choice
+renderer = "custom"  # "custom" | "passthrough"
+
+# Passthrough tool (when renderer = "passthrough" or user toggles)
+passthrough_tool = "default"  # "default" | "difft" | "delta"
+
+# Default view style
+style = "auto"  # "auto" | "unified" | "split"
+
+# Width thresholds for auto-switching
+unified_max_width = 140
+split_min_width = 100
+
+# Features
+word_highlighting = true
+syntax_highlighting = true
+show_line_numbers = true
+```
+
+---
+
+## Integration Points
+
+### With Interactive Splitting
+→ [interactive-splitting.md](./interactive-splitting.md)
+
+Same renderer, different mode. Hunk selection enabled.
+
+### With PR Review
+→ [pr-management.md](./pr-management.md)
+
+Same renderer with annotations. Comments rendered inline.
+
+### With AI Features
+→ [ai-integration.md](./ai-integration.md)
+
+**Note:** AI hunk selection is out of scope. External agents (Claude Code, Cursor) already provide change explanation. See AI Integration plan for scope decision.
+
+---
+
+## References
+
+- [Custom Diff Renderer](./custom-diff-renderer.md) - Architecture details
+- [@pierre/diffs](https://github.com/pierrecomputer/pierre/tree/main/packages/diffs) - Parsing library
+- [lumen](https://github.com/jnsahaj/lumen) - Rust CLI with beautiful diffs
