@@ -106,3 +106,38 @@ When expanding to full-width:
 - [ ] Add horizontal scroll for wide diffs
 - [ ] Add width threshold config options
 - [ ] Persist layout preference
+
+---
+
+## Future: Hunk Navigation
+
+> Requires custom diff rendering.
+
+When kajji has its own diff renderer (not just displaying jj's output), enable:
+
+### Hunk Navigation
+
+Navigate between hunks in a diff:
+
+| Key | Action |
+|-----|--------|
+| `[` / `]` | Previous / next hunk |
+| `n` / `N` | Next / previous hunk (alternative) |
+| `{` / `}` | Previous / next file |
+
+Jump between files by jumping between hunks — when you hit the last hunk in a file, next hunk goes to the first hunk of the next file.
+
+### Implementation Notes
+
+- Requires tracking hunk boundaries in custom renderer
+- Could enable hunk-level staging/splitting (see `interactive-splitting.md`)
+
+---
+
+## Out of Scope: AI Hunk Selection
+
+~~Selection for AI Context~~ — marking hunks to ask AI about is **out of scope**.
+
+This was considered but requires too much UX investment (selection UI + AI query modal) for uncertain value. External agents (Claude Code, Cursor) already provide change explanation via their own interfaces.
+
+See [AI Integration](./ai-integration.md) for the scope decision on AI features.

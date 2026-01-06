@@ -223,7 +223,7 @@ Each corner prop accepts `JSX.Element | string`. Internally wraps content in `po
 
 **Features:**
 - [ ] Side-by-side diff with aligned old/new panels
-- [ ] Hunk navigation with keyboard shortcuts
+- [ ] Hunk navigation with keyboard shortcuts (`[`/`]` or `n`/`N`)
 - [ ] Word-level change highlighting
 - [ ] Syntax highlighting per filetype
 - [ ] Inline action hints (what operations will affect this code)
@@ -233,6 +233,8 @@ Each corner prop accepts `JSX.Element | string`. Internally wraps content in `po
 - [ ] Config option: `diff.renderer = "native" | "kajji"`
 - [ ] Native mode: use `jj diff --color always` output directly
 - [ ] Respects user's jj config (difftastic, delta, etc.)
+
+→ [Diff viewing plan](./plans/diff-viewing.md)
 
 Inspiration: [lumen](https://github.com/jnsahaj/lumen) — beautiful CLI diff viewer with side-by-side layout
 
@@ -474,6 +476,36 @@ Longer-term possibilities, not actively planned:
 - Revset filtering
 - Interactive rebase UI
 - Large repo optimization (10k+ commits)
+
+### Exploratory: PR Management
+
+PR management is exploratory — the risk is becoming an "everything TUI" that overlaps too much with existing tools. Build for personal use first, evaluate fit.
+
+**PR Management** → [plan](./plans/pr-management.md)
+- View/filter PRs (open, assigned, created by me, review requested)
+- PR actions: approve, comment (inline), merge
+- GitHub file sync (track viewed files)
+- Full review workflow without leaving terminal
+
+**Architectural options** (if this expands):
+- Integrated panels within existing TUI
+- Separate tab (`[jj] [PR]`)
+- Completely separate TUI
+
+### AI/LLM Integration (Mostly Out of Scope)
+
+**Healthy skepticism toward AI features.** Most AI integration requires entirely new UX flows and significantly inflates scope. kajji should stay focused on being an excellent jj TUI, not an AI-powered development assistant. Many dedicated tools already exist (aicommits, gptcommit, lumen, Claude Code, Copilot).
+
+**Maybe in scope:** → [plan](./plans/ai-integration.md)
+- Commit message generation from diff (like [lumen](https://github.com/jnsahaj/lumen)) — low-friction, well-defined
+
+**Out of scope:**
+- Explain changes (revision → file → hunk) — too much UX investment
+- Hunk selection for AI queries — requires custom diff renderer first
+- AI-assisted jj actions — external agents (Claude Code, etc.) do this better
+- AI-assisted PR review — only reconsider if PR management lands AND there's clear value
+
+**If PR management is implemented:** Comment generation with human review *could* be reconsidered, but maintain skepticism about the UX complexity.
 
 ---
 

@@ -394,6 +394,15 @@ CLI output format is a contract. Use semantic versioning:
 - `kajji pr show <number>` — Show PR details
 - `kajji pr merge <number>` — Merge PR
 
+→ See [PR Management](./pr-management.md) for full PR workflow exploration.
+
+**AI commands (mostly out of scope):**
+- `kajji ai message [rev]` — Generate commit message from diff (maybe in scope)
+- ~~`kajji ai explain`~~ — Out of scope
+- ~~`kajji ai split-suggest`~~ — Out of scope
+
+→ See [AI Integration](./ai-integration.md) for scope decision. Most AI features are out of scope due to UX complexity and overlap with existing tools.
+
 **Advanced splitting:**
 - Line-level splitting (not just hunks)
 - `kajji changes --watch` — Stream changes as they happen (for agent monitoring)

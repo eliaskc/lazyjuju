@@ -253,25 +253,71 @@ feature-auth (3 PRs) ✓✓○ ● (CI failing on #3)
 
 ---
 
+## Implementation Notes (from prior art research)
+
+### Stack Discovery
+
+Use jj's revset to find mutable commits in ancestry:
+```bash
+jj log -r 'ancestors(@) & mutable()' --no-graph \
+  --template 'change_id.short() ++ "\t" ++ commit_id.short() ++ "\t" ++ bookmarks ++ "\t" ++ description.first_line() ++ "\n"'
+```
+
+### Base Targeting Logic
+
+```typescript
+function getBase(change: Change, stack: Change[]): string {
+  const idx = stack.indexOf(change)
+  if (idx === 0) return 'main' // or default branch
+  const parent = stack[idx - 1]
+  return parent.bookmarks[0] || `push-${parent.changeId.slice(0, 8)}`
+}
+```
+
+### Idempotent PR Creation
+
+Check for existing PR before creating:
+```bash
+gh pr list --head <branch> --json number,state,url
+```
+If exists, update via `gh pr edit`. If not, create new.
+
+### Relation Chain Generation
+
+Auto-generate for PR body:
+```typescript
+function relationChain(stack: StackItem[], current: number): string {
+  const lines = stack.map(item => {
+    const marker = item.prNumber === current ? '👉 ' : '   '
+    return `- ${marker}#${item.prNumber} ${item.title}`
+  })
+  return `### Relation chain\n${lines.join('\n')}`
+}
+```
+
+### Auto-Rebase After Landing
+
+jj-spr's main friction is manual rebase. After `land`:
+```bash
+jj git fetch
+jj rebase -d main@origin  # or appropriate target
+```
+kajji can prompt or auto-run this with confirmation.
+
+---
+
 ## Future: Full PR Management
 
-Beyond stacking, kajji could become a full PR management tool:
+Beyond stacking, kajji could become a full PR management tool.
 
-### PR List View
-- View all PRs (assigned to you, open, review requested)
-- Filter by status, author, label
-- Quick actions (merge, close, approve)
+→ **See [PR Management](./pr-management.md) for detailed exploration.**
 
-### PR Details
-- View PR description, comments, review status
-- See CI status inline
-- View diff (already have this infrastructure)
-
-### PR Actions
-- Add/edit PR description (especially useful for stacks — GitHub's stacked PR descriptions are painful)
-- Add comments, approve, request changes
-- Merge PR (with merge strategy selection)
-- Assign reviewers, add labels
+Summary of what's explored there:
+- PR list with filtering (open, assigned, created by me, review requested)
+- PR detail view (description, reviews, CI, files, diff)
+- Actions: approve, request changes, comment (inline and general), merge
+- GitHub file sync (track viewed files, sync with GitHub's checkboxes)
+- AI-assisted review (see [AI Integration](./ai-integration.md))
 
 ### Why This Matters
 This would make kajji a true "Graphite in TUI":
@@ -288,15 +334,67 @@ This would make kajji a true "Graphite in TUI":
 - Repository must have GitHub remote
 - jj must be configured with git backend
 
-## Prior Art
+## Prior Art & Inspiration
 
-- [Graphite](https://graphite.dev/) — Commercial stacking tool
+### Tools to Consider Integrating
+
+**[jj-spr](https://github.com/LucioFranco/jj-spr)** — jj-native stacked PRs (Rust)
+- Uses change IDs as PR identity (`jj-spr-{change_id}` branches)
+- Two modes: `--cherry-pick` (independent) vs dependent stacks — kajji should offer both
+- Append-only PR updates (new commits, not force-push — preserves review context)
+- Main friction: manual rebase after landing — kajji could automate this
+- Could potentially use as backend or reference implementation
+
+**[spr](https://github.com/ejoffe/spr)** — git-based stacked PRs (Go)
+- Proven UX patterns: status bits (⌛❌✅❌ for CI/approval/conflicts/stack), WIP prefix, batch merge
+- Git-only (no jj support), but valuable for UX inspiration
+- Key ideas to adopt: `--count` for partial stack ops, intelligent merge ordering, config model (repo vs user)
+
+### Scripts & Workflows
+
+**[jj-vcs/jj#485](https://github.com/jj-vcs/jj/issues/485)** — Upstream discussion on GitHub integration
+
+**[jj-gh-pr.nu](https://github.com/eopb/jj-gh-pr.nu)** — Nushell scripts for jj → GitHub PRs
+- Uses `jj log -r 'ancestors(@) & mutable()'` for stack discovery
+- Parent bookmark lookup via `{change}-` revset syntax
+
+**Community Python script** (jj-github-pr):
+- **Relation chain pattern**: Adds markdown section to PR body showing stack position:
+  ```markdown
+  ### Relation chain
+  - 👉 #45  ← this PR
+  - #44
+  - #43
+  ```
+- Idempotent PR creation (check existing via `repo.get_pulls(head=...)`, update or create)
+- Force-push via raw git for branch updates
+
+**Graphite bridge script**:
+- `jj branch list -r 'reachable(@,mutable())'` to discover bookmarks
+- `gt track --force` to import into Graphite, then `gt submit` for PR creation
+
+### Key Patterns from Research
+
+| Pattern | Source | Recommendation |
+|---------|--------|----------------|
+| Change ID as PR identity | jj-spr | Already planned, validated |
+| Two stacking modes (independent/dependent) | jj-spr | Add `--cherry-pick` style option |
+| Status bits (⌛❌✅❌) | spr | Adopt for stack visualization |
+| WIP prefix to skip PR | spr | Support in commit message detection |
+| Relation chain in PR body | Python script | Auto-generate for all stacked PRs |
+| Append-only PR updates | jj-spr | Consider as option (preserves review context) |
+| `--count` for partial ops | spr | Add to CLI commands |
+
+### Other References
+
+- [Graphite](https://graphite.dev/) — Commercial stacking tool (good UX reference)
 - [gh-stack](https://github.com/timothyandrew/gh-stack) — CLI for GitHub stacked PRs
-- [spr](https://github.com/ejoffe/spr) — Stacked PRs for GitHub
-- [jj's native GitHub support](https://github.com/martinvonz/jj/issues/1039) — Upstream discussion
 
 ## Open Questions
 
 - How to handle force-push failures (protected branches, etc.)?
 - Integration with jj's eventual native GitHub support?
 - Custom bookmark naming: allow user to rename auto-generated `push-xxx` bookmarks? (Yes, in visual editor)
+- Use jj-spr as backend vs implement natively? (jj-spr is Rust, well-structured)
+- Append-only vs force-push for PR updates? (trade-off: review context vs clean history)
+- Independent vs dependent stacks as default? (independent is simpler, dependent is more "correct")
