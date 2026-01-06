@@ -7,20 +7,23 @@ import type {
 	FlattenedHunk,
 	HunkId,
 	SyntaxToken,
+	WordDiffSegment,
 } from "../../diff"
 import {
+	computeWordDiff,
 	getFileStatusColor,
 	getFileStatusIndicator,
 	getLanguage,
 	tokenizeLineSync,
 } from "../../diff"
 
-// Subtle background colors for diff lines
 const DIFF_BG = {
 	addition: "#132a13",
 	deletion: "#2d1515",
 	empty: "#1a1a1a",
 	hunkHeader: "#1a1a2e",
+	additionEmphasis: "#1a4a1a",
+	deletionEmphasis: "#4a1a1a",
 } as const
 
 const LINE_NUM_WIDTH = 5
@@ -166,14 +169,12 @@ function SplitHunkSection(props: SplitHunkSectionProps) {
 }
 
 interface AlignedRow {
-	left: DiffLine | null // Old side (deletions, context)
-	right: DiffLine | null // New side (additions, context)
+	left: DiffLine | null
+	right: DiffLine | null
+	leftWordDiff?: WordDiffSegment[]
+	rightWordDiff?: WordDiffSegment[]
 }
 
-/**
- * Build aligned rows from a list of diff lines.
- * Context lines appear on both sides, deletions on left, additions on right.
- */
 function buildAlignedRows(lines: DiffLine[]): AlignedRow[] {
 	const rows: AlignedRow[] = []
 	let i = 0
@@ -187,11 +188,9 @@ function buildAlignedRows(lines: DiffLine[]): AlignedRow[] {
 		}
 
 		if (line.type === "context") {
-			// Context appears on both sides
 			rows.push({ left: line, right: line })
 			i++
 		} else if (line.type === "deletion") {
-			// Collect consecutive deletions
 			const deletions: DiffLine[] = []
 			while (i < lines.length && lines[i]?.type === "deletion") {
 				const del = lines[i]
@@ -199,7 +198,6 @@ function buildAlignedRows(lines: DiffLine[]): AlignedRow[] {
 				i++
 			}
 
-			// Collect consecutive additions
 			const additions: DiffLine[] = []
 			while (i < lines.length && lines[i]?.type === "addition") {
 				const add = lines[i]
@@ -207,16 +205,27 @@ function buildAlignedRows(lines: DiffLine[]): AlignedRow[] {
 				i++
 			}
 
-			// Pair them up
 			const maxLen = Math.max(deletions.length, additions.length)
 			for (let j = 0; j < maxLen; j++) {
-				rows.push({
-					left: deletions[j] ?? null,
-					right: additions[j] ?? null,
-				})
+				const del = deletions[j]
+				const add = additions[j]
+				const row: AlignedRow = {
+					left: del ?? null,
+					right: add ?? null,
+				}
+
+				if (del && add) {
+					const { old: oldSegs, new: newSegs } = computeWordDiff(
+						del.content,
+						add.content,
+					)
+					row.leftWordDiff = oldSegs
+					row.rightWordDiff = newSegs
+				}
+
+				rows.push(row)
 			}
 		} else if (line.type === "addition") {
-			// Addition without preceding deletion
 			rows.push({ left: null, right: line })
 			i++
 		} else {
@@ -233,6 +242,10 @@ interface SplitRowViewProps {
 	filename: string
 }
 
+interface TokenWithEmphasis extends SyntaxToken {
+	emphasis?: boolean
+}
+
 function SplitRowView(props: SplitRowViewProps) {
 	const { colors } = useTheme()
 
@@ -242,35 +255,64 @@ function SplitRowView(props: SplitRowViewProps) {
 	const formatLineNum = (num: number | undefined) =>
 		(num?.toString() ?? "").padStart(LINE_NUM_WIDTH, " ")
 
-	const tokenizeContent = (
-		line: DiffLine | null,
+	const tokenizeWithWordDiff = (
+		content: string,
+		wordDiff: WordDiffSegment[] | undefined,
 		maxWidth: number,
-		fallbackColor: string,
-	): SyntaxToken[] => {
-		if (!line) return []
+		emphasisType: "removed" | "added",
+	): TokenWithEmphasis[] => {
+		if (!wordDiff) {
+			const tokens = tokenizeLineSync(content, language())
+			let currentLen = 0
+			const result: TokenWithEmphasis[] = []
 
-		const content = line.content
-		const tokens = tokenizeLineSync(content, language())
+			for (const token of tokens) {
+				if (currentLen >= maxWidth) break
+				const remaining = maxWidth - currentLen
+				if (token.content.length <= remaining) {
+					result.push({
+						content: token.content,
+						color: token.color ?? colors().text,
+					})
+					currentLen += token.content.length
+				} else {
+					result.push({
+						content: `${token.content.slice(0, remaining - 1)}…`,
+						color: token.color ?? colors().text,
+					})
+					break
+				}
+			}
+			return result
+		}
 
+		const result: TokenWithEmphasis[] = []
 		let currentLen = 0
-		const result: SyntaxToken[] = []
 
-		for (const token of tokens) {
+		for (const segment of wordDiff) {
 			if (currentLen >= maxWidth) break
 
-			const remaining = maxWidth - currentLen
-			if (token.content.length <= remaining) {
-				result.push({
-					content: token.content,
-					color: token.color ?? fallbackColor,
-				})
-				currentLen += token.content.length
-			} else {
-				result.push({
-					content: `${token.content.slice(0, remaining - 1)}…`,
-					color: token.color ?? fallbackColor,
-				})
-				break
+			const segmentTokens = tokenizeLineSync(segment.text, language())
+			const isEmphasis = segment.type === emphasisType
+
+			for (const token of segmentTokens) {
+				if (currentLen >= maxWidth) break
+				const remaining = maxWidth - currentLen
+				if (token.content.length <= remaining) {
+					result.push({
+						content: token.content,
+						color: token.color ?? colors().text,
+						emphasis: isEmphasis,
+					})
+					currentLen += token.content.length
+				} else {
+					result.push({
+						content: `${token.content.slice(0, remaining - 1)}…`,
+						color: token.color ?? colors().text,
+						emphasis: isEmphasis,
+					})
+					break
+				}
 			}
 		}
 
@@ -288,24 +330,55 @@ function SplitRowView(props: SplitRowViewProps) {
 	})
 
 	const leftTokens = createMemo(() =>
-		tokenizeContent(props.row.left, contentWidth(), colors().text),
+		tokenizeWithWordDiff(
+			props.row.left?.content ?? "",
+			props.row.leftWordDiff,
+			contentWidth(),
+			"removed",
+		),
 	)
 
 	const rightTokens = createMemo(() =>
-		tokenizeContent(props.row.right, contentWidth(), colors().text),
+		tokenizeWithWordDiff(
+			props.row.right?.content ?? "",
+			props.row.rightWordDiff,
+			contentWidth(),
+			"added",
+		),
 	)
+
+	const leftLineNumColor = createMemo(() => {
+		if (!props.row.left) return colors().textMuted
+		return props.row.left.type === "deletion"
+			? colors().error
+			: colors().textMuted
+	})
+
+	const rightLineNumColor = createMemo(() => {
+		if (!props.row.right) return colors().textMuted
+		return props.row.right.type === "addition"
+			? colors().success
+			: colors().textMuted
+	})
 
 	return (
 		<box flexDirection="row">
 			<box backgroundColor={leftBg()} flexGrow={1} flexBasis={0}>
 				<text wrapMode="none">
-					<span style={{ fg: colors().textMuted }}>
+					<span style={{ fg: leftLineNumColor() }}>
 						{formatLineNum(props.row.left?.oldLineNumber)}
 					</span>
 					<span style={{ fg: colors().textMuted }}> │ </span>
 					<For each={leftTokens()}>
 						{(token) => (
-							<span style={{ fg: token.color }}>{token.content}</span>
+							<span
+								style={{
+									fg: token.color,
+									bg: token.emphasis ? DIFF_BG.deletionEmphasis : undefined,
+								}}
+							>
+								{token.content}
+							</span>
 						)}
 					</For>
 				</text>
@@ -313,13 +386,20 @@ function SplitRowView(props: SplitRowViewProps) {
 			<text fg={colors().border}>│</text>
 			<box backgroundColor={rightBg()} flexGrow={1} flexBasis={0}>
 				<text wrapMode="none">
-					<span style={{ fg: colors().textMuted }}>
+					<span style={{ fg: rightLineNumColor() }}>
 						{formatLineNum(props.row.right?.newLineNumber)}
 					</span>
 					<span style={{ fg: colors().textMuted }}> │ </span>
 					<For each={rightTokens()}>
 						{(token) => (
-							<span style={{ fg: token.color }}>{token.content}</span>
+							<span
+								style={{
+									fg: token.color,
+									bg: token.emphasis ? DIFF_BG.additionEmphasis : undefined,
+								}}
+							>
+								{token.content}
+							</span>
 						)}
 					</For>
 				</text>
