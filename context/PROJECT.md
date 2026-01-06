@@ -124,8 +124,14 @@ Priority queue after pre-release polish:
 1. **Fix HIGH bugs** (see Known Issues below)
    - [x] Divergent change IDs break operations
    - [x] Diff doesn't re-render on refresh
-2. **Basic rebase** — `r` to rebase selected commit onto target (revset picker)
-3. **Basic split** — `S` to invoke `jj split` on selected commit (opens in `$EDITOR`)
+2. [x] **Basic rebase** — `r` to rebase selected commit onto target (revset picker)
+3. [x] **Basic split** — `S` to invoke `jj split` on selected commit (opens in `$EDITOR`)
+4. **Picker & list improvements**
+   - [ ] Bookmark picker: fuzzy search/filtering
+   - [ ] Bookmark picker: mouse click to select
+   - [ ] Bookmark sorting: by recently changed (not alphabetical) — in picker and bookmarks tab
+   - [ ] Bookmark grouping: user-modified first, remote-only second (approximates local/remote in git; assumes tracked bookmarks)
+   - [ ] Revset picker: same filtering/mouse support
 
 ## Workspaces
 
@@ -358,7 +364,8 @@ Revsets are jj's query language for selecting commits (e.g., `trunk()..@`, `auth
 
 General pattern: list views with many items need filtering/search.
 
-- [ ] **Bookmark picker filtering** — SetBookmarkModal should support filtering bookmarks by name (fuzzy or prefix match) when selecting which bookmark to set on a revision
+See also: **Picker & list improvements** in Next Up (high priority bookmark/revset picker work).
+
 - [ ] **File tree search** — `/` to filter files by name in file tree views (log.files, bookmarks.files)
   - Fuzzy match on file path
   - Show matching files only (collapse non-matching folders)
@@ -366,11 +373,7 @@ General pattern: list views with many items need filtering/search.
 - [ ] **Revisions by file** — search for commits that touched files matching a pattern
   - Could integrate with revset: `jj log -r 'file("pattern")'`
   - Or custom UI: `/` in log.revisions opens file filter mode
-- [ ] **Similar picker patterns** — apply same filtering UX to other pickers:
-  - [ ] Revset picker (for rebase target selection)
-  - [ ] Workspace picker (when implemented)
-  - [ ] Any future list-based selection modals
-- [ ] **Mouse support in picker modals** — click to select item in bookmark picker, revset picker, etc. (focus switching already works)
+- [ ] **Workspace picker** — filtering when implemented
 
 Part of broader search/filter work (see Revset Filtering above).
 
@@ -408,7 +411,7 @@ jj commands that modify history require confirmation flags. We handle `--ignore-
 - Spaces not rendering in BorderBox corner overlays
 - Help modal narrow mode: scroll-to-selection only works in 1-column mode (multi-column doesn't need it typically)
 - Single-line textarea inputs have slight right margin (body textarea doesn't have this issue) → [OpenTUI issue draft](./issues/opentui-textarea-width.md)
-- Modals with multiple focusable sections (e.g., SetBookmarkModal, DescribeModal) need mouse click support to switch focus between sections
+- Modals with multiple focusable sections (e.g., SetBookmarkModal, DescribeModal) need mouse click support to switch focus between sections (see also: Picker improvements in Next Up)
 
 ### Performance
 
@@ -435,10 +438,15 @@ All major performance issues have been resolved:
 
 ### UX Polish
 
+- [ ] Command execution feedback — make command state and output more visible
+  - Show running state prominently for async operations (spinner, status text)
+  - Always show raw jj output in command log (not just errors) — e.g., "moved bookmark sideways", what was pushed, rebase results
+  - Clear indicator when done + success/failure state
+  - Consider: toast, modal, or highlighted command log entry for important results
 - [ ] Change edit keybind from `e` to `Space` for revisions (more ergonomic)
 - [ ] Status bar truncation indicator — show `...` when context commands are truncated due to narrow terminal
 - [ ] List position indicator — show "X of Y" on panel borders for scrollable lists (revisions, files, bookmarks, commits, oplog). Like lazygit. Decide: always show vs. only when overflow.
-- [ ] Log/bookmark panels slightly wider
+- [x] Log/bookmark panels slightly wider
 - [ ] Selected bookmark should match working copy on load
 - [ ] Active bookmark indication when navigating
 - [x] Disable selection highlight in unfocused panels
@@ -452,7 +460,6 @@ All major performance issues have been resolved:
 
 - Add unit tests for core operations
 - Verify all jj errors shown in command log
-- Display more jj output in command log (e.g., "moved bookmark sideways" on push)
 - Review dialog API patterns — consider consolidating
 - Decompose sync.tsx into focused contexts → [plan](./plans/sync-decomposition.md)
 
