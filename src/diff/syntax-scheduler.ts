@@ -94,6 +94,7 @@ export function createSyntaxScheduler(options: SyntaxSchedulerOptions = {}) {
 		}
 
 		if (results.length > 0) {
+			const prevVersion = version()
 			batch(() => {
 				for (const { key, tokens } of results) {
 					if (generation !== currentGen) continue
@@ -112,6 +113,9 @@ export function createSyntaxScheduler(options: SyntaxSchedulerOptions = {}) {
 				}
 				setVersion((v) => v + 1)
 			})
+			console.log(
+				`[Scheduler] batch done: ${results.length} tokens, version ${prevVersion} -> ${version()}`,
+			)
 			chunksProcessed++
 		}
 

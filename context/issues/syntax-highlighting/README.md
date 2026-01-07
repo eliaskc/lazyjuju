@@ -1,6 +1,6 @@
 # Syntax Highlighting Performance Issue
 
-**STATUS: PARTIALLY RESOLVED** - Navigation is instant, but startup is slow and syntax only loads on scroll
+**STATUS: IN PROGRESS** - Navigation instant, reactivity mostly working, need worker for JIT/startup
 
 ## Problem Summary
 
