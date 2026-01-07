@@ -1,4 +1,11 @@
-import { For, Show, createMemo } from "solid-js"
+import {
+	For,
+	Show,
+	createMemo,
+	createSignal,
+	createEffect,
+	onCleanup,
+} from "solid-js"
 import { useTheme } from "../../context/theme"
 import type {
 	DiffLine,
@@ -396,21 +403,27 @@ function SplitContentRow(props: SplitContentRowProps) {
 		return props.row.right.type === "addition" ? DIFF_BG.addition : undefined
 	})
 
-	const leftTokens = createMemo(() =>
-		tokenizeWithWordDiff(
-			props.row.left?.content ?? "",
-			props.row.leftWordDiff,
-			"removed",
-		),
-	)
+	const defaultColor = colors().text
+	const [leftTokens, setLeftTokens] = createSignal<TokenWithEmphasis[]>([
+		{ content: props.row.left?.content ?? "", color: defaultColor },
+	])
+	const [rightTokens, setRightTokens] = createSignal<TokenWithEmphasis[]>([
+		{ content: props.row.right?.content ?? "", color: defaultColor },
+	])
 
-	const rightTokens = createMemo(() =>
-		tokenizeWithWordDiff(
-			props.row.right?.content ?? "",
-			props.row.rightWordDiff,
-			"added",
-		),
-	)
+	createEffect(() => {
+		const leftContent = props.row.left?.content ?? ""
+		const rightContent = props.row.right?.content ?? ""
+		const leftWordDiff = props.row.leftWordDiff
+		const rightWordDiff = props.row.rightWordDiff
+
+		const id = setTimeout(() => {
+			setLeftTokens(tokenizeWithWordDiff(leftContent, leftWordDiff, "removed"))
+			setRightTokens(tokenizeWithWordDiff(rightContent, rightWordDiff, "added"))
+		}, 0)
+
+		onCleanup(() => clearTimeout(id))
+	})
 
 	const leftLineNumColor = createMemo(() => {
 		if (!props.row.left) return LINE_NUM_COLORS.context

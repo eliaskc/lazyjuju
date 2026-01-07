@@ -1,4 +1,11 @@
-import { For, Show, createMemo, createEffect } from "solid-js"
+import {
+	For,
+	Show,
+	createMemo,
+	createEffect,
+	createSignal,
+	onCleanup,
+} from "solid-js"
 import { profileLog } from "../../utils/profiler"
 import { useTheme } from "../../context/theme"
 import {
@@ -263,12 +270,26 @@ function DiffLineRow(props: DiffLineRowProps) {
 		}
 	})
 
-	const tokens = createMemo((): TokenWithEmphasis[] => {
-		const result = tokenizeWithCache(props.row.content, language())
-		return result.map((t) => ({
-			content: t.content,
-			color: t.color ?? colors().text,
-		}))
+	const [tokens, setTokens] = createSignal<TokenWithEmphasis[]>([
+		{ content: props.row.content, color: colors().text },
+	])
+
+	createEffect(() => {
+		const content = props.row.content
+		const lang = language()
+		const defaultColor = colors().text
+
+		const id = setTimeout(() => {
+			const result = tokenizeWithCache(content, lang)
+			setTokens(
+				result.map((t) => ({
+					content: t.content,
+					color: t.color ?? defaultColor,
+				})),
+			)
+		}, 0)
+
+		onCleanup(() => clearTimeout(id))
 	})
 
 	const lineNum = createMemo(() => {
