@@ -11,6 +11,7 @@ import {
 } from "solid-js"
 import { type Bookmark, fetchBookmarks } from "../commander/bookmarks"
 import { streamDiffPTY } from "../commander/diff"
+import { NO_PASSTHROUGH } from "../utils/profiler"
 import { fetchFiles } from "../commander/files"
 import { fetchLog } from "../commander/log"
 import {
@@ -701,7 +702,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		if (newKey === currentDiffKey) return
 
 		currentDiffKey = newKey
-		loadDiff(revId, columns, paths)
+		if (!NO_PASSTHROUGH) {
+			loadDiff(revId, columns, paths)
+		}
 	})
 
 	const loadLog = async () => {

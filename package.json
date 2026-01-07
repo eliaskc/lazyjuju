@@ -13,6 +13,9 @@
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/index.tsx",
 		"profile": "KAJJI_PROFILE=1 NODE_ENV=development bun run src/index.tsx",
+		"profile:no-passthrough": "KAJJI_PROFILE=1 KAJJI_NO_PASSTHROUGH=1 KAJJI_PROFILE_NAME=no-passthrough NODE_ENV=development bun run src/index.tsx",
+		"profile:no-syntax": "KAJJI_PROFILE=1 KAJJI_NO_SYNTAX=1 KAJJI_PROFILE_NAME=no-syntax NODE_ENV=development bun run src/index.tsx",
+		"profile:minimal": "KAJJI_PROFILE=1 KAJJI_NO_PASSTHROUGH=1 KAJJI_NO_SYNTAX=1 KAJJI_PROFILE_NAME=minimal NODE_ENV=development bun run src/index.tsx",
 		"test": "bun test",
 		"check": "tsc --noEmit",
 		"lint": "biome check .",
