@@ -152,14 +152,12 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 function CommitHeader(props: {
 	commit: Commit
 	details: CommitDetails | null
+	stats: DiffStats | null
 	maxWidth: number
 }) {
 	const { colors } = useTheme()
 
-	// Stale-while-revalidate: show details as-is (may be stale from previous commit)
-	// until new details arrive. This prevents flash during navigation.
 	const subject = () => props.details?.subject || props.commit.description
-	const stats = () => props.details?.stats
 
 	const bodyLines = createMemo(() => {
 		const b = props.details?.body
@@ -204,10 +202,14 @@ function CommitHeader(props: {
 					</box>
 				)}
 			</Show>
-			<Show when={stats()?.totalFiles ? stats() : undefined}>
-				{(s: () => DiffStats) => (
+			<Show
+				when={
+					props.stats && props.stats.totalFiles > 0 ? props.stats : undefined
+				}
+			>
+				{(stats: () => DiffStats) => (
 					<box flexDirection="column">
-						<FileStats stats={s()} maxWidth={props.maxWidth} />
+						<FileStats stats={stats()} maxWidth={props.maxWidth} />
 					</box>
 				)}
 			</Show>
@@ -274,6 +276,32 @@ export function MainArea() {
 		const hunkIdx = activeHunkIndex()
 		const file = files[fileIdx]
 		return file?.hunks[hunkIdx]?.hunkId ?? null
+	})
+
+	const diffStats = createMemo((): DiffStats | null => {
+		const files = parsedFiles()
+		if (files.length === 0) return null
+
+		const fileStats: DiffStats["files"] = []
+		let totalInsertions = 0
+		let totalDeletions = 0
+
+		for (const file of files) {
+			fileStats.push({
+				path: file.name,
+				insertions: file.additions,
+				deletions: file.deletions,
+			})
+			totalInsertions += file.additions
+			totalDeletions += file.deletions
+		}
+
+		return {
+			files: fileStats,
+			totalFiles: files.length,
+			totalInsertions,
+			totalDeletions,
+		}
 	})
 
 	// Navigation functions
@@ -684,6 +712,7 @@ export function MainArea() {
 							<CommitHeader
 								commit={commit()}
 								details={commitDetails()}
+								stats={diffStats()}
 								maxWidth={mainAreaWidth()}
 							/>
 						)}

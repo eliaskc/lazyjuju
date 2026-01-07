@@ -386,13 +386,12 @@ function parseDiffStats(output: string): DiffStats {
 }
 
 /**
- * Fetch commit details (description + diff stats) in a single jj command.
- * This reduces lock contention compared to running separate commands.
+ * Fetch commit details (description only, no stats).
+ * Stats are computed from the already-fetched diff in MainArea.tsx to avoid redundant jj calls.
  */
 export interface CommitDetailsResult {
 	subject: string
 	body: string
-	stats: DiffStats
 }
 
 const DETAILS_SEPARATOR = "\n---KAJJI_DETAILS_SEPARATOR---\n"
@@ -400,8 +399,7 @@ const DETAILS_SEPARATOR = "\n---KAJJI_DETAILS_SEPARATOR---\n"
 export async function jjCommitDetails(
 	revision: string,
 ): Promise<CommitDetailsResult> {
-	// Combined template: styled subject, then separator, then description, then separator, then diff stats
-	// We use a unique separator to split the output reliably
+	// Template: styled subject, then separator, then full description
 	const styledSubjectTemplate = `if(empty, label("empty", "(empty) "), "") ++ if(description.first_line(), description.first_line(), label("description placeholder", "(no description set)"))`
 
 	const result = await execute([
@@ -413,26 +411,19 @@ export async function jjCommitDetails(
 		"always",
 		"--ignore-working-copy",
 		"-T",
-		`${styledSubjectTemplate} ++ "${DETAILS_SEPARATOR}" ++ description ++ "${DETAILS_SEPARATOR}" ++ diff.stat(80)`,
+		`${styledSubjectTemplate} ++ "${DETAILS_SEPARATOR}" ++ description`,
 	])
 
 	if (!result.success) {
 		return {
 			subject: "",
 			body: "",
-			stats: {
-				files: [],
-				totalFiles: 0,
-				totalInsertions: 0,
-				totalDeletions: 0,
-			},
 		}
 	}
 
 	const parts = result.stdout.split(DETAILS_SEPARATOR)
 	const subject = (parts[0] ?? "").trim()
 	const fullDescription = (parts[1] ?? "").trim()
-	const statsOutput = parts[2] ?? ""
 
 	// Body is everything after the first line of description
 	const descLines = fullDescription.split("\n")
@@ -441,6 +432,5 @@ export async function jjCommitDetails(
 	return {
 		subject,
 		body,
-		stats: parseDiffStats(statsOutput),
 	}
 }

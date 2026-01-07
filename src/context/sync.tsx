@@ -14,7 +14,6 @@ import { type Bookmark, fetchBookmarks } from "../commander/bookmarks"
 import { fetchFiles } from "../commander/files"
 import { fetchLog } from "../commander/log"
 import {
-	type DiffStats,
 	fetchOpLogId,
 	jjAbandon,
 	jjCommitDetails,
@@ -43,7 +42,6 @@ export interface CommitDetails {
 	changeId: string
 	subject: string
 	body: string
-	stats: DiffStats
 }
 
 interface SyncContextValue {
@@ -376,13 +374,11 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		const endDetails = profile(`commitDetails(${changeId.slice(0, 8)})`)
 		jjCommitDetails(changeId).then((details) => {
 			endDetails()
-			// Only update if still the current commit
 			if (currentDetailsChangeId === changeId) {
 				setCommitDetails({
 					changeId,
 					subject: details.subject,
 					body: details.body,
-					stats: details.stats,
 				})
 			}
 		})
