@@ -34,12 +34,6 @@ import { useFocus } from "./focus"
 import { useLayout } from "./layout"
 import { useLoading } from "./loading"
 
-import {
-	clearPrefetchQueue,
-	markPrefetched,
-	pausePrefetch,
-	queuePrefetch,
-} from "../utils/prefetch"
 import { profile, profileMsg } from "../utils/profiler"
 
 export type ViewMode = "log" | "files"
@@ -206,9 +200,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		if (isRefreshing) return
 		isRefreshing = true
 		setRefreshCounter((c) => c + 1)
-
-		// Clear prefetch queue on refresh - commits may have changed
-		clearPrefetchQueue()
 
 		try {
 			await Promise.all([loadLog(), loadBookmarks()])
@@ -380,27 +371,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		currentDetailsChangeId = commit.changeId
 
 		const changeId = commit.changeId
-
-		// Pause prefetching while user is navigating - avoid competing for jj locks
-		pausePrefetch()
-
-		// Mark this commit as "warm" so prefetch doesn't redundantly fetch it
-		markPrefetched(changeId)
-
-		// Queue nearby commits for prefetching (3 before, 5 after)
-		// This warms the cache for likely next selections
-		// Prefetch will only start after user stops navigating (idle detection)
-		const allCommits = commits()
-		const currentIndex = allCommits.findIndex((c) => c.changeId === changeId)
-		if (currentIndex !== -1) {
-			const nearbyStart = Math.max(0, currentIndex - 3)
-			const nearbyEnd = Math.min(allCommits.length, currentIndex + 6)
-			const nearbyIds = allCommits
-				.slice(nearbyStart, nearbyEnd)
-				.map((c) => c.changeId)
-				.filter((id) => id !== changeId)
-			queuePrefetch(nearbyIds, "high")
-		}
 
 		profileMsg(`--- select commit: ${changeId.slice(0, 8)}`)
 		const endDetails = profile(`commitDetails(${changeId.slice(0, 8)})`)
@@ -627,17 +597,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 				const result = await fetchLog()
 				setCommits(result)
 				if (isInitialLoad) setSelectedIndex(0)
-
-				// Queue a few commits ahead for prefetching (not the first one - user will load that)
-				// Start from index 1 to skip the initially selected commit
-				// Keep it small to avoid blocking user's first interactions
-				const prefetchCount = Math.min(5, result.length - 1)
-				if (prefetchCount > 0) {
-					const prefetchIds = result
-						.slice(1, 1 + prefetchCount)
-						.map((c) => c.changeId)
-					queuePrefetch(prefetchIds, "low")
-				}
 			})
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to load log")
