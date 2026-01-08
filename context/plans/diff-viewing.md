@@ -66,6 +66,10 @@ passthrough_tool = "default"  # uses jj's ui.diff.tool, or "difft", "delta"
 | **Unified** | Single-column inline diff | Narrow terminals |
 | **Split** | Side-by-side old/new | Wide terminals |
 
+### File Browsing Behavior
+
+When browsing via files (log.files, bookmarks.files), the commit header should be hidden to maximize diff space. The user has already selected the file — the commit context is implicit.
+
 ### Panel Sizing
 
 | Key | Action |
@@ -87,6 +91,32 @@ passthrough_tool = "default"  # uses jj's ui.diff.tool, or "difft", "delta"
 100-140     → Default unified, allow split
 > 140 cols  → Default split
 ```
+
+---
+
+## Focus Modes
+
+**Current behavior:** Auto-switches layout when entering file view (log.files, bookmarks.files).
+
+**Consideration:** Replace auto-switch with explicit focus modes:
+
+| Mode | Focus | Description |
+|------|-------|-------------|
+| **Log mode** | Left panel | Default. Log/bookmarks panel is primary. |
+| **Diff mode** | Right panel | Diff panel expands, log becomes secondary. |
+
+**Keybind:** `Ctrl+X` (or similar) to swap between modes.
+
+**Benefits:**
+- Explicit user control over layout
+- Avoids jarring auto-resize on file selection
+- Pairs well with future PR integration — PR view could be another mode
+- Modal pattern scales to full-screen tabs (log mode, diff mode, PR mode, etc.)
+
+**Implementation notes:**
+- Mode state stored in focus context
+- Each mode defines panel proportions and which panel receives keyboard input
+- Escape could return to log mode from diff mode
 
 ---
 
