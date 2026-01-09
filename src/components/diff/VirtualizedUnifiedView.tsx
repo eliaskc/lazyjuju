@@ -1,36 +1,22 @@
-import {
-	For,
-	Show,
-	createMemo,
-	createEffect,
-	on,
-	createContext,
-	useContext,
-} from "solid-js"
-import { profileLog } from "../../utils/profiler"
+import { For, Show, createMemo } from "solid-js"
 import { useTheme } from "../../context/theme"
 import {
 	type DiffRow,
 	type FileId,
 	type FlattenedFile,
 	type HunkId,
-	type WordDiffSegment,
-	computeWordDiff,
-	createSyntaxScheduler,
 	flattenToRows,
 	getFileStatusColor,
 	getFileStatusIndicator,
 	getLanguage,
 	getLineNumWidth,
 	getMaxLineNumber,
-	getSyntaxStats,
 	getVisibleRange,
-	resetSyntaxStats,
-	type SyntaxScheduler,
+	highlighterReady,
+	tokenVersion,
+	tokenizeLineSync,
 	type SyntaxToken,
 } from "../../diff"
-
-const SchedulerContext = createContext<SyntaxScheduler>()
 
 const DIFF_BG = {
 	addition: "#0d2818",
@@ -71,7 +57,6 @@ interface VirtualizedUnifiedViewProps {
 
 export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 	const { colors } = useTheme()
-	const scheduler = createSyntaxScheduler()
 
 	const filesToRender = createMemo(() => {
 		if (props.activeFileId) {
@@ -101,58 +86,6 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 		return rows().slice(start, end)
 	})
 
-	createEffect(() => {
-		props.files
-		scheduler.clearStore()
-		resetSyntaxStats()
-	})
-
-	createEffect(() => {
-		const visible = visibleRows()
-		const itemsToTokenize = visible
-			.filter(
-				(row): row is DiffRow & { type: "addition" | "deletion" | "context" } =>
-					row.type === "addition" ||
-					row.type === "deletion" ||
-					row.type === "context",
-			)
-			.map((row) => {
-				const language = getLanguage(row.fileName)
-				return {
-					key: scheduler.makeKey(row.content, language),
-					content: row.content,
-					language,
-				}
-			})
-
-		if (itemsToTokenize.length > 0) {
-			scheduler.prefetch(itemsToTokenize, "high")
-		}
-	})
-
-	createEffect(() => {
-		const totalRows = rows().length
-		const visible = visibleRows().length
-		const range = visibleRange()
-		const syntaxStats = getSyntaxStats()
-		const schedulerStats = scheduler.getStats()
-		profileLog("unified-virtualization", {
-			totalRows,
-			visibleRows: visible,
-			start: range.start,
-			end: range.end,
-			scrollTop: props.scrollTop,
-			viewportHeight: props.viewportHeight,
-			syntaxHits: syntaxStats.hits,
-			syntaxMisses: syntaxStats.misses,
-			syntaxMs: Math.round(syntaxStats.totalMs * 100) / 100,
-			slowestMs: Math.round(syntaxStats.slowestMs * 100) / 100,
-			slowestLang: syntaxStats.slowestLang || undefined,
-			schedulerGen: schedulerStats.generation,
-			schedulerTokens: schedulerStats.tokensProcessed,
-		})
-	})
-
 	const fileStats = createMemo(() => {
 		const stats = new Map<
 			FileId,
@@ -170,27 +103,26 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 	})
 
 	return (
-		<SchedulerContext.Provider value={scheduler}>
-			<box flexDirection="column">
-				<Show when={rows().length === 0}>
-					<text fg={colors().textMuted}>No changes</text>
-				</Show>
-				<Show when={rows().length > 0}>
-					<box height={visibleRange().start} flexShrink={0} />
-					<For each={visibleRows()}>
-						{(row) => (
-							<VirtualizedRow
-								row={row}
-								lineNumWidth={lineNumWidth()}
-								currentHunkId={props.currentHunkId}
-								fileStats={fileStats()}
-							/>
-						)}
-					</For>
-					<box height={rows().length - visibleRange().end} flexShrink={0} />
-				</Show>
-			</box>
-		</SchedulerContext.Provider>
+		<box flexDirection="column">
+			<Show when={rows().length === 0}>
+				<text fg={colors().textMuted}>No changes</text>
+			</Show>
+			<Show when={rows().length > 0}>
+				<box height={visibleRange().start} flexShrink={0} />
+				<For each={visibleRows()}>
+					{(row) => (
+						<VirtualizedRow
+							row={row}
+							lineNumWidth={lineNumWidth()}
+							currentHunkId={props.currentHunkId}
+							fileStats={fileStats()}
+							highlighterReady={highlighterReady}
+						/>
+					)}
+				</For>
+				<box height={rows().length - visibleRange().end} flexShrink={0} />
+			</Show>
+		</box>
 	)
 }
 
@@ -202,6 +134,7 @@ interface VirtualizedRowProps {
 		FileId,
 		{ additions: number; deletions: number; prevName?: string; type: string }
 	>
+	highlighterReady: () => boolean
 }
 
 function VirtualizedRow(props: VirtualizedRowProps) {
@@ -276,21 +209,23 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 		)
 	}
 
-	return <DiffLineRow row={props.row} lineNumWidth={props.lineNumWidth} />
+	return (
+		<DiffLineRow
+			row={props.row}
+			lineNumWidth={props.lineNumWidth}
+			highlighterReady={props.highlighterReady}
+		/>
+	)
 }
 
 interface DiffLineRowProps {
 	row: DiffRow
 	lineNumWidth: number
-}
-
-interface TokenWithEmphasis extends SyntaxToken {
-	emphasis?: boolean
+	highlighterReady: () => boolean
 }
 
 function DiffLineRow(props: DiffLineRowProps) {
 	const { colors } = useTheme()
-	const scheduler = useContext(SchedulerContext)
 
 	const language = createMemo(() => getLanguage(props.row.fileName))
 
@@ -305,33 +240,27 @@ function DiffLineRow(props: DiffLineRowProps) {
 		}
 	})
 
-	const tokens = createMemo(
-		on(
-			() => scheduler?.version() ?? 0,
-			(version) => {
-				const content = props.row.content
-				const defaultColor = colors().text
-				const lang = language()
+	// Worker-based tokenization - returns immediately, re-renders when tokens arrive
+	const tokens = createMemo((): SyntaxToken[] => {
+		// Track tokenVersion to re-render when worker sends new tokens
+		tokenVersion()
 
-				if (!scheduler) {
-					return [{ content, color: defaultColor }] as TokenWithEmphasis[]
-				}
+		// Strip trailing newline - shiki does this internally, but plain text fallback doesn't
+		const content = props.row.content.replace(/\n$/, "")
+		const defaultColor = colors().text
 
-				const key = scheduler.makeKey(content, lang)
-				const cached = scheduler.getTokens(key)
+		// If highlighter not ready, return plain text
+		if (!props.highlighterReady()) {
+			return [{ content, color: defaultColor }]
+		}
 
-				if (cached) {
-					return cached.map((t) => ({
-						content: t.content,
-						color: t.color ?? defaultColor,
-					})) as TokenWithEmphasis[]
-				}
-
-				return [{ content, color: defaultColor }] as TokenWithEmphasis[]
-			},
-			{ defer: false },
-		),
-	)
+		// Request tokenization from worker (returns cached or queues request)
+		const result = tokenizeLineSync(content, language())
+		return result.map((t) => ({
+			content: t.content,
+			color: t.color ?? defaultColor,
+		}))
+	})
 
 	const lineNum = createMemo(() => {
 		const num =

@@ -1,36 +1,25 @@
-import {
-	For,
-	Show,
-	createMemo,
-	createEffect,
-	on,
-	createContext,
-	useContext,
-} from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { useTheme } from "../../context/theme"
 import type {
 	DiffLine,
 	FileId,
 	FlattenedFile,
-	FlattenedHunk,
 	HunkId,
-	SupportedLanguages,
-	SyntaxScheduler,
 	SyntaxToken,
 	WordDiffSegment,
 } from "../../diff"
 import {
 	computeWordDiff,
-	createSyntaxScheduler,
 	getFileStatusColor,
 	getFileStatusIndicator,
 	getLanguage,
 	getLineNumWidth,
 	getMaxLineNumber,
 	getVisibleRange,
+	highlighterReady,
+	tokenVersion,
+	tokenizeLineSync,
 } from "../../diff"
-
-const SchedulerContext = createContext<SyntaxScheduler>()
 
 const DIFF_BG = {
 	addition: "#0d2818",
@@ -204,7 +193,6 @@ interface VirtualizedSplitViewProps {
 
 export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 	const { colors } = useTheme()
-	const scheduler = createSyntaxScheduler()
 
 	const filesToRender = createMemo(() => {
 		if (props.activeFileId) {
@@ -234,64 +222,6 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 		return rows().slice(start, end)
 	})
 
-	createEffect(() => {
-		props.files
-		scheduler.clearStore()
-	})
-
-	createEffect(() => {
-		const visible = visibleRows()
-		const itemsToTokenize: Array<{
-			key: string
-			content: string
-			language: ReturnType<typeof getLanguage>
-		}> = []
-
-		for (const row of visible) {
-			if (row.type !== "content") continue
-			const language = getLanguage(row.fileName)
-
-			if (row.left) {
-				if (row.leftWordDiff) {
-					for (const seg of row.leftWordDiff) {
-						itemsToTokenize.push({
-							key: scheduler.makeKey(seg.text, language),
-							content: seg.text,
-							language,
-						})
-					}
-				} else {
-					itemsToTokenize.push({
-						key: scheduler.makeKey(row.left.content, language),
-						content: row.left.content,
-						language,
-					})
-				}
-			}
-			if (row.right) {
-				if (row.rightWordDiff) {
-					for (const seg of row.rightWordDiff) {
-						itemsToTokenize.push({
-							key: scheduler.makeKey(seg.text, language),
-							content: seg.text,
-							language,
-						})
-					}
-				} else {
-					itemsToTokenize.push({
-						key: scheduler.makeKey(row.right.content, language),
-						content: row.right.content,
-						language,
-					})
-				}
-			}
-		}
-
-		if (itemsToTokenize.length > 0) {
-			scheduler.prefetch(itemsToTokenize, "high")
-		}
-	})
-
 	const fileStats = createMemo(() => {
 		const stats = new Map<
 			FileId,
@@ -309,27 +239,26 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 	})
 
 	return (
-		<SchedulerContext.Provider value={scheduler}>
-			<box flexDirection="column">
-				<Show when={rows().length === 0}>
-					<text fg={colors().textMuted}>No changes</text>
-				</Show>
-				<Show when={rows().length > 0}>
-					<box height={visibleRange().start} flexShrink={0} />
-					<For each={visibleRows()}>
-						{(row) => (
-							<VirtualizedSplitRow
-								row={row}
-								lineNumWidth={lineNumWidth()}
-								currentHunkId={props.currentHunkId}
-								fileStats={fileStats()}
-							/>
-						)}
-					</For>
-					<box height={rows().length - visibleRange().end} flexShrink={0} />
-				</Show>
-			</box>
-		</SchedulerContext.Provider>
+		<box flexDirection="column">
+			<Show when={rows().length === 0}>
+				<text fg={colors().textMuted}>No changes</text>
+			</Show>
+			<Show when={rows().length > 0}>
+				<box height={visibleRange().start} flexShrink={0} />
+				<For each={visibleRows()}>
+					{(row) => (
+						<VirtualizedSplitRow
+							row={row}
+							lineNumWidth={lineNumWidth()}
+							currentHunkId={props.currentHunkId}
+							fileStats={fileStats()}
+							highlighterReady={highlighterReady}
+						/>
+					)}
+				</For>
+				<box height={rows().length - visibleRange().end} flexShrink={0} />
+			</Show>
+		</box>
 	)
 }
 
@@ -341,6 +270,7 @@ interface VirtualizedSplitRowProps {
 		FileId,
 		{ additions: number; deletions: number; prevName?: string; type: string }
 	>
+	highlighterReady: () => boolean
 }
 
 function VirtualizedSplitRow(props: VirtualizedSplitRowProps) {
@@ -411,12 +341,19 @@ function VirtualizedSplitRow(props: VirtualizedSplitRowProps) {
 		)
 	}
 
-	return <SplitContentRow row={props.row} lineNumWidth={props.lineNumWidth} />
+	return (
+		<SplitContentRow
+			row={props.row}
+			lineNumWidth={props.lineNumWidth}
+			highlighterReady={props.highlighterReady}
+		/>
+	)
 }
 
 interface SplitContentRowProps {
 	row: SplitRow
 	lineNumWidth: number
+	highlighterReady: () => boolean
 }
 
 interface TokenWithEmphasis extends SyntaxToken {
@@ -425,7 +362,6 @@ interface TokenWithEmphasis extends SyntaxToken {
 
 function SplitContentRow(props: SplitContentRowProps) {
 	const { colors } = useTheme()
-	const scheduler = useContext(SchedulerContext)
 
 	const language = createMemo(() => getLanguage(props.row.fileName))
 
@@ -444,37 +380,42 @@ function SplitContentRow(props: SplitContentRowProps) {
 
 	const defaultColor = colors().text
 
-	const tokenizeSegments = (
-		wordDiff: WordDiffSegment[],
+	// Tokenize with word diff emphasis
+	const tokenizeWithWordDiff = (
+		content: string,
+		wordDiff: WordDiffSegment[] | undefined,
 		emphasisType: "removed" | "added",
-		lang: SupportedLanguages,
 	): TokenWithEmphasis[] => {
-		if (!scheduler) {
-			return wordDiff.map((seg) => ({
-				content: seg.text,
-				color: defaultColor,
-				emphasis: seg.type === emphasisType,
+		const lang = language()
+
+		if (!props.highlighterReady()) {
+			if (wordDiff) {
+				return wordDiff.map((seg) => ({
+					content: seg.text,
+					color: defaultColor,
+					emphasis: seg.type === emphasisType,
+				}))
+			}
+			return [{ content, color: defaultColor }]
+		}
+
+		if (!wordDiff) {
+			const tokens = tokenizeLineSync(content, lang)
+			return tokens.map((t) => ({
+				content: t.content,
+				color: t.color ?? defaultColor,
 			}))
 		}
 
+		// Tokenize each word diff segment
 		const result: TokenWithEmphasis[] = []
-		for (const seg of wordDiff) {
-			const key = scheduler.makeKey(seg.text, lang)
-			const cached = scheduler.store[key]
-			const isEmphasis = seg.type === emphasisType
-
-			if (cached) {
-				for (const token of cached) {
-					result.push({
-						content: token.content,
-						color: token.color ?? defaultColor,
-						emphasis: isEmphasis,
-					})
-				}
-			} else {
+		for (const segment of wordDiff) {
+			const segmentTokens = tokenizeLineSync(segment.text, lang)
+			const isEmphasis = segment.type === emphasisType
+			for (const token of segmentTokens) {
 				result.push({
-					content: seg.text,
-					color: defaultColor,
+					content: token.content,
+					color: token.color ?? defaultColor,
 					emphasis: isEmphasis,
 				})
 			}
@@ -482,71 +423,25 @@ function SplitContentRow(props: SplitContentRowProps) {
 		return result
 	}
 
-	const leftTokens = createMemo(
-		on(
-			() => scheduler?.version() ?? 0,
-			(): TokenWithEmphasis[] => {
-				const lang = language()
-				const leftContent = props.row.left?.content ?? ""
+	const leftTokens = createMemo((): TokenWithEmphasis[] => {
+		// Track tokenVersion to re-render when worker sends new tokens
+		tokenVersion()
 
-				if (!leftContent) return []
+		// Strip trailing newline - shiki does this internally, but plain text fallback doesn't
+		const leftContent = (props.row.left?.content ?? "").replace(/\n$/, "")
+		if (!leftContent) return []
+		return tokenizeWithWordDiff(leftContent, props.row.leftWordDiff, "removed")
+	})
 
-				const wordDiff = props.row.leftWordDiff
-				if (wordDiff) {
-					return tokenizeSegments(wordDiff, "removed", lang)
-				}
+	const rightTokens = createMemo((): TokenWithEmphasis[] => {
+		// Track tokenVersion to re-render when worker sends new tokens
+		tokenVersion()
 
-				if (!scheduler) {
-					return [{ content: leftContent, color: defaultColor }]
-				}
-
-				const key = scheduler.makeKey(leftContent, lang)
-				const cached = scheduler.store[key]
-				if (cached) {
-					return cached.map((t) => ({
-						content: t.content,
-						color: t.color ?? defaultColor,
-					}))
-				}
-
-				return [{ content: leftContent, color: defaultColor }]
-			},
-			{ defer: false },
-		),
-	)
-
-	const rightTokens = createMemo(
-		on(
-			() => scheduler?.version() ?? 0,
-			(): TokenWithEmphasis[] => {
-				const lang = language()
-				const rightContent = props.row.right?.content ?? ""
-
-				if (!rightContent) return []
-
-				const wordDiff = props.row.rightWordDiff
-				if (wordDiff) {
-					return tokenizeSegments(wordDiff, "added", lang)
-				}
-
-				if (!scheduler) {
-					return [{ content: rightContent, color: defaultColor }]
-				}
-
-				const key = scheduler.makeKey(rightContent, lang)
-				const cached = scheduler.store[key]
-				if (cached) {
-					return cached.map((t) => ({
-						content: t.content,
-						color: t.color ?? defaultColor,
-					}))
-				}
-
-				return [{ content: rightContent, color: defaultColor }]
-			},
-			{ defer: false },
-		),
-	)
+		// Strip trailing newline - shiki does this internally, but plain text fallback doesn't
+		const rightContent = (props.row.right?.content ?? "").replace(/\n$/, "")
+		if (!rightContent) return []
+		return tokenizeWithWordDiff(rightContent, props.row.rightWordDiff, "added")
+	})
 
 	const leftLineNumColor = createMemo(() => {
 		if (!props.row.left) return LINE_NUM_COLORS.context

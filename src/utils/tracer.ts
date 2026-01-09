@@ -86,9 +86,7 @@ function formatSpanTree(span: SpanData, indent = 0): string {
 	const prefix = "  ".repeat(indent)
 	const bar = "│ ".repeat(Math.max(0, indent - 1)) + (indent > 0 ? "├─" : "")
 	const duration = formatDuration(span.duration)
-	const meta = span.metadata
-		? ` ${JSON.stringify(span.metadata)}`
-		: ""
+	const meta = span.metadata ? ` ${JSON.stringify(span.metadata)}` : ""
 
 	let result = `${bar}${span.name} (${duration})${meta}\n`
 
@@ -101,7 +99,9 @@ function formatSpanTree(span: SpanData, indent = 0): string {
 
 function formatTraceOutput(trace: TraceData): string {
 	const header = `\n╭─ TRACE: ${trace.name} [${trace.id}] ─ ${formatDuration(trace.duration)}`
-	const meta = trace.metadata ? `\n│ metadata: ${JSON.stringify(trace.metadata)}` : ""
+	const meta = trace.metadata
+		? `\n│ metadata: ${JSON.stringify(trace.metadata)}`
+		: ""
 
 	let spans = ""
 	for (const span of trace.spans) {
@@ -352,21 +352,37 @@ export const tracer = {
 	/**
 	 * Get a summary of recent traces grouped by name
 	 */
-	getSummary(): Record<string, { count: number; avgMs: number; maxMs: number; minMs: number }> {
-		const summary: Record<string, { count: number; totalMs: number; maxMs: number; minMs: number }> = {}
+	getSummary(): Record<
+		string,
+		{ count: number; avgMs: number; maxMs: number; minMs: number }
+	> {
+		const summary: Record<
+			string,
+			{ count: number; totalMs: number; maxMs: number; minMs: number }
+		> = {}
 
 		for (const trace of traceHistory) {
 			if (!summary[trace.name]) {
-				summary[trace.name] = { count: 0, totalMs: 0, maxMs: 0, minMs: Infinity }
+				summary[trace.name] = {
+					count: 0,
+					totalMs: 0,
+					maxMs: 0,
+					minMs: Infinity,
+				}
 			}
 			const s = summary[trace.name]
-			s.count++
-			s.totalMs += trace.duration
-			s.maxMs = Math.max(s.maxMs, trace.duration)
-			s.minMs = Math.min(s.minMs, trace.duration)
+			if (s) {
+				s.count++
+				s.totalMs += trace.duration
+				s.maxMs = Math.max(s.maxMs, trace.duration)
+				s.minMs = Math.min(s.minMs, trace.duration)
+			}
 		}
 
-		const result: Record<string, { count: number; avgMs: number; maxMs: number; minMs: number }> = {}
+		const result: Record<
+			string,
+			{ count: number; avgMs: number; maxMs: number; minMs: number }
+		> = {}
 		for (const [name, data] of Object.entries(summary)) {
 			result[name] = {
 				count: data.count,
@@ -384,12 +400,24 @@ export const tracer = {
 	 */
 	formatSummary(): string {
 		const summary = this.getSummary()
-		const entries = Object.entries(summary).sort((a, b) => b[1].avgMs - a[1].avgMs)
+		const entries = Object.entries(summary).sort(
+			(a, b) => b[1].avgMs - a[1].avgMs,
+		)
 
 		if (entries.length === 0) return "No traces recorded"
 
-		const header = "Trace Name                    │ Count │   Avg   │   Max   │   Min"
-		const separator = "─".repeat(30) + "┼" + "─".repeat(7) + "┼" + "─".repeat(9) + "┼" + "─".repeat(9) + "┼" + "─".repeat(9)
+		const header =
+			"Trace Name                    │ Count │   Avg   │   Max   │   Min"
+		const separator =
+			"─".repeat(30) +
+			"┼" +
+			"─".repeat(7) +
+			"┼" +
+			"─".repeat(9) +
+			"┼" +
+			"─".repeat(9) +
+			"┼" +
+			"─".repeat(9)
 
 		const rows = entries.map(([name, data]) => {
 			const padName = name.slice(0, 28).padEnd(30)
@@ -403,5 +431,3 @@ export const tracer = {
 		return [header, separator, ...rows].join("\n")
 	},
 }
-
-export type { Trace, Span, TraceData, SpanData }

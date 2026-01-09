@@ -59,63 +59,20 @@ export {
 	type WordDiffSegment,
 } from "./word-diff"
 
-// Syntax highlighting
+// Syntax highlighting (worker-based shiki)
 export {
+	clearTokenCache,
 	getLanguage,
+	highlighterReady,
 	initHighlighter,
 	isHighlighterReady,
 	tokenizeLine,
 	tokenizeLineSync,
+	tokenVersion,
 	type SyntaxToken,
 } from "./syntax"
 
 export type { SupportedLanguages } from "@pierre/diffs"
-
-// Syntax cache
-export {
-	clearSyntaxCache,
-	getSyntaxCacheSize,
-	getSyntaxStats,
-	resetSyntaxStats,
-	tokenizeWithCache,
-} from "./syntax-cache"
-
-export {
-	createSyntaxScheduler,
-	getGlobalTokenizeStats,
-	resetGlobalTokenizeStats,
-	type SchedulerStats,
-	type SyntaxBackend,
-	type SyntaxScheduler,
-	type SyntaxSchedulerOptions,
-} from "./syntax-scheduler"
-
-// Tree-sitter highlighter (native, fast)
-export {
-	getLoadedLanguages as getTreeSitterLanguages,
-	getTreeSitterStats,
-	initTreeSitter,
-	isTreeSitterReady,
-	tokenizeWithTreeSitter,
-	tokenizeWithTreeSitterSync,
-	type TreeSitterLanguage,
-} from "./tree-sitter-highlighter"
-
-// Unified highlighter API
-export {
-	clearHighlighterCache,
-	configureHighlighter,
-	getHighlighterBackend,
-	getHighlighterStats,
-	initHighlighter as initUnifiedHighlighter,
-	isHighlighterReady as isUnifiedHighlighterReady,
-	resetHighlighterStats,
-	tokenize as tokenizeUnified,
-	tokenizeSync as tokenizeSyncUnified,
-	type HighlighterBackend,
-	type HighlighterConfig,
-	type HighlighterStats,
-} from "./syntax-highlighter"
 
 // Virtualization
 export {
