@@ -82,8 +82,40 @@ export {
 
 export {
 	createSyntaxScheduler,
+	getGlobalTokenizeStats,
+	resetGlobalTokenizeStats,
+	type SchedulerStats,
+	type SyntaxBackend,
 	type SyntaxScheduler,
+	type SyntaxSchedulerOptions,
 } from "./syntax-scheduler"
+
+// Tree-sitter highlighter (native, fast)
+export {
+	getLoadedLanguages as getTreeSitterLanguages,
+	getTreeSitterStats,
+	initTreeSitter,
+	isTreeSitterReady,
+	tokenizeWithTreeSitter,
+	tokenizeWithTreeSitterSync,
+	type TreeSitterLanguage,
+} from "./tree-sitter-highlighter"
+
+// Unified highlighter API
+export {
+	clearHighlighterCache,
+	configureHighlighter,
+	getHighlighterBackend,
+	getHighlighterStats,
+	initHighlighter as initUnifiedHighlighter,
+	isHighlighterReady as isUnifiedHighlighterReady,
+	resetHighlighterStats,
+	tokenize as tokenizeUnified,
+	tokenizeSync as tokenizeSyncUnified,
+	type HighlighterBackend,
+	type HighlighterConfig,
+	type HighlighterStats,
+} from "./syntax-highlighter"
 
 // Virtualization
 export {
