@@ -2,7 +2,7 @@
 
 **Status**: Planning  
 **Priority**: Medium  
-**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phase 3 (PR Review)
+**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phases 1-2
 
 ---
 
@@ -48,20 +48,18 @@ Instead of moving hunks between two panes, mark hunks in place:
 
 ---
 
-## Why This Comes After PR Review
+## Why Splitting Before PR Review
 
-The custom diff renderer phases are ordered:
-1. Basic rendering
-2. Enhanced viewing
-3. **PR review** ← builds the row mapping / annotation substrate
-4. **Interactive splitting** ← reuses that substrate
+Splitting only needs **hunk-level** identification:
+- File ID: path (or rename path)
+- Hunk ID: `path + @@ coords`
+- Toggle state per hunk
 
-PR review forces us to build:
-- Row index with stable anchors (path, side, line)
-- File-at-a-time rendering
-- Hunk navigation
+PR review needs **line-level** anchoring for GitHub API:
+- `(path, side: LEFT|RIGHT, line)` to match GitHub comment coordinates
+- More complex row mapping layer
 
-Splitting reuses all of that, just with different visual indicators (Keep/Split badges instead of comment threads).
+Since splitting is simpler, it comes first (Phase 3). PR review (Phase 4) adds the line-level infrastructure on top.
 
 ---
 

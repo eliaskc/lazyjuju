@@ -416,13 +416,12 @@ src/
 
 ## Implementation Phases
 
-**Note:** PR review comes before interactive splitting. The structured row model for annotations is the same substrate splitting will reuse.
+**Note:** Interactive splitting comes before PR review. Splitting only needs hunk-level identification (path + @@ coords), while PR review needs full line-level anchoring for GitHub API compatibility.
 
 ### Phase 1: Basic Rendering (MVP)
-- [x] Add `@pierre/diffs` dependency
-- [x] Create parser wrapper (`src/diff/parser.ts`)
+- [ ] Add `@pierre/diffs` dependency
+- [ ] Create parser wrapper (`src/diff/parser.ts`)
 - [ ] Implement stable identifiers (`src/diff/identifiers.ts`)
-- [ ] Build row index with full coordinates
 - [ ] Basic file-at-a-time unified view
 - [ ] Add `d` toggle to switch to passthrough
 
@@ -433,20 +432,20 @@ src/
 - [ ] Word-level highlighting
 - [ ] Hunk navigation (`[`/`]`)
 
-### Phase 3: PR Review Features
-- [ ] Fetch PR patches via GitHub API
-- [ ] Annotation anchoring with LineAnchor
-- [ ] Inline comment rendering
-- [ ] Comment input modal
-- [ ] GitHub comment sync
-- → See [pr-management.md](./pr-management.md)
-
-### Phase 4: Interactive Splitting
+### Phase 3: Interactive Splitting
 - [ ] Hunk selection state (keyed by stable hunkId)
 - [ ] Visual selection indicators
 - [ ] Split mode entry/exit
 - [ ] Execute split with selections
 - → See [interactive-splitting.md](./interactive-splitting.md)
+
+### Phase 4: PR Review Features
+- [ ] Fetch PR patches via GitHub API
+- [ ] Annotation anchoring with LineAnchor (line-level, not just hunk-level)
+- [ ] Inline comment rendering
+- [ ] Comment input modal
+- [ ] GitHub comment sync
+- → See [pr-management.md](./pr-management.md)
 
 ### Phase 5: AI Features
 - [ ] Hunk selection for AI context
@@ -479,11 +478,57 @@ src/
 
 ## Open Questions
 
-1. **Syntax highlighting approach**: Shiki ANSI vs OpenTUI tree-sitter?
+1. ~~**Syntax highlighting approach**: Shiki ANSI vs OpenTUI tree-sitter?~~ → Using Shiki via `@pierre/diffs`
 2. **Full commit diff**: File-at-a-time only, or virtualized full view?
 3. **Collapsible hunks**: Support collapsing unchanged regions?
 4. **Line numbers**: Show git line numbers or 1-indexed from hunk?
-5. **Theme integration**: How to match kajji's theme system?
+5. ~~**Theme integration**: How to match kajji's theme system?~~ → See Theming section below
+
+---
+
+## Theming
+
+### Current State
+
+**Syntax highlighting**: Uses `ayu-dark` Shiki theme (via `@pierre/diffs`). Hardcoded in `src/diff/syntax.ts`.
+
+**Diff colors**: Hardcoded in `src/components/diff/SplitDiffView.tsx`:
+```typescript
+const DIFF_BG = {
+  addition: "#12211E",
+  deletion: "#361815",
+  empty: "#1a1a1a",
+  hunkHeader: "#1a1a2e",
+  additionEmphasis: "#1a4a1a",
+  deletionEmphasis: "#4a1a1a",
+}
+
+const BAR_COLORS = {
+  addition: "#00cab1",
+  deletion: "#ff2e3f",
+}
+```
+
+### Future Work
+
+**Refactor diff tokens to theme system:**
+- [ ] Move `DIFF_BG`, `BAR_COLORS`, `EMPTY_STRIPE_COLOR` to `src/theme/types.ts`
+- [ ] Add `diff` section to theme presets (lazygit, opencode)
+- [ ] Access via `useTheme()` → `colors().diff.additionBg` etc.
+
+**Syntax highlighting theme selection:**
+- [ ] Map kajji theme → Shiki theme (e.g., lazygit → `github-dark`, opencode → `ayu-dark`)
+- [ ] Config option: `syntax.theme = "auto" | "<shiki-theme-name>"`
+- [ ] Auto mode: detect closest matching Shiki theme for current kajji theme
+
+**Advanced (optional):**
+- [ ] Detect terminal colorscheme and adapt (like bat/delta)
+- [ ] Custom Shiki theme registration for perfect theme matching
+- [ ] Consider: terminal-native ANSI colors vs hardcoded hex (16-color mode support)
+
+**Available Shiki themes** (dark): `ayu-dark`, `github-dark`, `vitesse-dark`, `tokyo-night`, `catppuccin-mocha`, `nord`, `dracula`, `one-dark-pro`, etc.
+
+**Reference:** See `context/references/reference-pierre-diffs.md` for pierre theme structure and CSS variable patterns.
 
 ---
 

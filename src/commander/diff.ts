@@ -4,17 +4,7 @@ import {
 	executePTYStreaming,
 	executeStreaming,
 } from "./executor"
-
-const PROFILE = process.env.KAJJI_PROFILE === "1"
-
-function profile(label: string) {
-	if (!PROFILE) return () => {}
-	const start = performance.now()
-	return (extra?: string) => {
-		const ms = (performance.now() - start).toFixed(2)
-		console.error(`[PROFILE] ${label}: ${ms}ms${extra ? ` (${extra})` : ""}`)
-	}
-}
+import { profile, profileMsg } from "../utils/profiler"
 
 export interface FetchDiffOptions {
 	cwd?: string

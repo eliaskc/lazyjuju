@@ -2,9 +2,9 @@
 
 > Full GitHub PR review and management within kajji.
 
-**Status**: Planning (elevated priority)  
-**Priority**: Medium-High  
-**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phases 1-2
+**Status**: Planning  
+**Priority**: Medium  
+**Depends on**: [Custom Diff Renderer](./custom-diff-renderer.md) Phases 1-3 (after Interactive Splitting)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This is exploratory territory. The goal is to evaluate whether kajji should become a PR management tool or stay focused on jj operations. Build for personal use first, see if it adds value or feels like scope creep.
 
-**Why PR review before interactive splitting:** PR review forces us to build the structured row model with stable anchors (path, side, line) that splitting will reuse. The annotation infrastructure is the same substrate.
+**Why PR review after interactive splitting:** Splitting only needs hunk-level identification (simpler), while PR review needs line-level anchoring to match GitHub's comment API. PR review adds the `(path, side, line)` infrastructure on top of the hunk-level base.
 
 **Risk**: Becoming an "everything TUI" that tries to replace GitHub's web UI entirely. kajji's value is jj-native workflows — PR management should complement that, not dominate it.
 
@@ -341,6 +341,6 @@ All with `--json` for agent consumption.
 
 *Record key decisions as they're made*
 
-- Phase ordering: PR review before interactive splitting (builds annotation substrate first)
+- Phase ordering: Interactive splitting before PR review (splitting only needs hunk-level, PR needs line-level)
 - State keying: Stable anchors (path, side, line), not array indices
 - Rendering: File-at-a-time for performance and natural UX

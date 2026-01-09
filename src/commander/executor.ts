@@ -1,3 +1,5 @@
+import { profile, profileMsg } from "../utils/profiler"
+
 export interface ExecuteResult {
 	stdout: string
 	stderr: string
@@ -9,17 +11,6 @@ export interface ExecuteOptions {
 	cwd?: string
 	env?: Record<string, string>
 	timeout?: number
-}
-
-const PROFILE = process.env.KAJJI_PROFILE === "1"
-
-function profile(label: string) {
-	if (!PROFILE) return () => {}
-	const start = performance.now()
-	return (extra?: string) => {
-		const ms = (performance.now() - start).toFixed(2)
-		console.error(`[PROFILE] ${label}: ${ms}ms${extra ? ` (${extra})` : ""}`)
-	}
 }
 
 export async function execute(
@@ -121,11 +112,9 @@ export function executeStreaming(
 				const newLines = chunk.split("\n").length - 1
 				lineCount += newLines
 
-				if (PROFILE) {
-					console.error(
-						`[PROFILE]   chunk #${chunkCount}: ${chunk.length} bytes, ${newLines} lines, total ${lineCount} lines`,
-					)
-				}
+				profileMsg(
+					`  chunk #${chunkCount}: ${chunk.length} bytes, ${newLines} lines, total ${lineCount} lines`,
+				)
 
 				callbacks.onChunk(stdout, lineCount)
 
@@ -214,10 +203,10 @@ export function executePTYStreaming(
 					const chunk = data.toString()
 					stdout += chunk
 
-					if (chunkCount === 1 && PROFILE) {
+					if (chunkCount === 1) {
 						const firstChunkTime = performance.now() - startTime
-						console.error(
-							`[PROFILE]   PTY first chunk: ${firstChunkTime.toFixed(0)}ms, ${chunk.length} bytes`,
+						profileMsg(
+							`  PTY first chunk: ${firstChunkTime.toFixed(0)}ms, ${chunk.length} bytes`,
 						)
 					}
 
@@ -227,9 +216,9 @@ export function executePTYStreaming(
 					}
 					lineCount += newLines
 
-					if (PROFILE && chunkCount <= 5) {
-						console.error(
-							`[PROFILE]   PTY chunk #${chunkCount}: ${chunk.length} bytes, ${newLines} lines, total ${lineCount} lines`,
+					if (chunkCount <= 5) {
+						profileMsg(
+							`  PTY chunk #${chunkCount}: ${chunk.length} bytes, ${newLines} lines, total ${lineCount} lines`,
 						)
 					}
 
@@ -250,11 +239,22 @@ export function executePTYStreaming(
 						}, UPDATE_INTERVAL)
 					}
 				},
+				close() {
+					const closeTime = performance.now() - startTime
+					profileMsg(
+						`  PTY close callback: ${closeTime.toFixed(0)}ms, ${chunkCount} chunks`,
+					)
+				},
 			},
 		})
 
 		proc.exited.then((exitCode) => {
 			if (cancelled) return
+
+			const exitTime = performance.now() - startTime
+			profileMsg(
+				`  PTY exited: ${exitTime.toFixed(0)}ms, ${chunkCount} chunks, ${stdout.length} bytes total`,
+			)
 
 			proc.terminal?.close()
 			endTotal()
@@ -275,11 +275,7 @@ export function executePTYStreaming(
 			},
 		}
 	} catch (error) {
-		if (PROFILE) {
-			console.error(
-				`[PROFILE]   PTY error: ${error}, falling back to pipe streaming`,
-			)
-		}
+		profileMsg(`  PTY error: ${error}, falling back to pipe streaming`)
 		return executeStreaming(args, options, callbacks)
 	}
 }

@@ -281,6 +281,47 @@ function useApp() {
 
 ---
 
+## Spacer Elements & Virtualization
+
+### CRITICAL: Empty boxes require flexShrink={0}
+
+When using `<box height={N}>` as a spacer element (e.g., for virtualization), you **MUST** add `flexShrink={0}` or the box will collapse to 0 height in flex containers.
+
+```tsx
+// WRONG - will collapse in flex container
+<box height={50} />
+
+// CORRECT - maintains height
+<box height={50} flexShrink={0} />
+```
+
+### Virtualization Pattern
+
+For row virtualization in scrollable content:
+
+```tsx
+<box flexDirection="column">
+  {/* Top spacer - represents rows above viewport */}
+  <box height={visibleRange().start} flexShrink={0} />
+  
+  {/* Only render visible rows */}
+  <For each={visibleRows()}>
+    {(row) => <Row row={row} />}
+  </For>
+  
+  {/* Bottom spacer - represents rows below viewport */}
+  <box height={totalRows - visibleRange().end} flexShrink={0} />
+</box>
+```
+
+### ScrollBox Coordinates
+
+- `scrollRef.scrollTop` returns **row index**, not pixels
+- `scrollRef.viewport?.height` returns **number of visible rows**
+- `scrollRef.scrollTo(index)` scrolls to a **row index**
+
+---
+
 ## Key Patterns for kajji
 
 1. **Focus management** - Track focused panel in parent, pass `focused` prop
@@ -289,3 +330,4 @@ function useApp() {
 4. **SyntaxStyle** - For any syntax-highlighted content
 5. **reconcile()** - For efficient list updates
 6. **useOnResize** - For responsive layouts
+7. **flexShrink={0}** - Required for spacer boxes with explicit height

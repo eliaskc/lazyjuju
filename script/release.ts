@@ -20,7 +20,7 @@
  */
 
 import { execSync } from "node:child_process"
-import { readFileSync, writeFileSync, existsSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"))
 const currentVersion = pkg.version

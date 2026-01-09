@@ -1,17 +1,7 @@
 import type { TerminalLine } from "ghostty-opentui"
 import { ptyToJson } from "ghostty-opentui"
 import { For, Show, createEffect, createMemo } from "solid-js"
-
-const PROFILE = process.env.KAJJI_PROFILE === "1"
-
-function profile(label: string) {
-	if (!PROFILE) return () => {}
-	const start = performance.now()
-	return (extra?: string) => {
-		const ms = (performance.now() - start).toFixed(2)
-		console.error(`[PROFILE] ${label}: ${ms}ms${extra ? ` (${extra})` : ""}`)
-	}
-}
+import { profile } from "../utils/profiler"
 
 interface AnsiTextProps {
 	content: string
