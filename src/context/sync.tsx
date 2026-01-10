@@ -239,7 +239,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		}
 	}
 
-	// Auto-refresh: focus-based + adaptive polling (2s focused, 30s unfocused)
 	onMount(() => {
 		let focusDebounceTimer: ReturnType<typeof setTimeout> | null = null
 		let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -341,7 +340,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		}
 	})
 
-	// Determine which commit to show based on context (main log vs bookmark commits)
 	const activeCommit = () => {
 		const focusedPanel = focus.panel()
 		const bmMode = bookmarkViewMode()
@@ -354,21 +352,19 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		return selectedCommit()
 	}
 
-	// Fetch full commit details when selection changes
-	// Works for both main log and bookmark commits views
-	// Uses combined jjCommitDetails to reduce lock contention (single jj command)
-	let currentDetailsChangeId: string | null = null
+	let currentDetailsCacheKey: string | null = null
 	createEffect(() => {
 		const commit = activeCommit()
 
 		if (!commit) {
 			setCommitDetails(null)
-			currentDetailsChangeId = null
+			currentDetailsCacheKey = null
 			return
 		}
 
-		if (commit.changeId === currentDetailsChangeId) return
-		currentDetailsChangeId = commit.changeId
+		const cacheKey = `${commit.changeId}:${commit.commitId}`
+		if (cacheKey === currentDetailsCacheKey) return
+		currentDetailsCacheKey = cacheKey
 
 		const changeId = commit.changeId
 
@@ -376,7 +372,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		const endDetails = profile(`commitDetails(${changeId.slice(0, 8)})`)
 		jjCommitDetails(changeId).then((details) => {
 			endDetails()
-			if (currentDetailsChangeId === changeId) {
+			if (currentDetailsCacheKey === cacheKey) {
 				setCommitDetails({
 					changeId,
 					subject: details.subject,

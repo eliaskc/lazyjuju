@@ -378,8 +378,7 @@ export function MainArea() {
 			}
 		}
 
-		// Generate cache key to prevent duplicate fetches
-		const fetchKey = `${commit.changeId}:${paths?.join(",") ?? "all"}`
+		const fetchKey = `${commit.changeId}:${commit.commitId}:${paths?.join(",") ?? "all"}`
 		if (fetchKey === currentFetchKey) return
 		currentFetchKey = fetchKey
 
