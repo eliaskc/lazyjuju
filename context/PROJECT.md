@@ -124,8 +124,11 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
    - [ ] Otherwise: show recent jj repos or helpful message
 
 2. **Diff virtualization fix** — spacer boxes at top when scrolling
-   - [ ] Root cause: commit header height varies (message length, file stats)
-   - [ ] Spacer calculation doesn't account for dynamic header height
+   - [x] Root cause: commit header height varies (message length, file stats)
+   - [x] Spacer calculation doesn't account for dynamic header height
+   - [x] Measure header height dynamically, subtract from scrollTop for virtualization
+   - [x] Increase overscan buffer (10 → 25 rows)
+   - [x] Fix page up/down to update scroll signal immediately
 
 3. **Large repo optimization**
    - [ ] Lazy/paginated revision loading (don't load 1000+ commits upfront)
@@ -429,7 +432,7 @@ jj commands that modify history require confirmation flags. We handle `--ignore-
 
 ### Bugs
 
-- Spacer boxes showing at top when scrolling diff view — **prioritized in Next Up #2**
+- ~~Spacer boxes showing at top when scrolling diff view~~ — **fixed in Next Up #2**
 - Commit header (subject, body, file stats) doesn't update on auto-refresh — only updates when navigating to a different commit
 - Help modal has small visual gap between border and outer edge (OpenTUI quirk)
 - Search input in help modal doesn't render visually (filtering works though)
