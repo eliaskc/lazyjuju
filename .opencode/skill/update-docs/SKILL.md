@@ -25,7 +25,7 @@ Check these files and update as needed:
   - Add useful commands or workflows
 
 ### This Skill
-- **`.claude/skills/update-docs/SKILL.md`** — This file
+- **`.opencode/skill/update-docs/SKILL.md`** — This file
   - Update if documentation structure changes
   - Add new key documents if created
 
