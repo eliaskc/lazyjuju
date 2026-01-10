@@ -30,6 +30,12 @@ function buildTemplate(): string {
 		`"${MARKER}"`,
 		'author.timestamp().local().format("%Y-%m-%d %H:%M:%S %:z")',
 		`"${MARKER}"`,
+		'bookmarks.map(|b| b.name()).join(",")',
+		`"${MARKER}"`,
+		"git_head",
+		`"${MARKER}"`,
+		'working_copies.map(|wc| wc.name()).join(",")',
+		`"${MARKER}"`,
 	].join(" ++ ")
 
 	return `${prefix} ++ builtin_log_compact`
@@ -42,12 +48,14 @@ export function parseLogOutput(output: string): Commit[] {
 	for (const line of output.split("\n")) {
 		if (line.includes(MARKER)) {
 			const parts = line.split(MARKER)
-			if (parts.length >= 11) {
+			if (parts.length >= 14) {
 				if (current) {
 					commits.push(current)
 				}
 
 				const gutter = parts[0] ?? ""
+				const bookmarksRaw = stripAnsi(parts[10] ?? "")
+				const workingCopiesRaw = stripAnsi(parts[12] ?? "")
 				current = {
 					changeId: stripAnsi(parts[1] ?? ""),
 					commitId: stripAnsi(parts[2] ?? ""),
@@ -58,8 +66,12 @@ export function parseLogOutput(output: string): Commit[] {
 					author: stripAnsi(parts[7] ?? ""),
 					authorEmail: stripAnsi(parts[8] ?? ""),
 					timestamp: stripAnsi(parts[9] ?? ""),
+					bookmarks: bookmarksRaw ? bookmarksRaw.split(",") : [],
+					gitHead: stripAnsi(parts[11] ?? "") === "true",
+					workingCopies: workingCopiesRaw ? workingCopiesRaw.split(",") : [],
 					isWorkingCopy: gutter.includes("@"),
-					lines: [gutter + (parts[10] ?? "")],
+					refLine: parts[13] ?? "",
+					lines: [gutter + (parts[13] ?? "")],
 				}
 				continue
 			}

@@ -6,10 +6,15 @@ export interface Commit {
 	authorEmail: string
 	timestamp: string
 	lines: string[]
+	/** Raw jj-rendered ref line with ANSI colors (changeId, email, date, bookmarks, etc.) */
+	refLine: string
 	isWorkingCopy: boolean
 	immutable: boolean
 	empty: boolean
 	divergent: boolean
+	bookmarks: string[]
+	gitHead: boolean
+	workingCopies: string[]
 }
 
 export function getRevisionId(commit: Commit): string {

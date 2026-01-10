@@ -11,7 +11,7 @@
 - [x] Two-panel layout — log/bookmarks left, diff/detail right
 - [x] Commit header — author, date, timezone, empty status, description
 - [x] Rich commit details — full message (subject + body) + file stats
-- [ ] Commit header indicators — bookmarks, workspace, git HEAD, remote tracking
+- [x] Commit header indicators — bookmarks, workspace, git HEAD
 
 ## Navigation
 
@@ -140,12 +140,12 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
    - [ ] Bookmark grouping: local/modified first, remote-only second
 
 4. **Focus modes** → [plan](./plans/focus-modes.md)
-   - [ ] Normal mode: 50/50 split (default)
-   - [ ] Diff mode: narrow log sidebar, expanded diff, command log hidden
-   - [ ] `ctrl+x` mode picker (toggle for MVP, picker when adding more modes)
-   - [ ] Auto-switch to Diff on file tree entry, return to previous on exit
-   - [ ] Minimal commit header when browsing file tree (changeId + subject only)
-   - [ ] Mode indicator in status bar
+   - [x] Normal mode: 50/50 split (default)
+   - [x] Diff mode: narrow log sidebar, expanded diff, command log hidden
+   - [x] `ctrl+x` mode picker (toggle for MVP, picker when adding more modes)
+   - [x] Auto-switch to Diff on file tree entry, return to previous on exit
+   - [x] Minimal commit header when browsing file tree (changeId + subject only)
+   - [x] Mode indicator in status bar
    - [ ] Future: Log mode (75% log + file tree), PR mode
 
 5. **Fuzzy search infrastructure** — shared across lists

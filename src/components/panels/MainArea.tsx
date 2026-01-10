@@ -36,38 +36,6 @@ const LIMIT_INCREMENT = 200
 const LOAD_THRESHOLD = 200
 const SPLIT_VIEW_THRESHOLD = 90
 
-function formatTimestamp(timestamp: string): string {
-	// Input: "2026-01-02 14:30:45 -0800"
-	// Output: "Thu Jan 2 14:30:45 2026 -0800"
-	const match = timestamp.match(
-		/(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2}:\d{2}) (.+)/,
-	)
-	if (!match) return timestamp
-
-	const [, year, month, day, time, tz] = match
-	const date = new Date(`${year}-${month}-${day}T${time}`)
-	const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-	const monthNames = [
-		"Jan",
-		"Feb",
-		"Mar",
-		"Apr",
-		"May",
-		"Jun",
-		"Jul",
-		"Aug",
-		"Sep",
-		"Oct",
-		"Nov",
-		"Dec",
-	]
-	const dayName = dayNames[date.getDay()]
-	const monthName = monthNames[date.getMonth()]
-	const dayNum = date.getDate()
-
-	return `${dayName} ${monthName} ${dayNum} ${time} ${year} ${tz}`
-}
-
 function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 	const { colors } = useTheme()
 	const s = () => props.stats
@@ -149,20 +117,61 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 	)
 }
 
+// Remove email and date/time from jj's refLine, preserving ANSI colors
+function stripEmailAndDate(
+	refLine: string,
+	email: string,
+	timestamp: string,
+): string {
+	let result = refLine
+
+	// Escape special regex chars in the strings we're removing
+	const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+	// Pattern to match text with optional surrounding ANSI codes
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences
+	const ansiWrap = (s: string) =>
+		`(?:\\x1b\\[[0-9;]*m)*${s}(?:\\x1b\\[[0-9;]*m)*\\s*`
+
+	// Remove email
+	if (email) {
+		const emailPattern = new RegExp(ansiWrap(escapeRegex(email)), "g")
+		result = result.replace(emailPattern, "")
+	}
+
+	// Remove date and time (timestamp is "2026-01-10 13:38:26 -0800", refLine has "2026-01-10 13:38:26")
+	if (timestamp) {
+		const [date, time] = timestamp.split(" ")
+		if (date) {
+			const datePattern = new RegExp(ansiWrap(escapeRegex(date)), "g")
+			result = result.replace(datePattern, "")
+		}
+		if (time) {
+			const timePattern = new RegExp(ansiWrap(escapeRegex(time)), "g")
+			result = result.replace(timePattern, "")
+		}
+	}
+
+	return result
+}
+
 function MinimalCommitHeader(props: {
 	commit: Commit
 	details: CommitDetails | null
 }) {
-	const { colors } = useTheme()
 	const subject = () => props.details?.subject || props.commit.description
+	const cleanRefLine = () =>
+		stripEmailAndDate(
+			props.commit.refLine,
+			props.commit.authorEmail,
+			props.commit.timestamp,
+		)
 
 	return (
 		<box flexDirection="column" flexShrink={0}>
+			<AnsiText content={cleanRefLine()} wrapMode="none" />
 			<box flexDirection="row">
-				<text>
-					<span style={{ fg: colors().warning }}>{props.commit.changeId}</span>
-					{"  "}
-				</text>
+				<text>{"    "}</text>
 				<AnsiText content={subject()} wrapMode="none" />
 			</box>
 			<text> </text>
@@ -185,23 +194,25 @@ function CommitHeader(props: {
 		return b ? b.split("\n") : null
 	})
 
+	const cleanRefLine = () =>
+		stripEmailAndDate(
+			props.commit.refLine,
+			props.commit.authorEmail,
+			props.commit.timestamp,
+		)
+
 	return (
 		<box flexDirection="column" flexShrink={0}>
+			<AnsiText content={cleanRefLine()} wrapMode="none" />
 			<text>
-				<span style={{ fg: colors().warning }}>{props.commit.changeId}</span>{" "}
-				<span style={{ fg: colors().textMuted }}>{props.commit.commitId}</span>
-			</text>
-			<text>
-				<span style={{ fg: colors().text }}>{"Author: "}</span>
+				<span style={{ fg: colors().textMuted }}>{"Author: "}</span>
 				<span style={{ fg: colors().secondary }}>
 					{`${props.commit.author} <${props.commit.authorEmail}>`}
 				</span>
 			</text>
 			<text>
-				<span style={{ fg: colors().text }}>{"Date:   "}</span>
-				<span style={{ fg: colors().secondary }}>
-					{formatTimestamp(props.commit.timestamp)}
-				</span>
+				<span style={{ fg: colors().textMuted }}>{"Date:   "}</span>
+				<span style={{ fg: colors().secondary }}>{props.commit.timestamp}</span>
 			</text>
 			<text> </text>
 			<box flexDirection="row">
@@ -747,7 +758,9 @@ export function MainArea() {
 							{(commit: () => Commit) => (
 								<Show
 									when={
-										viewMode() !== "files" && bookmarkViewMode() !== "files"
+										viewMode() !== "files" &&
+										bookmarkViewMode() !== "files" &&
+										layout.focusMode() === "normal"
 									}
 									fallback={
 										<MinimalCommitHeader

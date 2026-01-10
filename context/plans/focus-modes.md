@@ -123,10 +123,10 @@ Header content varies by context to maximize space:
 
 | Context | Header Content |
 |---------|----------------|
-| Full commit view | changeId, commitId, author, date, subject, body, file stats |
-| File tree browsing | changeId + subject only (minimal, 1-2 lines) |
+| Normal mode | Full: jj refLine, author, date, subject, body, file stats |
+| Diff mode / File tree | Minimal: jj refLine + subject only (2 lines) |
 
-File tree browsing needs diff space more than commit metadata. The minimal header keeps context without eating space.
+Diff mode and file tree browsing need diff space more than commit metadata. The minimal header keeps context without eating space.
 
 ---
 
@@ -161,7 +161,7 @@ Text is centered in a fixed-width box (width of "NORMAL"). The key is:
 1. Normal + Diff modes only
 2. `ctrl+x` toggles between them
 3. Diff mode: hide bookmarks panel + command log
-4. Minimal commit header for file tree
+4. Minimal commit header in Diff mode and file tree
 5. Auto-switch on file tree entry
 6. Previous mode tracking
 7. Mode indicator in status bar
@@ -226,6 +226,12 @@ function getPanelWidths(mode: Mode, terminalWidth: number) {
 With focus modes, simplify by removing passthrough/ANSI diff rendering:
 - Custom renderer only — one code path
 - Can re-add as config option if users request
+
+---
+
+## Known Issues
+
+1. **Previous mode not updated on manual switch while in file tree**: If in Diff mode → enter file tree → manually switch to Normal via ctrl+x → exit file tree → returns to Diff (should stay Normal). The `previousMode` tracking doesn't account for manual mode changes while in auto-switched state.
 
 ---
 
