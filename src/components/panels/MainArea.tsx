@@ -758,9 +758,7 @@ export function MainArea() {
 							{(commit: () => Commit) => (
 								<Show
 									when={
-										viewMode() !== "files" &&
-										bookmarkViewMode() !== "files" &&
-										layout.focusMode() === "normal"
+										viewMode() !== "files" && bookmarkViewMode() !== "files"
 									}
 									fallback={
 										<MinimalCommitHeader
