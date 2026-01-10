@@ -133,14 +133,21 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
    - [ ] Smarter bookmark sorting: recently modified first (not alphabetical)
    - [ ] Bookmark grouping: local/modified first, remote-only second
 
-4. **Fuzzy search infrastructure** — shared across lists
+4. **Focus modes: log vs diff** → [plan](./plans/focus-modes.md)
+   - [ ] Log mode: 50/50 split (default)
+   - [ ] Diff mode: narrow log sidebar, expanded diff, command log hidden
+   - [ ] Triggers: file tree, diff focus, `Ctrl+X` toggle
+   - [ ] Mode indicator in bottom corner
+   - [ ] Remove passthrough diff mode (custom only)
+
+5. **Fuzzy search infrastructure** — shared across lists
    - [ ] Bookmark picker: fuzzy filtering
    - [ ] Commits list: fuzzy search by description/author
    - [ ] Bookmarks tab: fuzzy filtering
    - [ ] Oplog: fuzzy search
    - [ ] Shared component/hook for consistent UX
 
-5. **Picker improvements**
+6. **Picker improvements**
    - [ ] Mouse click to select in pickers
    - [ ] Revset picker: same filtering support
 
