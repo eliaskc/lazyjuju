@@ -9,6 +9,7 @@ import {
 } from "./commander/operations"
 import { Layout } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
+import { RecentReposModal } from "./components/modals/RecentReposModal"
 import { UndoModal } from "./components/modals/UndoModal"
 import { BookmarksPanel } from "./components/panels/BookmarksPanel"
 import { LogPanel } from "./components/panels/LogPanel"
@@ -22,6 +23,7 @@ import { LayoutProvider } from "./context/layout"
 import { LoadingProvider, useLoading } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider } from "./context/theme"
+import { setRepoPath } from "./repo"
 
 function AppContent() {
 	const renderer = useRenderer()
@@ -134,6 +136,32 @@ function AppContent() {
 				dialog.toggle("help", () => <HelpModal />, {
 					hints: [{ key: "enter", label: "execute" }],
 				}),
+		},
+		{
+			id: "global.switch_repository",
+			title: "switch repository",
+			keybind: "open_recent",
+			context: "global",
+			type: "action",
+			visibility: "help-only",
+			onSelect: () =>
+				dialog.open(
+					() => (
+						<RecentReposModal
+							onSelect={(path) => {
+								setRepoPath(path)
+								refresh()
+							}}
+						/>
+					),
+					{
+						hints: [
+							{ key: "j/k", label: "select" },
+							{ key: "1-9", label: "open" },
+							{ key: "enter", label: "switch" },
+						],
+					},
+				),
 		},
 		{
 			id: "global.refresh",

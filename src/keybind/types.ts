@@ -50,6 +50,7 @@ export type KeybindConfigKey =
 	| "nav_next_hunk"
 	| "nav_prev_file"
 	| "nav_next_file"
+	| "open_recent"
 
 export type KeybindConfig = Record<KeybindConfigKey, string>
 
@@ -98,4 +99,5 @@ export const DEFAULT_KEYBINDS: KeybindConfig = {
 	nav_next_hunk: "]",
 	nav_prev_file: "{",
 	nav_next_file: "}",
+	open_recent: "ctrl+o",
 }

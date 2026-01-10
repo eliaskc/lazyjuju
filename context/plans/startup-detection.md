@@ -12,10 +12,13 @@
 - `src/utils/state.ts` — State file management (`~/.config/kajji/state.json`), recent repos tracking
 - `src/utils/repo-check.ts` — Repo detection (`.jj/`, `.git/`) and init functions
 - `src/components/StartupScreen.tsx` — Startup UI with two modes
+- `src/components/modals/RecentReposModal.tsx` — Quick repository switcher (`ctrl+o`)
 
 **Files modified:**
 - `src/index.tsx` — Root component conditionally renders StartupScreen or App
 - `src/context/sync.tsx` — Tracks repo on successful initial load
+- `src/App.tsx` — Registers `switch repository` command
+- `src/keybind/types.ts` — Adds `open_recent` keybind (ctrl+o)
 
 **Decisions made:**
 - State location: `~/.config/kajji/state.json` (Option 1)

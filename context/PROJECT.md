@@ -124,6 +124,7 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
    - [x] If no VCS: show recent jj repos + `jj init` option
    - [x] Recent repos stored in `~/.config/kajji/state.json` (max 10, sorted by last opened)
    - [x] Keyboard navigation: j/k, Tab to switch sections, 1-9 for quick repo select, Enter to execute
+   - [x] Switch repository modal (`ctrl+o`) — quick switch between recent repos from within app
 
 2. **Diff virtualization fix** — spacer boxes at top when scrolling
    - [x] Root cause: commit header height varies (message length, file stats)
