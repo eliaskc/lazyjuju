@@ -125,6 +125,8 @@ Solved by replacing `<input>` with `<textarea>` using single-line keybindings (E
    - [x] Recent repos stored in `~/.config/kajji/state.json` (max 10, sorted by last opened)
    - [x] Keyboard navigation: j/k, Tab to switch sections, 1-9 for quick repo select, Enter to execute
    - [x] Switch repository modal (`ctrl+o`) — quick switch between recent repos from within app
+   - [x] Error screen for critical startup errors (stale working copy, etc.)
+     - Wave background, parsed error hints/URLs, fix button for known errors, retry, quit
 
 2. **Diff virtualization fix** — spacer boxes at top when scrolling
    - [x] Root cause: commit header height varies (message length, file stats)
@@ -379,6 +381,7 @@ Revsets are jj's query language for selecting commits (e.g., `trunk()..@`, `auth
 ## Nice-to-Have
 
 - [ ] Command mode — `:` to run arbitrary jj commands
+  - Would enable manual error recovery for unknown jj errors (currently only known errors like stale working copy have auto-fix)
 - [ ] Smart paste in describe modal — if pasted text contains a newline, put first line in subject and rest in body
 
 ## Open in Editor

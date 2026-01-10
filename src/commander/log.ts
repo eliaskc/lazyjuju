@@ -106,6 +106,12 @@ export async function fetchLog(options?: FetchLogOptions): Promise<Commit[]> {
 		cwd: options?.cwd,
 	})
 
+	// Check for critical errors in both stdout and stderr (jj sometimes outputs errors to stdout)
+	const combinedOutput = result.stdout + result.stderr
+	if (/working copy is stale|stale working copy/i.test(combinedOutput)) {
+		throw new Error(`The working copy is stale\n${combinedOutput}`)
+	}
+
 	if (!result.success) {
 		throw new Error(`jj log failed: ${result.stderr}`)
 	}

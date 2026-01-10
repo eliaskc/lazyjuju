@@ -12,6 +12,9 @@
 	"files": ["bin", "script", "src"],
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/index.tsx",
+		"mock:error-stale": "NODE_ENV=development bun run src/index.tsx --mock=error-stale",
+		"mock:startup-no-vcs": "NODE_ENV=development bun run src/index.tsx --mock=startup-no-vcs",
+		"mock:startup-git": "NODE_ENV=development bun run src/index.tsx --mock=startup-git",
 		"profile": "bun run script/profile.ts",
 		"trace": "KAJJI_TRACE=1 bun run src/index.tsx",
 		"test": "bun test",

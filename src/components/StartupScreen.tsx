@@ -4,7 +4,6 @@ import {
 	For,
 	Show,
 	createEffect,
-	createMemo,
 	createSignal,
 	onCleanup,
 	onMount,
@@ -14,115 +13,7 @@ import { createDoubleClickDetector } from "../utils/double-click"
 import type { RecentRepo } from "../utils/state"
 import { formatRelativeTime } from "../utils/state"
 import { BorderBox } from "./BorderBox"
-
-function parseHex(hex: string) {
-	const h = hex.replace("#", "")
-	return {
-		r: Number.parseInt(h.slice(0, 2), 16),
-		g: Number.parseInt(h.slice(2, 4), 16),
-		b: Number.parseInt(h.slice(4, 6), 16),
-	}
-}
-
-function toHex(r: number, g: number, b: number) {
-	const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)))
-	const hex = (n: number) => clamp(n).toString(16).padStart(2, "0")
-	return `#${hex(r)}${hex(g)}${hex(b)}`
-}
-
-function lerpColor(from: string, to: string, t: number) {
-	const f = parseHex(from)
-	const c = parseHex(to)
-	return toHex(f.r + (c.r - f.r) * t, f.g + (c.g - f.g) * t, f.b + (c.b - f.b) * t)
-}
-
-const directionalWaves = [
-	{ angle: 0.3, freq: 0.06, speed: 0.03, amp: 0.35, twist: 0.002 },
-	{ angle: 0.15, freq: 0.04, speed: -0.02, amp: 0.25, twist: -0.003 },
-	{ angle: 0.5, freq: 0.08, speed: 0.04, amp: 0.2, twist: 0.001 },
-]
-
-const radialWaves = [
-	{ freq: 0.1, speed: 0.025, amp: 0.3, drift: 0.008 },
-	{ freq: 0.07, speed: -0.02, amp: 0.25, drift: -0.005 },
-]
-
-function WaveBackground() {
-	const renderer = useRenderer()
-	const { colors } = useTheme()
-	const [tick, setTick] = createSignal(0)
-	const [dimensions, setDimensions] = createSignal({
-		width: renderer.width,
-		height: renderer.height,
-	})
-
-	onMount(() => {
-		const interval = setInterval(() => setTick((t) => t + 1), 16)
-		onCleanup(() => clearInterval(interval))
-
-		const handleResize = (w: number, h: number) => setDimensions({ width: w, height: h })
-		renderer.on("resize", handleResize)
-		onCleanup(() => renderer.off("resize", handleResize))
-	})
-
-	const getIntensity = (x: number, y: number, t: number, w: number, h: number) => {
-		let total = 0
-		let totalAmp = 0
-
-		for (const wave of directionalWaves) {
-			const a = wave.angle + Math.sin(t * wave.twist) * 0.3
-			const val = Math.sin((x * a + y) * wave.freq + t * wave.speed) * 0.5 + 0.5
-			total += val * wave.amp
-			totalAmp += wave.amp
-		}
-
-		for (const wave of radialWaves) {
-			const cx = w / 2 + Math.sin(t * wave.drift) * w * 0.3
-			const cy = h / 2 + Math.cos(t * wave.drift * 1.3) * h * 0.3
-			const dist = Math.sqrt((x - cx) ** 2 + ((y - cy) * 2) ** 2)
-			const val = Math.sin(dist * wave.freq - t * wave.speed) * 0.5 + 0.5
-			total += val * wave.amp
-			totalAmp += wave.amp
-		}
-
-		return Math.max(0.03, (total / totalAmp) ** 1.5)
-	}
-
-	const rows = createMemo(() => {
-		const { width, height } = dimensions()
-		const t = tick()
-		const bg = colors().background
-		const accent = colors().primary
-
-		const result: string[][] = []
-		for (let y = 0; y < height; y++) {
-			const row: string[] = []
-			for (let x = 0; x < width; x++) {
-				row.push(lerpColor(bg, accent, getIntensity(x, y, t, width, height) * 0.5))
-			}
-			result.push(row)
-		}
-		return result
-	})
-
-	return (
-		<box
-			position="absolute"
-			left={0}
-			top={0}
-			width={dimensions().width}
-			height={dimensions().height}
-		>
-			<For each={rows()}>
-				{(row) => (
-					<text>
-						<For each={row}>{(color) => <span style={{ fg: color }}>█</span>}</For>
-					</text>
-				)}
-			</For>
-		</box>
-	)
-}
+import { WaveBackground } from "./WaveBackground"
 
 function KeyHint(props: { keys: string; label: string; last?: boolean }) {
 	const { colors, style } = useTheme()
@@ -187,24 +78,30 @@ function GitRepoScreen(props: GitRepoScreenProps) {
 			justifyContent="center"
 			alignItems="center"
 		>
-			{/* Message above modal */}
-			<text fg={colors().warning} bg={colors().background}>
-				Not a jj repository
-			</text>
-			<text fg={colors().textMuted} bg={colors().background}>
-				Git repository detected in this directory
-			</text>
-			<box height={1} />
-
 			<BorderBox
 				border
 				borderStyle={style().panel.borderStyle}
 				borderColor={colors().borderFocused}
 				backgroundColor={colors().background}
-				width={50}
-				topLeft={<text fg={colors().borderFocused}>Initialize jj</text>}
+				width={70}
+				topLeft={<text fg={colors().borderFocused}>Setup</text>}
+				bottomRight={
+					<text bg={colors().background}>
+						<KeyHint keys="enter" label="run" />
+						<KeyHint keys="q" label="quit" last />
+					</text>
+				}
 			>
 				<box flexDirection="column" padding={1}>
+					<box>
+						<text fg={colors().warning}>Not a jj repository</text>
+					</box>
+					<box>
+						<text fg={colors().textMuted}>
+							Git repository detected in this directory
+						</text>
+					</box>
+					<box height={1} />
 					<For each={options}>
 						{(option, index) => {
 							const isSelected = () => index() === selectedIndex()
@@ -224,7 +121,9 @@ function GitRepoScreen(props: GitRepoScreenProps) {
 									<text>
 										<span
 											style={{
-												fg: isSelected() ? colors().text : colors().textMuted,
+												fg: isSelected()
+													? colors().primary
+													: colors().textMuted,
 											}}
 										>
 											{option.label}
@@ -240,14 +139,6 @@ function GitRepoScreen(props: GitRepoScreenProps) {
 					</text>
 				</box>
 			</BorderBox>
-
-			{/* Keybind hints */}
-			<box height={1} />
-			<text bg={colors().background}>
-				<KeyHint keys="j/k" label="select" />
-				<KeyHint keys="enter" label="run" />
-				<KeyHint keys="q" label="quit" last />
-			</text>
 		</box>
 	)
 }
@@ -321,9 +212,7 @@ function NoVcsScreen(props: NoVcsScreenProps) {
 		if (evt.name === "tab") {
 			evt.preventDefault()
 			evt.stopPropagation()
-			if (props.recentRepos.length > 0) {
-				setFocusedSection((s) => (s === "repos" ? "init" : "repos"))
-			}
+			setFocusedSection((s) => (s === "repos" ? "init" : "repos"))
 		} else if (evt.name === "j" || evt.name === "down") {
 			evt.preventDefault()
 			evt.stopPropagation()
@@ -379,97 +268,98 @@ function NoVcsScreen(props: NoVcsScreenProps) {
 			justifyContent="center"
 			alignItems="center"
 		>
-			{/* Message above modals */}
-			<text fg={colors().warning} bg={colors().background}>
-				Not a jj repository
-			</text>
-			<text fg={colors().textMuted} bg={colors().background}>
-				No version control found in this directory
-			</text>
-			<box height={1} />
-
-			<box flexDirection="column" width={60} gap={0}>
+			<box flexDirection="column" width={70} gap={1}>
 				{/* Recent repos section */}
 				<BorderBox
 					border
 					borderStyle={style().panel.borderStyle}
 					borderColor={reposBorderColor()}
 					backgroundColor={colors().background}
-					height={Math.min(props.recentRepos.length + 4, 14)}
-					topLeft={<text fg={reposBorderColor()}>Recent repositories</text>}
+					height={Math.min(props.recentRepos.length + 7, 17)}
+					topLeft={<text fg={reposBorderColor()}>Setup</text>}
 					onMouseDown={() => setFocusedSection("repos")}
 				>
-					<Show
-						when={props.recentRepos.length > 0}
-						fallback={
-							<box padding={1}>
+					<box flexDirection="column" padding={1}>
+						<box>
+							<text fg={colors().warning}>Not a jj repository</text>
+						</box>
+						<box>
+							<text fg={colors().textMuted}>
+								No version control found in this directory
+							</text>
+						</box>
+						<box height={1} />
+						<Show
+							when={props.recentRepos.length > 0}
+							fallback={
 								<text fg={colors().textMuted}>No recent repositories</text>
-							</box>
-						}
-					>
-						<scrollbox
-							ref={scrollRef}
-							flexGrow={1}
-							paddingLeft={1}
-							paddingRight={1}
-							scrollbarOptions={{ visible: false }}
+							}
 						>
-							<For each={props.recentRepos}>
-								{(repo, index) => {
-									const isSelected = () =>
-										focusedSection() === "repos" &&
-										index() === selectedRepoIndex()
-									const num = index() + 1
-									// Shorten home directory
-									const displayPath = repo.path.replace(
-										new RegExp(`^${process.env.HOME}`),
-										"~",
-									)
-									const handleDoubleClick = createDoubleClickDetector(() =>
-										props.onSelectRepo(repo.path),
-									)
-									return (
-										<box
-											flexDirection="row"
-											backgroundColor={
-												isSelected() ? colors().selectionBackground : undefined
-											}
-											onMouseDown={() => {
-												setFocusedSection("repos")
-												setSelectedRepoIndex(index())
-												handleDoubleClick()
-											}}
-										>
-											<text wrapMode="none">
-												<span
-													style={{
-														fg: isSelected()
-															? colors().primary
-															: colors().textMuted,
-													}}
-												>
-													{num}.{" "}
-												</span>
-												<span
-													style={{
-														fg: isSelected()
-															? colors().text
-															: colors().textMuted,
-													}}
-												>
-													{displayPath}
-												</span>
-											</text>
-											<box flexGrow={1} />
-											<text fg={colors().textMuted}>
-												{getTimestamp(repo.lastOpened)}
-											</text>
-										</box>
-									)
-								}}
-							</For>
-						</scrollbox>
-					</Show>
+							<text fg={colors().textMuted}>Recent repositories:</text>
+							<scrollbox
+								ref={scrollRef}
+								flexGrow={1}
+								scrollbarOptions={{ visible: false }}
+							>
+								<For each={props.recentRepos}>
+									{(repo, index) => {
+										const isSelected = () =>
+											focusedSection() === "repos" &&
+											index() === selectedRepoIndex()
+										const num = index() + 1
+										// Shorten home directory
+										const displayPath = repo.path.replace(
+											new RegExp(`^${process.env.HOME}`),
+											"~",
+										)
+										const handleDoubleClick = createDoubleClickDetector(() =>
+											props.onSelectRepo(repo.path),
+										)
+										return (
+											<box
+												flexDirection="row"
+												backgroundColor={
+													isSelected()
+														? colors().selectionBackground
+														: undefined
+												}
+												onMouseDown={() => {
+													setFocusedSection("repos")
+													setSelectedRepoIndex(index())
+													handleDoubleClick()
+												}}
+											>
+												<text wrapMode="none">
+													<span
+														style={{
+															fg: isSelected()
+																? colors().primary
+																: colors().textMuted,
+														}}
+													>
+														{num}.{" "}
+													</span>
+													<span
+														style={{
+															fg: isSelected()
+																? colors().primary
+																: colors().textMuted,
+														}}
+													>
+														{displayPath}
+													</span>
+												</text>
+												<box flexGrow={1} />
+												<text fg={colors().textMuted}>
+													{getTimestamp(repo.lastOpened)}
+												</text>
+											</box>
+										)
+									}}
+								</For>
+							</scrollbox>
+						</Show>
+					</box>
 				</BorderBox>
 
 				{/* Init section */}
@@ -478,8 +368,13 @@ function NoVcsScreen(props: NoVcsScreenProps) {
 					borderStyle={style().panel.borderStyle}
 					borderColor={initBorderColor()}
 					backgroundColor={colors().background}
-					height={3}
 					topLeft={<text fg={initBorderColor()}>Initialize</text>}
+					bottomRight={
+						<text bg={colors().background}>
+							<KeyHint keys="enter" label="run" />
+							<KeyHint keys="q" label="quit" last />
+						</text>
+					}
 					onMouseDown={() => setFocusedSection("init")}
 				>
 					<box paddingLeft={1} paddingRight={1}>
@@ -499,7 +394,7 @@ function NoVcsScreen(props: NoVcsScreenProps) {
 									style={{
 										fg:
 											focusedSection() === "init"
-												? colors().text
+												? colors().primary
 												: colors().textMuted,
 									}}
 								>
@@ -510,16 +405,6 @@ function NoVcsScreen(props: NoVcsScreenProps) {
 					</box>
 				</BorderBox>
 			</box>
-
-			{/* Keybind hints */}
-			<box height={1} />
-			<text bg={colors().background}>
-				<KeyHint keys="tab" label="switch" />
-				<KeyHint keys="j/k" label="select" />
-				<KeyHint keys="1-9" label="open" />
-				<KeyHint keys="enter" label="run" />
-				<KeyHint keys="q" label="quit" last />
-			</text>
 		</box>
 	)
 }

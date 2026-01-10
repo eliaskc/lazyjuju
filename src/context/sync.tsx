@@ -263,6 +263,11 @@ export function SyncProvider(props: { children: JSX.Element }) {
 				} else {
 					lastOpLogId = currentId
 				}
+			} catch (e) {
+				// Propagate critical errors (like stale working copy)
+				if (e instanceof Error) {
+					setError(e.message)
+				}
 			} finally {
 				isChecking = false
 			}
@@ -305,7 +310,12 @@ export function SyncProvider(props: { children: JSX.Element }) {
 			.then((id) => {
 				lastOpLogId = id
 			})
-			.catch(() => {})
+			.catch((e) => {
+				// Propagate critical errors (like stale working copy)
+				if (e instanceof Error) {
+					setError(e.message)
+				}
+			})
 
 		schedulePoll()
 

@@ -235,6 +235,13 @@ export async function fetchOpLog(limit?: number): Promise<string[]> {
 		args.push("--limit", String(limit))
 	}
 	const result = await execute(args)
+
+	// Check for critical errors in both stdout and stderr (jj sometimes outputs errors to stdout)
+	const combinedOutput = result.stdout + result.stderr
+	if (/working copy is stale|stale working copy/i.test(combinedOutput)) {
+		throw new Error(`The working copy is stale\n${combinedOutput}`)
+	}
+
 	if (!result.success) {
 		throw new Error(`jj op log failed: ${result.stderr}`)
 	}
@@ -251,7 +258,17 @@ export async function fetchOpLogId(): Promise<string> {
 		"-T",
 		"self.id()",
 	])
-	return result.success ? result.stdout.trim() : ""
+
+	// Check for critical errors in both stdout and stderr (jj sometimes outputs errors to stdout)
+	const combinedOutput = result.stdout + result.stderr
+	if (/working copy is stale|stale working copy/i.test(combinedOutput)) {
+		throw new Error(`The working copy is stale\n${combinedOutput}`)
+	}
+
+	if (!result.success) {
+		return ""
+	}
+	return result.stdout.trim()
 }
 
 export async function jjUndo(): Promise<OperationResult> {
@@ -280,6 +297,15 @@ export async function jjOpRestore(
 	return {
 		...result,
 		command: `jj op restore ${operationId}`,
+	}
+}
+
+export async function jjWorkspaceUpdateStale(): Promise<OperationResult> {
+	const args = ["workspace", "update-stale"]
+	const result = await execute(args)
+	return {
+		...result,
+		command: "jj workspace update-stale",
 	}
 }
 

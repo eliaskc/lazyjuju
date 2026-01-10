@@ -1,16 +1,42 @@
 import { existsSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { join } from "node:path"
 import { execute } from "../commander/executor"
 
 export interface RepoStatus {
 	isJjRepo: boolean
 	hasGitRepo: boolean
+	/** Critical error detected at startup (e.g., stale working copy) */
+	startupError: string | null
 }
 
 export function checkRepoStatus(path: string): RepoStatus {
+	const isJjRepo = existsSync(join(path, ".jj"))
+	const hasGitRepo = existsSync(join(path, ".git"))
+
+	// If it's a jj repo, run a quick check for critical errors
+	let startupError: string | null = null
+	if (isJjRepo) {
+		try {
+			// Run jj status synchronously to check for stale working copy
+			const result = spawnSync("jj", ["status"], {
+				cwd: path,
+				encoding: "utf-8",
+				timeout: 5000,
+			})
+			const output = (result.stdout || "") + (result.stderr || "")
+			if (/working copy is stale|stale working copy/i.test(output)) {
+				startupError = output
+			}
+		} catch {
+			// Ignore errors from the check itself
+		}
+	}
+
 	return {
-		isJjRepo: existsSync(join(path, ".jj")),
-		hasGitRepo: existsSync(join(path, ".git")),
+		isJjRepo,
+		hasGitRepo,
+		startupError,
 	}
 }
 

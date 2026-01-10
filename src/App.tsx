@@ -1,12 +1,14 @@
 import { useRenderer } from "@opentui/solid"
-import { onMount } from "solid-js"
+import { Show, onMount } from "solid-js"
 import {
 	fetchOpLog,
 	jjGitFetch,
 	jjGitPush,
 	jjRedo,
 	jjUndo,
+	jjWorkspaceUpdateStale,
 } from "./commander/operations"
+import { ErrorScreen } from "./components/ErrorScreen"
 import { Layout } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
 import { RecentReposModal } from "./components/modals/RecentReposModal"
@@ -24,16 +26,48 @@ import { LoadingProvider, useLoading } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider } from "./context/theme"
 import { setRepoPath } from "./repo"
+import { isCriticalStartupError, parseJjError } from "./utils/error-parser"
 
 function AppContent() {
 	const renderer = useRenderer()
-	const { loadLog, loadBookmarks, refresh } = useSync()
+	const { loadLog, loadBookmarks, refresh, error, loading, commits } = useSync()
 	const focus = useFocus()
 	const command = useCommand()
 	const dialog = useDialog()
 	const commandLog = useCommandLog()
 	const globalLoading = useLoading()
 	const layout = useLayout()
+
+	// Check if we have a critical startup error (loading done, no data, has error)
+	const hasCriticalError = () => {
+		const err = error()
+		const isLoading = loading()
+		const hasNoData = commits().length === 0
+		return !isLoading && hasNoData && isCriticalStartupError(err)
+	}
+
+	const handleRetry = () => {
+		loadLog()
+		loadBookmarks()
+	}
+
+	const handleFix = async () => {
+		const err = error()
+		if (!err) return
+
+		const parsed = parseJjError(err)
+		if (parsed.errorType === "stale-working-copy") {
+			const result = await jjWorkspaceUpdateStale()
+			if (result.success) {
+				handleRetry()
+			}
+		}
+	}
+
+	const handleQuit = () => {
+		renderer.destroy()
+		process.exit(0)
+	}
 
 	onMount(() => {
 		loadLog()
@@ -319,6 +353,22 @@ function AppContent() {
 			},
 		},
 	])
+
+	// Show error screen for critical startup errors
+	if (hasCriticalError()) {
+		const err = error()
+		if (err) {
+			const parsed = parseJjError(err)
+			return (
+				<ErrorScreen
+					error={err}
+					onRetry={handleRetry}
+					onFix={parsed.fixCommand ? handleFix : undefined}
+					onQuit={handleQuit}
+				/>
+			)
+		}
+	}
 
 	return (
 		<DialogContainer>
