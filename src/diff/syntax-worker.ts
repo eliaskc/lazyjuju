@@ -27,6 +27,7 @@ export type WorkerResponse =
 
 // Languages to load and warm up
 const COMMON_LANGS: SupportedLanguages[] = [
+	// Web/JS ecosystem
 	"typescript",
 	"tsx",
 	"javascript",
@@ -34,13 +35,35 @@ const COMMON_LANGS: SupportedLanguages[] = [
 	"json",
 	"html",
 	"css",
+	// Config/docs
 	"markdown",
 	"yaml",
 	"toml",
 	"bash",
-	"python",
+	// Systems languages
+	"c",
+	"cpp",
 	"rust",
 	"go",
+	"zig",
+	// JVM/mobile
+	"java",
+	"kotlin",
+	"scala",
+	"swift",
+	"objective-c",
+	// Scripting
+	"python",
+	"ruby",
+	"php",
+	"lua",
+	"elixir",
+	// Functional
+	"haskell",
+	// Data/infra
+	"sql",
+	"dockerfile",
+	"hcl",
 ]
 
 // Warmup code samples
