@@ -2,7 +2,7 @@
 
 Follow the Boy Scout rule:
 - For minor things, just improve them
-- For larger improvements, lift them to the user OR add them directly to `context/PROJECT.md`
+- For larger improvements, lift them to the user OR add them directly to the project docs
 - If you see a lack of testing in an area, offer to add
 
 ## Build/Test Commands
@@ -95,53 +95,6 @@ Modal stack with backdrop overlay. Dialogs push/pop from stack. Theme-aware styl
 
 ### Prefix Injection (Log Parsing)
 We inject unique prefixes into `jj log` template output to reliably parse multi-line entries. See `src/commander/log.ts`.
-
-## Project Context & Plans
-
-The `context/` folder contains project documentation:
-
-### Primary Doc
-- **`context/PROJECT.md`** - Features, plans, and known issues (single source of truth)
-
-### Detailed Plans
-- **`context/plans/configuration.md`** - Config system design
-- **`context/plans/keybindings.md`** - Context-aware keybinds, status bar visibility
-- **`context/plans/diff-viewing.md`** - Side-by-side diffs, layout modes, difftastic
-- **`context/plans/diff-virtualization.md`** - Large diff performance (PTY streaming, lazy loading)
-- **`context/plans/multi-select.md`** - Visual mode for batch operations
-- **`context/plans/interactive-splitting.md`** - File/hunk-level jj split
-- **`context/plans/github-stacking.md`** - Stacked PR creation and management
-- **`context/plans/release-flows.md`** - npm, Homebrew, compiled binaries
-
-### References
-When unsure how to implement a jj TUI feature, check these repos and local analyses:
-
-| Project | Repo | Local Analysis |
-|---------|------|----------------|
-| **jjui** (Go) | [idursun/jjui](https://github.com/idursun/jjui) | `context/references/reference-jjui.md` |
-| **lazyjj** (Rust) | [Cretezy/lazyjj](https://github.com/Cretezy/lazyjj) | `context/references/reference-lazyjj.md` |
-| **opencode** (TS) | [sst/opencode](https://github.com/sst/opencode) | `context/references/reference-opencode.md` |
-| **OpenTUI** | [sst/opentui](https://github.com/sst/opentui) | `context/references/reference-opentui.md` |
-| **critique** (TS) | [remorses/critique](https://github.com/remorses/critique) | — |
-
-### Other
-- **`context/llm-suggestions/`** - AI-generated improvement ideas (low priority)
-- **`context/archive/`** - Historical docs (original spec, phase history)
-
-## When to Update Documentation
-
-Keep docs in sync with changes:
-
-| Trigger | Action |
-|---------|--------|
-| **Implemented a feature** | Check off in `PROJECT.md` |
-| **Major feature completed** | Update `README.md` (features list, keybindings) |
-| **Found a bug** | Add to `PROJECT.md` under "Known Issues" |
-| **New feature/goal** | Add checkbox to `PROJECT.md`, or create `plans/*.md` for complex features |
-| **Design decision made** | Document in relevant `plans/*.md` file |
-| **Discovered useful pattern** | Add to `references/` or this file |
-
-**Don't update docs for**: Minor refactors, internal changes that don't affect features or plans.
 
 ## jj (Jujutsu) Workflow
 
