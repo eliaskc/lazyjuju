@@ -88,7 +88,9 @@ export function Panel(props: PanelProps) {
 									style={{
 										fg:
 											tab.id === props.activeTab
-												? colors().borderFocused
+												? props.focused
+													? colors().borderFocused
+													: colors().border
 												: colors().border,
 									}}
 								>
