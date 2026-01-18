@@ -74,8 +74,8 @@ bun dev
 - [x] Focus modes for normal browsing vs diff viewing
 - [x] Recent repository switcher
 - [x] Automatic update notifications
+- [x] Revset filtering and fuzzy search
 - [ ] Multi-select for batch operations
-- [ ] Search and filter
 
 ## Usage
 
@@ -124,7 +124,7 @@ kajji /path/to/repo      # specific directory
 | `b` | Set bookmark on commit |
 | `m` | Move bookmark |
 
-See [PROJECT](./context/PROJECT.md) for the full roadmap.
+See [GitHub issues](https://github.com/eliaskc/kajji/issues) for the roadmap.
 
 ## Built With
 

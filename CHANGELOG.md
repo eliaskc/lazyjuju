@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+### new
+- revset filtering in log panel (`/`) with error display and persistent filter ([`2b2ba7c7`](../../commit/2b2ba7c7))
+- fuzzy filtering in bookmarks panel and file tree (`/`) ([`40073a9c`](../../commit/40073a9c))
+- fuzzy search in set bookmark modal ([`9c9bd18f`](../../commit/9c9bd18f))
+- bookmarks sorted by recency (most recently committed first) ([`671596f3`](../../commit/671596f3))
+- streaming bookmark list for faster loading in large repos ([`aafdc88b`](../../commit/aafdc88b))
+
+### improved
+- perf: paginated log and bookmark loading for large repos ([`15fda895`](../../commit/15fda895))
+
+### fixed
+- layout: log panel tabs only highlighted when panel is focused ([`32a24af0`](../../commit/32a24af0))
+- layout: focus mode stable in files view ([`e15fd943`](../../commit/e15fd943))
+
 ## 0.3.1
 
 ### removed

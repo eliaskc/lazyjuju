@@ -12,6 +12,8 @@ Generate release notes and update CHANGELOG.md.
 4. For each commit, gather context progressively (see below)
 5. Generate release notes with references
 6. Prepend to CHANGELOG.md
+7. Check README.md — update feature checklists, fix broken links
+8. Bump version in package.json
 
 Only ask user if: no tags exist, or commit range is ambiguous.
 
