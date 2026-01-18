@@ -20,6 +20,13 @@
 		}
 	},
 	"files": {
-		"ignore": ["node_modules", "dist", "bun.lock"]
+		"ignore": [
+			"node_modules",
+			"dist",
+			"bun.lock",
+			"bench-results.json",
+			"bench-diff-results.json",
+			"bench-syntax-results.json"
+		]
 	}
 }
