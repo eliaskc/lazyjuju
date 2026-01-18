@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+### new
+- new before command (`N`) to insert revision as parent of selected ([`3cbd0a32`](../../commit/3cbd0a32))
+
 ## 0.4.0
 
 ### new
