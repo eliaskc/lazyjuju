@@ -152,8 +152,16 @@ console.log("\nPublishing to npm...")
 run("bun run script/publish.ts", { inherit: true })
 
 console.log("\nCreating GitHub release...")
+const changelog = readFileSync("CHANGELOG.md", "utf-8")
+const versionPattern = new RegExp(
+	`## ${newVersion}\\n([\\s\\S]*?)(?=\\n## \\d|$)`,
+)
+const match = changelog.match(versionPattern)
+const releaseNotes = match ? match[1].trim() : `Release v${newVersion}`
+const notesFile = `/tmp/kajji-release-notes-${newVersion}.md`
+writeFileSync(notesFile, releaseNotes)
 run(
-	`gh release create v${newVersion} dist/*.tar.gz dist/*.zip --title "v${newVersion}" --notes-file CHANGELOG.md`,
+	`gh release create v${newVersion} dist/*.tar.gz dist/*.zip --title "v${newVersion}" --notes-file ${notesFile}`,
 )
 run(`gh release edit v${newVersion} --prerelease=false`)
 
