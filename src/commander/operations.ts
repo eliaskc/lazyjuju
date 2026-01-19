@@ -7,6 +7,7 @@ export interface OperationResult extends ExecuteResult {
 
 export interface InteractiveOptions {
 	cwd?: string
+	ignoreImmutable?: boolean
 }
 
 export async function jjSplitInteractive(
@@ -14,6 +15,9 @@ export async function jjSplitInteractive(
 	options?: InteractiveOptions,
 ): Promise<{ success: boolean; error?: string }> {
 	const args = ["split", "-r", revision]
+	if (options?.ignoreImmutable) {
+		args.push("--ignore-immutable")
+	}
 	const cwd = options?.cwd ?? getRepoPath()
 
 	const proc = Bun.spawn(["jj", ...args], {
@@ -105,18 +109,82 @@ export async function jjEdit(
 	}
 }
 
+export interface SquashOptions {
+	into?: string
+	useDestinationMessage?: boolean
+	keepEmptied?: boolean
+	ignoreImmutable?: boolean
+}
+
 export async function jjSquash(
 	revision?: string,
-	options?: { ignoreImmutable?: boolean },
+	options?: SquashOptions,
 ): Promise<OperationResult> {
-	const args = revision ? ["squash", "-r", revision] : ["squash"]
+	const args = ["squash"]
+
+	// Use --from when squashing into a specific target, -r otherwise
+	if (options?.into) {
+		if (revision) {
+			args.push("--from", revision)
+		}
+		args.push("--into", options.into)
+	} else if (revision) {
+		args.push("-r", revision)
+	}
+
+	if (options?.useDestinationMessage) {
+		args.push("-u")
+	}
+	if (options?.keepEmptied) {
+		args.push("-k")
+	}
 	if (options?.ignoreImmutable) {
 		args.push("--ignore-immutable")
 	}
+
 	const result = await execute(args)
 	return {
 		...result,
 		command: `jj ${args.join(" ")}`,
+	}
+}
+
+export async function jjSquashInteractive(
+	revision: string,
+	options?: SquashOptions & { cwd?: string },
+): Promise<{ success: boolean; error?: string }> {
+	const args = ["squash", "-i"]
+
+	if (options?.into) {
+		args.push("--from", revision, "--into", options.into)
+	} else {
+		args.push("-r", revision)
+	}
+
+	if (options?.useDestinationMessage) {
+		args.push("-u")
+	}
+	if (options?.keepEmptied) {
+		args.push("-k")
+	}
+	if (options?.ignoreImmutable) {
+		args.push("--ignore-immutable")
+	}
+
+	const cwd = options?.cwd ?? getRepoPath()
+
+	const proc = Bun.spawn(["jj", ...args], {
+		cwd,
+		stdin: "inherit",
+		stdout: "inherit",
+		stderr: "inherit",
+	})
+
+	const exitCode = await proc.exited
+	return {
+		success: exitCode === 0,
+		error:
+			exitCode !== 0 ? `jj squash -i exited with code ${exitCode}` : undefined,
 	}
 }
 

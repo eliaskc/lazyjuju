@@ -292,6 +292,85 @@ describe("jjSquash", () => {
 			"--ignore-immutable",
 		])
 	})
+
+	test("uses --from and --into when target is specified", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await jjSquash("abc123", { into: "def456" })
+
+		expect(mockExecute).toHaveBeenCalledWith([
+			"squash",
+			"--from",
+			"abc123",
+			"--into",
+			"def456",
+		])
+	})
+
+	test("adds -u flag when useDestinationMessage is set", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await jjSquash("abc123", { into: "def456", useDestinationMessage: true })
+
+		expect(mockExecute).toHaveBeenCalledWith([
+			"squash",
+			"--from",
+			"abc123",
+			"--into",
+			"def456",
+			"-u",
+		])
+	})
+
+	test("adds -k flag when keepEmptied is set", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await jjSquash("abc123", { keepEmptied: true })
+
+		expect(mockExecute).toHaveBeenCalledWith(["squash", "-r", "abc123", "-k"])
+	})
+
+	test("combines multiple options correctly", async () => {
+		mockExecute.mockResolvedValueOnce({
+			stdout: "",
+			stderr: "",
+			exitCode: 0,
+			success: true,
+		})
+
+		await jjSquash("abc123", {
+			into: "def456",
+			useDestinationMessage: true,
+			keepEmptied: true,
+			ignoreImmutable: true,
+		})
+
+		expect(mockExecute).toHaveBeenCalledWith([
+			"squash",
+			"--from",
+			"abc123",
+			"--into",
+			"def456",
+			"-u",
+			"-k",
+			"--ignore-immutable",
+		])
+	})
 })
 
 describe("jjAbandon", () => {

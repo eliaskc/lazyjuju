@@ -27,6 +27,7 @@ import {
 	jjShowDescription,
 	jjSplitInteractive,
 	jjSquash,
+	jjSquashInteractive,
 	parseOpLog,
 } from "../../commander/operations"
 import { useCommand } from "../../context/command"
@@ -47,6 +48,7 @@ import { Panel } from "../Panel"
 import { DescribeModal } from "../modals/DescribeModal"
 import { RevisionPickerModal } from "../modals/RevisionPickerModal"
 import { SetBookmarkModal } from "../modals/SetBookmarkModal"
+import { SquashModal } from "../modals/SquashModal"
 import { UndoModal } from "../modals/UndoModal"
 
 type LogTab = "revisions" | "oplog"
@@ -524,26 +526,94 @@ export function LogPanel() {
 			context: "log.revisions",
 			type: "action",
 			panel: "log",
-			onSelect: async () => {
+			onSelect: () => {
 				const commit = selectedCommit()
 				if (!commit) return
-				const result = await jjSquash(commit.changeId)
-				if (isImmutableError(result)) {
-					const confirmed = await dialog.confirm({
-						message: "Parent is immutable. Squash anyway?",
-					})
-					if (confirmed) {
-						await runOperation("Squashing...", () =>
-							jjSquash(commit.changeId, { ignoreImmutable: true }),
-						)
-					}
-				} else {
-					commandLog.addEntry(result)
-					if (result.success) {
-						refresh()
-						loadOpLog()
-					}
-				}
+
+				// Find parent (next commit in list is typically the parent)
+				const commitList = commits()
+				const currentIndex = commitList.findIndex(
+					(c) => c.changeId === commit.changeId,
+				)
+				const parentCommit =
+					currentIndex >= 0 && currentIndex < commitList.length - 1
+						? commitList[currentIndex + 1]
+						: undefined
+
+				dialog.open(
+					() => (
+						<SquashModal
+							source={commit}
+							commits={commitList}
+							defaultTarget={parentCommit?.changeId}
+							onSquash={async (target, options) => {
+								if (options.interactive) {
+									// Check if immutable first (before suspending TUI)
+									let ignoreImmutable = false
+									if (commit.immutable) {
+										const confirmed = await dialog.confirm({
+											message: "Commit is immutable. Squash anyway?",
+										})
+										if (!confirmed) return
+										ignoreImmutable = true
+									}
+
+									// Interactive mode needs to suspend the TUI
+									renderer.suspend?.()
+									try {
+										await jjSquashInteractive(commit.changeId, {
+											into: target !== commit.changeId ? target : undefined,
+											useDestinationMessage: options.useDestinationMessage,
+											keepEmptied: options.keepEmptied,
+											ignoreImmutable,
+										})
+									} finally {
+										renderer.resume?.()
+										refresh()
+										loadOpLog()
+									}
+								} else {
+									// Non-interactive squash
+									const result = await jjSquash(commit.changeId, {
+										into: target,
+										useDestinationMessage: options.useDestinationMessage,
+										keepEmptied: options.keepEmptied,
+									})
+									if (isImmutableError(result)) {
+										const confirmed = await dialog.confirm({
+											message: "Target is immutable. Squash anyway?",
+										})
+										if (confirmed) {
+											await runOperation("Squashing...", () =>
+												jjSquash(commit.changeId, {
+													into: target,
+													useDestinationMessage: options.useDestinationMessage,
+													keepEmptied: options.keepEmptied,
+													ignoreImmutable: true,
+												}),
+											)
+										}
+									} else {
+										commandLog.addEntry(result)
+										if (result.success) {
+											refresh()
+											loadOpLog()
+										}
+									}
+								}
+							}}
+						/>
+					),
+					{
+						id: "squash",
+						hints: [
+							{ key: "u", label: "use dest msg" },
+							{ key: "K", label: "keep emptied" },
+							{ key: "i", label: "interactive" },
+							{ key: "enter", label: "squash" },
+						],
+					},
+				)
 			},
 		},
 		{
@@ -610,9 +680,19 @@ export function LogPanel() {
 					return
 				}
 
+				// Check if immutable first (before suspending TUI)
+				let ignoreImmutable = false
+				if (commit.immutable) {
+					const confirmed = await dialog.confirm({
+						message: "Commit is immutable. Split anyway?",
+					})
+					if (!confirmed) return
+					ignoreImmutable = true
+				}
+
 				renderer.suspend?.()
 				try {
-					await jjSplitInteractive(commit.changeId)
+					await jjSplitInteractive(commit.changeId, { ignoreImmutable })
 				} finally {
 					renderer.resume?.()
 					refresh()

@@ -646,9 +646,19 @@ export function BookmarksPanel() {
 							return
 						}
 
+						// Check if immutable first (before suspending TUI)
+						let ignoreImmutable = false
+						if (commit.immutable) {
+							const confirmed = await dialog.confirm({
+								message: "Commit is immutable. Split anyway?",
+							})
+							if (!confirmed) return
+							ignoreImmutable = true
+						}
+
 						renderer.suspend?.()
 						try {
-							await jjSplitInteractive(commit.changeId)
+							await jjSplitInteractive(commit.changeId, { ignoreImmutable })
 						} finally {
 							renderer.resume?.()
 							refresh()

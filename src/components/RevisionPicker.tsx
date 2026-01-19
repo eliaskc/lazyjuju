@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/solid"
 import { For, Show, createEffect, createSignal, onMount } from "solid-js"
 import type { Commit } from "../commander/types"
 import { useTheme } from "../context/theme"
+import { calculateScrollPosition } from "../utils/scroll"
 import { AnsiText } from "./AnsiText"
 
 export interface RevisionPickerProps {
@@ -30,7 +31,6 @@ export function RevisionPicker(props: RevisionPickerProps) {
 	const [selectedIndex, setSelectedIndex] = createSignal(findDefaultIndex())
 
 	let scrollRef: ScrollBoxRenderable | undefined
-	const [scrollTop, setScrollTop] = createSignal(0)
 
 	const scrollToIndex = (index: number, force = false) => {
 		const commitList = props.commits
@@ -42,36 +42,28 @@ export function RevisionPicker(props: RevisionPickerProps) {
 			lineOffset += commit.lines.length
 		}
 
-		const margin = 2
-		const refAny = scrollRef as unknown as Record<string, unknown>
-		const viewportHeight =
-			(typeof refAny.height === "number" ? refAny.height : null) ??
-			(typeof refAny.rows === "number" ? refAny.rows : null) ??
-			10
-		const currentScrollTop = scrollTop()
+		const selectedHeight =
+			commitList[Math.min(index, commitList.length - 1)]?.lines.length ?? 1
+
+		const currentScrollTop = scrollRef.scrollTop ?? 0
 
 		if (force) {
-			const targetScroll = Math.max(0, lineOffset - margin)
+			const targetScroll = Math.max(0, lineOffset - 2)
 			scrollRef.scrollTo(targetScroll)
-			setScrollTop(targetScroll)
 			return
 		}
 
-		const visibleStart = currentScrollTop
-		const visibleEnd = currentScrollTop + viewportHeight - 1
-		const safeStart = visibleStart + margin
-		const safeEnd = visibleEnd - margin
+		const newScrollTop = calculateScrollPosition({
+			ref: scrollRef,
+			index: lineOffset,
+			currentScrollTop,
+			listLength: commitList.length,
+			margin: 2,
+			itemSize: selectedHeight,
+		})
 
-		let newScrollTop = currentScrollTop
-		if (lineOffset < safeStart) {
-			newScrollTop = Math.max(0, lineOffset - margin)
-		} else if (lineOffset > safeEnd) {
-			newScrollTop = Math.max(0, lineOffset - viewportHeight + margin + 1)
-		}
-
-		if (newScrollTop !== currentScrollTop) {
+		if (newScrollTop !== null) {
 			scrollRef.scrollTo(newScrollTop)
-			setScrollTop(newScrollTop)
 		}
 	}
 

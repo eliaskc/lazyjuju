@@ -8,12 +8,20 @@ export interface ScrollIntoViewOptions {
 	currentScrollTop: number
 	listLength: number
 	margin?: number
+	itemSize?: number
 }
 
 export function calculateScrollPosition(
 	options: ScrollIntoViewOptions,
 ): number | null {
-	const { ref, index, currentScrollTop, listLength, margin = 2 } = options
+	const {
+		ref,
+		index,
+		currentScrollTop,
+		listLength,
+		margin = 2,
+		itemSize = 1,
+	} = options
 
 	if (!ref || listLength === 0) return null
 
@@ -30,12 +38,13 @@ export function calculateScrollPosition(
 	const visibleEnd = currentScrollTop + viewportHeight - 1
 	const safeStart = visibleStart + margin
 	const safeEnd = visibleEnd - margin
+	const itemEnd = index + itemSize - 1
 
 	let newScrollTop = currentScrollTop
 	if (index < safeStart) {
 		newScrollTop = Math.max(0, index - margin)
-	} else if (index > safeEnd) {
-		newScrollTop = Math.max(0, index - viewportHeight + margin + 1)
+	} else if (itemEnd > safeEnd) {
+		newScrollTop = Math.max(0, itemEnd - viewportHeight + margin + 1)
 	}
 
 	if (newScrollTop !== currentScrollTop) {
