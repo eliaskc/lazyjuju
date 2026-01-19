@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+### new
+- tab switching with `h`/`l` and arrow keys in addition to `[`/`]` ([`c7c3ff5`](../../commit/c7c3ff5))
+
 ## 0.4.1
 
 ### new
