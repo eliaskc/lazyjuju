@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+### new
+- squash modal (`s`) with target picker and flag options (`u` use dest msg, `K` keep emptied, `i` interactive) ([`75523fb`](../../commit/75523fb))
+- rebase modal (`r`) with flag shortcuts (`s` descendants, `b` branch, `e` skip emptied, `a` after, `B` before) ([`a7bcd0b`](../../commit/a7bcd0b))
+
+### fixed
+- ux: page up/down command titles lowercase ([`511fb4d`](../../commit/511fb4d))
+
 ## 0.4.2
 
 ### new
