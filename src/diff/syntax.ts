@@ -16,6 +16,19 @@ export { highlighterReady }
 const [tokenVersion, setTokenVersion] = createSignal(0)
 export { tokenVersion }
 
+// Batched version updates - multiple worker responses within a frame only trigger one re-render
+let pendingVersionBump = false
+function bumpTokenVersion() {
+	if (!pendingVersionBump) {
+		pendingVersionBump = true
+		// Use queueMicrotask to batch all token arrivals within the same event loop tick
+		queueMicrotask(() => {
+			setTokenVersion((v) => v + 1)
+			pendingVersionBump = false
+		})
+	}
+}
+
 // Token cache: Map<"content:language", tokens>
 const tokenCache = new Map<string, SyntaxToken[]>()
 
@@ -49,8 +62,8 @@ function handleWorkerMessage(event: MessageEvent<WorkerResponse>) {
 				tokenCache.set(cacheKey, msg.tokens)
 				requestToCacheKey.delete(msg.id)
 				pendingRequests.delete(cacheKey)
-				// Trigger re-render by incrementing version
-				setTokenVersion((v) => v + 1)
+				// Trigger re-render by incrementing version (batched)
+				bumpTokenVersion()
 			}
 			break
 		}
@@ -234,4 +247,45 @@ export function isHighlighterReady(): boolean {
 export function clearTokenCache(): void {
 	tokenCache.clear()
 	setTokenVersion((v) => v + 1)
+}
+
+/**
+ * Pre-tokenize all lines in the given files.
+ * Call this when files are loaded to warm the cache before the user scrolls.
+ * This dispatches all unique lines to the worker in the background.
+ */
+export function pretokenizeFiles(
+	files: Array<{
+		name: string
+		hunks: Array<{ lines: Array<{ content: string }> }>
+	}>,
+): void {
+	if (!worker || !highlighterReady()) return
+
+	// Collect all unique content+language pairs
+	const toTokenize: Array<{ content: string; language: SupportedLanguages }> =
+		[]
+
+	for (const file of files) {
+		const language = getLanguage(file.name)
+		for (const hunk of file.hunks) {
+			for (const line of hunk.lines) {
+				// Strip trailing newline like tokenizeLineSync does
+				const content = line.content.replace(/\n$/, "")
+				if (!content) continue
+
+				const cacheKey = getCacheKey(content, language)
+				// Skip if already cached or pending
+				if (tokenCache.has(cacheKey) || pendingRequests.has(cacheKey)) continue
+
+				toTokenize.push({ content, language })
+			}
+		}
+	}
+
+	// Dispatch all tokenization requests
+	for (const { content, language } of toTokenize) {
+		const cacheKey = getCacheKey(content, language)
+		requestTokenization(content, language, cacheKey)
+	}
 }

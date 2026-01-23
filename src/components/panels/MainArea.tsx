@@ -16,7 +16,12 @@ import { useFocus } from "../../context/focus"
 import { useLayout } from "../../context/layout"
 import { type CommitDetails, useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
-import { type FlattenedFile, fetchParsedDiff, flattenDiff } from "../../diff"
+import {
+	type FlattenedFile,
+	fetchParsedDiff,
+	flattenDiff,
+	pretokenizeFiles,
+} from "../../diff"
 import { getFilePaths } from "../../utils/file-tree"
 import { AnsiText } from "../AnsiText"
 import { Panel } from "../Panel"
@@ -412,6 +417,9 @@ export function MainArea() {
 				const flattenStart = performance.now()
 				const flattened = flattenDiff(files)
 				const flattenMs = performance.now() - flattenStart
+
+				// Pre-tokenize all lines in the background before user scrolls
+				pretokenizeFiles(flattened)
 
 				const lineCount = flattened.reduce(
 					(sum, f) => sum + f.hunks.reduce((s, h) => s + h.lines.length, 0),

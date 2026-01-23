@@ -66,6 +66,7 @@ export {
 	highlighterReady,
 	initHighlighter,
 	isHighlighterReady,
+	pretokenizeFiles,
 	tokenizeLine,
 	tokenizeLineSync,
 	tokenVersion,
