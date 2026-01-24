@@ -158,6 +158,8 @@ async function runUpdate(
 }
 
 export function checkForUpdates(): void {
+	if (Bun.env.NODE_ENV === "development") return
+
 	setTimeout(async () => {
 		try {
 			// Dynamic import to avoid circular dependency

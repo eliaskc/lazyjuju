@@ -7,7 +7,11 @@ import { jjWorkspaceUpdateStale } from "./commander/operations"
 import { ErrorScreen } from "./components/ErrorScreen"
 import { LogoScreen } from "./components/LogoScreen"
 import { StartupScreen } from "./components/StartupScreen"
+import { WhatsNewScreen } from "./components/WhatsNewScreen"
 import { ThemeProvider } from "./context/theme"
+import { getChangesSince, parseChangelog } from "./utils/changelog"
+
+import changelogContent from "../CHANGELOG.md" with { type: "text" }
 import { initHighlighter } from "./diff"
 import { getRepoPath, setRepoPath } from "./repo"
 import { checkRepoStatus, initJjGitRepo, initJjRepo } from "./utils/repo-check"
@@ -22,15 +26,24 @@ type MockMode =
 	| "update-success"
 	| "update-failed"
 	| "logo"
+	| "whats-new"
 
 // Parse CLI args
 const args = process.argv.slice(2)
 let mockMode: MockMode = null
+let mockWhatsNewVersion: string | null = null
 
 for (const arg of args) {
 	if (arg.startsWith("--mock=")) {
 		const value = arg.slice(7)
-		if (
+		// Handle whats-new:version format
+		if (value.startsWith("whats-new")) {
+			mockMode = "whats-new"
+			const colonIndex = value.indexOf(":")
+			if (colonIndex !== -1) {
+				mockWhatsNewVersion = value.slice(colonIndex + 1)
+			}
+		} else if (
 			[
 				"error-stale",
 				"startup-no-vcs",
@@ -43,6 +56,13 @@ for (const arg of args) {
 			mockMode = value as MockMode
 		}
 	} else if (!arg.startsWith("-")) {
+		if (mockMode === "whats-new" && !mockWhatsNewVersion) {
+			const isVersion = /^\d+\.\d+\.\d+$/.test(arg)
+			if (isVersion) {
+				mockWhatsNewVersion = arg
+				continue
+			}
+		}
 		setRepoPath(arg)
 	}
 }
@@ -121,6 +141,23 @@ function Root() {
 		return (
 			<ThemeProvider>
 				<LogoScreen />
+			</ThemeProvider>
+		)
+	}
+
+	// Mock what's new screen
+	if (mockMode === "whats-new") {
+		const allBlocks = parseChangelog(changelogContent)
+		const lastSeenVersion =
+			mockWhatsNewVersion ?? allBlocks[1]?.version ?? "0.0.0"
+		const newChanges = getChangesSince(allBlocks, lastSeenVersion)
+		return (
+			<ThemeProvider>
+				<WhatsNewScreen
+					changes={newChanges.length > 0 ? newChanges : allBlocks.slice(0, 1)}
+					onClose={handleQuit}
+					onDisable={handleQuit}
+				/>
 			</ThemeProvider>
 		)
 	}

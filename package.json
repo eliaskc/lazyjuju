@@ -18,6 +18,7 @@
 		"mock:update-success": "NODE_ENV=development bun run src/index.tsx --mock=update-success",
 		"mock:update-failed": "NODE_ENV=development bun run src/index.tsx --mock=update-failed",
 		"mock:logo": "NODE_ENV=development bun run src/index.tsx --mock=logo",
+		"mock:whats-new": "NODE_ENV=development bun run src/index.tsx --mock=whats-new",
 		"profile": "bun run script/profile.ts",
 		"trace": "KAJJI_TRACE=1 bun run src/index.tsx",
 		"test": "bun test",

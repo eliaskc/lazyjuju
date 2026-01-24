@@ -12,6 +12,8 @@ export interface RecentRepo {
 export interface AppState {
 	recentRepos: RecentRepo[]
 	lastUpdateCheck?: string
+	lastSeenVersion?: string
+	whatsNewDisabled?: boolean
 	dismissedVersion?: string | null
 }
 

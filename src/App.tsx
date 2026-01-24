@@ -14,6 +14,7 @@ import { LayoutGrid } from "./components/Layout"
 import { HelpModal } from "./components/modals/HelpModal"
 import { RecentReposModal } from "./components/modals/RecentReposModal"
 import { UndoModal } from "./components/modals/UndoModal"
+import { WhatsNewModal } from "./components/modals/WhatsNewModal"
 
 import { CommandProvider, useCommand } from "./context/command"
 import { CommandLogProvider, useCommandLog } from "./context/commandlog"
@@ -25,8 +26,12 @@ import { LoadingProvider, useLoading } from "./context/loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { setRepoPath } from "./repo"
+import { getChangesSince, parseChangelog } from "./utils/changelog"
 import { isCriticalStartupError, parseJjError } from "./utils/error-parser"
-import { checkForUpdates } from "./utils/update"
+import { readState, writeState } from "./utils/state"
+import { checkForUpdates, getCurrentVersion } from "./utils/update"
+
+import changelogContent from "../CHANGELOG.md" with { type: "text" }
 
 function AppContent() {
 	const renderer = useRenderer()
@@ -73,6 +78,45 @@ function AppContent() {
 		loadLog()
 		loadBookmarks()
 		checkForUpdates()
+
+		const state = readState()
+		const currentVersion = getCurrentVersion()
+		const allBlocks = parseChangelog(changelogContent)
+
+		if (!state.lastSeenVersion) {
+			writeState({ ...state, lastSeenVersion: currentVersion })
+		} else if (
+			!state.whatsNewDisabled &&
+			currentVersion !== "0.0.0" &&
+			state.lastSeenVersion !== currentVersion
+		) {
+			const newChanges = getChangesSince(allBlocks, state.lastSeenVersion)
+
+			if (newChanges.length > 0) {
+				dialog.open(() => (
+					<WhatsNewModal
+						changes={newChanges}
+						onClose={() => {
+							dialog.close()
+							writeState({
+								...readState(),
+								lastSeenVersion: currentVersion,
+							})
+						}}
+						onDisable={() => {
+							dialog.close()
+							writeState({
+								...readState(),
+								lastSeenVersion: currentVersion,
+								whatsNewDisabled: true,
+							})
+						}}
+					/>
+				))
+			} else {
+				writeState({ ...state, lastSeenVersion: currentVersion })
+			}
+		}
 
 		renderer.console.keyBindings = [
 			{ name: "y", ctrl: true, action: "copy-selection" },
