@@ -1,4 +1,8 @@
-import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import type {
+	MouseEvent,
+	ScrollBoxRenderable,
+	TextareaRenderable,
+} from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import {
 	For,
@@ -252,6 +256,8 @@ export function LogPanel() {
 	let scrollRef: ScrollBoxRenderable | undefined
 	const [scrollTop, setScrollTop] = createSignal(0)
 	const [logViewportHeight, setLogViewportHeight] = createSignal(30)
+	const [logViewportWidth, setLogViewportWidth] = createSignal(80)
+	const [logScrollLeft, setLogScrollLeft] = createSignal(0)
 
 	const logTotalLines = createMemo(() =>
 		commits().reduce((sum, commit) => sum + commit.lines.length, 0),
@@ -259,6 +265,76 @@ export function LogPanel() {
 
 	let opLogScrollRef: ScrollBoxRenderable | undefined
 	const [opLogScrollTop, setOpLogScrollTop] = createSignal(0)
+	const [opLogViewportWidth, setOpLogViewportWidth] = createSignal(80)
+	const [opLogScrollLeft, setOpLogScrollLeft] = createSignal(0)
+
+	const stripAnsi = (str: string) => {
+		let out = ""
+		let i = 0
+		while (i < str.length) {
+			if (str[i] === "\u001b" && str[i + 1] === "[") {
+				i += 2
+				while (i < str.length && str[i] !== "m") i += 1
+				if (i < str.length) i += 1
+				continue
+			}
+			out += str[i]
+			i += 1
+		}
+		return out
+	}
+
+	const logMaxLineLength = createMemo(() => {
+		let maxLength = 0
+		for (const commit of commits()) {
+			for (const line of commit.lines) {
+				const length = stripAnsi(line).length
+				if (length > maxLength) maxLength = length
+			}
+		}
+		return maxLength
+	})
+
+	const opLogMaxLineLength = createMemo(() => {
+		let maxLength = 0
+		for (const entry of opLogEntries()) {
+			for (const line of entry.lines) {
+				const length = stripAnsi(line).length
+				if (length > maxLength) maxLength = length
+			}
+		}
+		return maxLength
+	})
+
+	const clampScrollLeft = (value: number, maxLength: number, width: number) => {
+		const contentWidth = Math.max(1, width)
+		const maxScroll = Math.max(0, maxLength - contentWidth)
+		return Math.max(0, Math.min(value, maxScroll))
+	}
+
+	const createHorizontalScrollHandler = (
+		getScrollLeft: () => number,
+		setScrollLeft: (value: number) => void,
+		maxLength: () => number,
+		viewportWidth: () => number,
+	) => {
+		return (event: MouseEvent) => {
+			if (!event.scroll) return
+			const delta = event.scroll.delta || 1
+			const direction = event.scroll.direction
+			const next =
+				direction === "left"
+					? getScrollLeft() - delta
+					: direction === "right"
+						? getScrollLeft() + delta
+						: getScrollLeft()
+			if (direction === "left" || direction === "right") {
+				setScrollLeft(clampScrollLeft(next, maxLength(), viewportWidth()))
+				event.preventDefault()
+				event.stopPropagation()
+			}
+		}
+	}
 
 	createEffect(
 		on([selectedIndex, commits], ([index, commitList]) => {
@@ -333,11 +409,21 @@ export function LogPanel() {
 			if (!scrollRef) return
 			const currentScroll = scrollRef.scrollTop ?? 0
 			const currentViewport = scrollRef.viewport?.height ?? 30
+			const currentViewportWidth = scrollRef.viewport?.width ?? 80
 			if (currentScroll !== scrollTop()) {
 				setScrollTop(currentScroll)
 			}
 			if (currentViewport !== logViewportHeight()) {
 				setLogViewportHeight(currentViewport)
+			}
+			if (currentViewportWidth !== logViewportWidth()) {
+				setLogViewportWidth(currentViewportWidth)
+			}
+			if (opLogScrollRef) {
+				const opViewportWidth = opLogScrollRef.viewport?.width ?? 80
+				if (opViewportWidth !== opLogViewportWidth()) {
+					setOpLogViewportWidth(opViewportWidth)
+				}
 			}
 
 			if (!logLoadingMore() && logHasMore()) {
@@ -349,6 +435,22 @@ export function LogPanel() {
 			}
 		}, 100)
 		onCleanup(() => clearInterval(pollInterval))
+	})
+
+	createEffect(() => {
+		setLogScrollLeft(
+			clampScrollLeft(logScrollLeft(), logMaxLineLength(), logViewportWidth()),
+		)
+	})
+
+	createEffect(() => {
+		setOpLogScrollLeft(
+			clampScrollLeft(
+				opLogScrollLeft(),
+				opLogMaxLineLength(),
+				opLogViewportWidth(),
+			),
+		)
 	})
 
 	let filesScrollRef: ScrollBoxRenderable | undefined
@@ -967,6 +1069,12 @@ export function LogPanel() {
 					ref={scrollRef}
 					flexGrow={1}
 					overflow="hidden"
+					onMouseScroll={createHorizontalScrollHandler(
+						logScrollLeft,
+						setLogScrollLeft,
+						logMaxLineLength,
+						logViewportWidth,
+					)}
 					scrollbarOptions={{ visible: false }}
 				>
 					<Show
@@ -1012,6 +1120,14 @@ export function LogPanel() {
 														content={line}
 														bold={commit.isWorkingCopy}
 														wrapMode="none"
+														onMouseScroll={createHorizontalScrollHandler(
+															logScrollLeft,
+															setLogScrollLeft,
+															logMaxLineLength,
+															logViewportWidth,
+														)}
+														cropStart={logScrollLeft()}
+														cropWidth={Math.max(1, logViewportWidth())}
 													/>
 												</box>
 											)}
@@ -1074,6 +1190,13 @@ export function LogPanel() {
 			<scrollbox
 				ref={opLogScrollRef}
 				flexGrow={1}
+				overflow="hidden"
+				onMouseScroll={createHorizontalScrollHandler(
+					opLogScrollLeft,
+					setOpLogScrollLeft,
+					opLogMaxLineLength,
+					opLogViewportWidth,
+				)}
 				scrollbarOptions={{ visible: false }}
 			>
 				<For each={opLogEntries()}>
@@ -1089,7 +1212,18 @@ export function LogPanel() {
 										}
 										overflow="hidden"
 									>
-										<AnsiText content={line} wrapMode="none" />
+										<AnsiText
+											content={line}
+											wrapMode="none"
+											onMouseScroll={createHorizontalScrollHandler(
+												opLogScrollLeft,
+												setOpLogScrollLeft,
+												opLogMaxLineLength,
+												opLogViewportWidth,
+											)}
+											cropStart={opLogScrollLeft()}
+											cropWidth={Math.max(1, opLogViewportWidth())}
+										/>
 									</box>
 								)}
 							</For>
@@ -1141,12 +1275,12 @@ export function LogPanel() {
 			hotkey="1"
 			focused={isFocused()}
 		>
-			<Show when={isFilesView()}>{() => renderFilesContent()}</Show>
+			<Show when={isFilesView()}>{renderFilesContent()}</Show>
 			<Show when={!isFilesView() && activeTab() === "revisions"}>
-				{() => renderLogContent()}
+				{renderLogContent()}
 			</Show>
 			<Show when={!isFilesView() && activeTab() === "oplog"}>
-				{() => renderOpLogContent()}
+				{renderOpLogContent()}
 			</Show>
 		</Panel>
 	)
