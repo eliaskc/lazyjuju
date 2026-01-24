@@ -52,6 +52,7 @@ const STAT_COLORS = {
 const BAR_CHAR = "▌"
 const EMPTY_STRIPE_CHAR = "╱"
 const EMPTY_STRIPE_COLOR = "#2a2a2a"
+const RIGHT_PADDING = 3
 
 type SplitRowType = "file-header" | "hunk-header" | "content"
 
@@ -186,10 +187,22 @@ interface VirtualizedSplitViewProps {
 	files: FlattenedFile[]
 	activeFileId?: FileId | null
 	currentHunkId?: HunkId | null
-	width: number
 	scrollTop: number
 	viewportHeight: number
+	viewportWidth: number
+	wrapEnabled: boolean
 }
+
+type WrappedSplitRow =
+	| { type: "file-header" | "hunk-header"; row: SplitRow }
+	| {
+			type: "content"
+			row: SplitRow
+			leftStart: number | null
+			leftLength: number
+			rightStart: number | null
+			rightLength: number
+	  }
 
 export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 	const { colors } = useTheme()
@@ -209,17 +222,33 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 		return Math.max(1, getLineNumWidth(maxLine))
 	})
 
+	const wrapWidth = createMemo(() => {
+		const width = Math.max(1, props.viewportWidth)
+		const columnWidth = Math.max(1, Math.floor((width - 1) / 2))
+		const prefixWidth = lineNumWidth() + 5
+		return Math.max(1, columnWidth - prefixWidth - RIGHT_PADDING)
+	})
+
+	const columnWidth = createMemo(() => {
+		const width = Math.max(1, props.viewportWidth)
+		return Math.max(1, Math.floor((width - 1) / 2))
+	})
+
+	const wrappedRows = createMemo(() =>
+		buildWrappedSplitRows(rows(), wrapWidth(), props.wrapEnabled),
+	)
+
 	const visibleRange = createMemo(() =>
 		getVisibleRange({
 			scrollTop: props.scrollTop,
 			viewportHeight: props.viewportHeight,
-			totalRows: rows().length,
+			totalRows: wrappedRows().length,
 		}),
 	)
 
 	const visibleRows = createMemo(() => {
 		const { start, end } = visibleRange()
-		return rows().slice(start, end)
+		return wrappedRows().slice(start, end)
 	})
 
 	const fileStats = createMemo(() => {
@@ -253,17 +282,21 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 							currentHunkId={props.currentHunkId}
 							fileStats={fileStats()}
 							highlighterReady={highlighterReady}
+							columnWidth={columnWidth()}
 						/>
 					)}
 				</For>
-				<box height={rows().length - visibleRange().end} flexShrink={0} />
+				<box
+					height={wrappedRows().length - visibleRange().end}
+					flexShrink={0}
+				/>
 			</Show>
 		</box>
 	)
 }
 
 interface VirtualizedSplitRowProps {
-	row: SplitRow
+	row: WrappedSplitRow
 	lineNumWidth: number
 	currentHunkId?: HunkId | null
 	fileStats: Map<
@@ -271,13 +304,14 @@ interface VirtualizedSplitRowProps {
 		{ additions: number; deletions: number; prevName?: string; type: string }
 	>
 	highlighterReady: () => boolean
+	columnWidth: number
 }
 
 function VirtualizedSplitRow(props: VirtualizedSplitRowProps) {
 	const { colors } = useTheme()
 
 	if (props.row.type === "file-header") {
-		const stats = props.fileStats.get(props.row.fileId)
+		const stats = props.fileStats.get(props.row.row.fileId)
 		return (
 			<box backgroundColor={FILE_HEADER_BG} paddingLeft={1} paddingRight={1}>
 				<text>
@@ -302,7 +336,7 @@ function VirtualizedSplitRow(props: VirtualizedSplitRowProps) {
 								| "deleted",
 						)}
 					</span>
-					<span style={{ fg: colors().text }}> {props.row.fileName}</span>
+					<span style={{ fg: colors().text }}> {props.row.row.fileName}</span>
 					<Show when={stats?.prevName}>
 						<span style={{ fg: colors().textMuted }}>
 							{" ← "}
@@ -329,31 +363,35 @@ function VirtualizedSplitRow(props: VirtualizedSplitRowProps) {
 	}
 
 	if (props.row.type === "hunk-header") {
-		const isCurrent = props.row.hunkId === props.currentHunkId
+		const isCurrent = props.row.row.hunkId === props.currentHunkId
 		return (
 			<box backgroundColor={HUNK_HEADER_BG} paddingLeft={1}>
 				<text>
 					<span style={{ fg: isCurrent ? "#58a6ff" : "#6e7681" }}>
-						{props.row.hunkHeader}
+						{props.row.row.hunkHeader}
 					</span>
 				</text>
 			</box>
 		)
 	}
 
+	if (props.row.type !== "content") return null
+
 	return (
 		<SplitContentRow
 			row={props.row}
 			lineNumWidth={props.lineNumWidth}
 			highlighterReady={props.highlighterReady}
+			columnWidth={props.columnWidth}
 		/>
 	)
 }
 
 interface SplitContentRowProps {
-	row: SplitRow
+	row: Extract<WrappedSplitRow, { type: "content" }>
 	lineNumWidth: number
 	highlighterReady: () => boolean
+	columnWidth: number
 }
 
 interface TokenWithEmphasis extends SyntaxToken {
@@ -363,19 +401,30 @@ interface TokenWithEmphasis extends SyntaxToken {
 function SplitContentRow(props: SplitContentRowProps) {
 	const { colors } = useTheme()
 
-	const language = createMemo(() => getLanguage(props.row.fileName))
+	const language = createMemo(() => getLanguage(props.row.row.fileName))
 
 	const formatLineNum = (num: number | undefined) =>
 		(num?.toString() ?? "").padStart(props.lineNumWidth, " ")
 
+	const hasLeftLine = createMemo(
+		() => props.row.leftStart !== null && props.row.row.left,
+	)
+	const hasRightLine = createMemo(
+		() => props.row.rightStart !== null && props.row.row.right,
+	)
+
 	const leftBg = createMemo(() => {
-		if (!props.row.left) return DIFF_BG.empty
-		return props.row.left.type === "deletion" ? DIFF_BG.deletion : undefined
+		if (!hasLeftLine()) return DIFF_BG.empty
+		return props.row.row.left?.type === "deletion"
+			? DIFF_BG.deletion
+			: undefined
 	})
 
 	const rightBg = createMemo(() => {
-		if (!props.row.right) return DIFF_BG.empty
-		return props.row.right.type === "addition" ? DIFF_BG.addition : undefined
+		if (!hasRightLine()) return DIFF_BG.empty
+		return props.row.row.right?.type === "addition"
+			? DIFF_BG.addition
+			: undefined
 	})
 
 	const defaultColor = colors().text
@@ -428,9 +477,13 @@ function SplitContentRow(props: SplitContentRowProps) {
 		tokenVersion()
 
 		// Strip trailing newline - shiki does this internally, but plain text fallback doesn't
-		const leftContent = (props.row.left?.content ?? "").replace(/\n$/, "")
+		const leftContent = (props.row.row.left?.content ?? "").replace(/\n$/, "")
 		if (!leftContent) return []
-		return tokenizeWithWordDiff(leftContent, props.row.leftWordDiff, "removed")
+		return tokenizeWithWordDiff(
+			leftContent,
+			props.row.row.leftWordDiff,
+			"removed",
+		)
 	})
 
 	const rightTokens = createMemo((): TokenWithEmphasis[] => {
@@ -438,40 +491,54 @@ function SplitContentRow(props: SplitContentRowProps) {
 		tokenVersion()
 
 		// Strip trailing newline - shiki does this internally, but plain text fallback doesn't
-		const rightContent = (props.row.right?.content ?? "").replace(/\n$/, "")
+		const rightContent = (props.row.row.right?.content ?? "").replace(/\n$/, "")
 		if (!rightContent) return []
-		return tokenizeWithWordDiff(rightContent, props.row.rightWordDiff, "added")
+		return tokenizeWithWordDiff(
+			rightContent,
+			props.row.row.rightWordDiff,
+			"added",
+		)
 	})
 
 	const leftLineNumColor = createMemo(() => {
-		if (!props.row.left) return LINE_NUM_COLORS.context
-		return props.row.left.type === "deletion"
+		if (!hasLeftLine()) return LINE_NUM_COLORS.context
+		return props.row.row.left?.type === "deletion"
 			? LINE_NUM_COLORS.deletion
 			: LINE_NUM_COLORS.context
 	})
 
 	const rightLineNumColor = createMemo(() => {
-		if (!props.row.right) return LINE_NUM_COLORS.context
-		return props.row.right.type === "addition"
+		if (!hasRightLine()) return LINE_NUM_COLORS.context
+		return props.row.row.right?.type === "addition"
 			? LINE_NUM_COLORS.addition
 			: LINE_NUM_COLORS.context
 	})
 
 	const leftBar = createMemo(() => {
-		if (!props.row.left) return null
-		if (props.row.left.type === "deletion")
+		if (!hasLeftLine()) return null
+		if (props.row.row.left?.type === "deletion")
 			return { char: BAR_CHAR, color: BAR_COLORS.deletion }
 		return { char: " ", color: undefined }
 	})
 
 	const rightBar = createMemo(() => {
-		if (!props.row.right) return null
-		if (props.row.right.type === "addition")
+		if (!hasRightLine()) return null
+		if (props.row.row.right?.type === "addition")
 			return { char: BAR_CHAR, color: BAR_COLORS.addition }
 		return { char: " ", color: undefined }
 	})
 
-	const emptyFill = createMemo(() => EMPTY_STRIPE_CHAR.repeat(500))
+	const leftLineNum = createMemo(() =>
+		props.row.leftStart === 0 ? props.row.row.left?.oldLineNumber : undefined,
+	)
+
+	const rightLineNum = createMemo(() =>
+		props.row.rightStart === 0 ? props.row.row.right?.newLineNumber : undefined,
+	)
+
+	const emptyFill = createMemo(() =>
+		EMPTY_STRIPE_CHAR.repeat(props.columnWidth),
+	)
 
 	return (
 		<box flexDirection="row">
@@ -482,7 +549,7 @@ function SplitContentRow(props: SplitContentRowProps) {
 				overflow="hidden"
 			>
 				<Show
-					when={props.row.left}
+					when={hasLeftLine()}
 					fallback={
 						<text wrapMode="none">
 							<span style={{ fg: EMPTY_STRIPE_COLOR }}>{emptyFill()}</span>
@@ -493,11 +560,17 @@ function SplitContentRow(props: SplitContentRowProps) {
 						<span style={{ fg: leftBar()?.color }}>{leftBar()?.char}</span>
 						<span style={{ fg: leftLineNumColor() }}>
 							{" "}
-							{formatLineNum(props.row.left?.oldLineNumber)}{" "}
+							{formatLineNum(leftLineNum())}{" "}
 						</span>
 						<span style={{ fg: SEPARATOR_COLOR }}>│</span>
 						<span> </span>
-						<For each={leftTokens()}>
+						<For
+							each={sliceTokens(
+								leftTokens(),
+								props.row.leftStart ?? 0,
+								props.row.leftLength,
+							)}
+						>
 							{(token) => (
 								<span
 									style={{
@@ -509,6 +582,7 @@ function SplitContentRow(props: SplitContentRowProps) {
 								</span>
 							)}
 						</For>
+						<span> </span>
 					</text>
 				</Show>
 			</box>
@@ -520,7 +594,7 @@ function SplitContentRow(props: SplitContentRowProps) {
 				overflow="hidden"
 			>
 				<Show
-					when={props.row.right}
+					when={hasRightLine()}
 					fallback={
 						<text wrapMode="none">
 							<span style={{ fg: EMPTY_STRIPE_COLOR }}>{emptyFill()}</span>
@@ -531,11 +605,17 @@ function SplitContentRow(props: SplitContentRowProps) {
 						<span style={{ fg: rightBar()?.color }}>{rightBar()?.char}</span>
 						<span style={{ fg: rightLineNumColor() }}>
 							{" "}
-							{formatLineNum(props.row.right?.newLineNumber)}{" "}
+							{formatLineNum(rightLineNum())}{" "}
 						</span>
 						<span style={{ fg: SEPARATOR_COLOR }}>│</span>
 						<span> </span>
-						<For each={rightTokens()}>
+						<For
+							each={sliceTokens(
+								rightTokens(),
+								props.row.rightStart ?? 0,
+								props.row.rightLength,
+							)}
+						>
 							{(token) => (
 								<span
 									style={{
@@ -547,9 +627,104 @@ function SplitContentRow(props: SplitContentRowProps) {
 								</span>
 							)}
 						</For>
+						<span> </span>
 					</text>
 				</Show>
 			</box>
 		</box>
 	)
+}
+
+function buildWrappedSplitRows(
+	rows: SplitRow[],
+	wrapWidth: number,
+	wrapEnabled: boolean,
+): WrappedSplitRow[] {
+	const result: WrappedSplitRow[] = []
+	const width = Math.max(1, wrapWidth)
+
+	for (const row of rows) {
+		if (row.type === "file-header" || row.type === "hunk-header") {
+			result.push({ type: row.type, row })
+			continue
+		}
+
+		const leftContent = (row.left?.content ?? "").replace(/\n$/, "")
+		const rightContent = (row.right?.content ?? "").replace(/\n$/, "")
+		const leftLength = leftContent.length
+		const rightLength = rightContent.length
+
+		if (!wrapEnabled) {
+			result.push({
+				type: "content",
+				row,
+				leftStart: row.left ? 0 : null,
+				leftLength,
+				rightStart: row.right ? 0 : null,
+				rightLength,
+			})
+			continue
+		}
+		const leftLines = row.left ? Math.max(1, Math.ceil(leftLength / width)) : 1
+		const rightLines = row.right
+			? Math.max(1, Math.ceil(rightLength / width))
+			: 1
+		const totalLines = Math.max(leftLines, rightLines)
+
+		for (let i = 0; i < totalLines; i += 1) {
+			const leftStart = row.left && i < leftLines ? i * width : null
+			const leftSegmentLength =
+				leftStart === null
+					? 0
+					: Math.min(width, Math.max(0, leftLength - leftStart))
+			const rightStart = row.right && i < rightLines ? i * width : null
+			const rightSegmentLength =
+				rightStart === null
+					? 0
+					: Math.min(width, Math.max(0, rightLength - rightStart))
+
+			result.push({
+				type: "content",
+				row,
+				leftStart,
+				leftLength: leftSegmentLength,
+				rightStart,
+				rightLength: rightSegmentLength,
+			})
+		}
+	}
+
+	return result
+}
+
+function sliceTokens<T extends { content: string }>(
+	tokens: T[],
+	start: number,
+	length: number,
+): T[] {
+	if (length <= 0) return []
+	const end = start + length
+	let offset = 0
+	const result: T[] = []
+
+	for (const token of tokens) {
+		const tokenLength = token.content.length
+		const tokenStart = offset
+		const tokenEnd = offset + tokenLength
+		offset = tokenEnd
+
+		if (tokenEnd <= start) continue
+		if (tokenStart >= end) break
+
+		const sliceStart = Math.max(0, start - tokenStart)
+		const sliceEnd = Math.min(tokenLength, end - tokenStart)
+		if (sliceEnd > sliceStart) {
+			result.push({
+				...token,
+				content: token.content.slice(sliceStart, sliceEnd),
+			})
+		}
+	}
+
+	return result
 }

@@ -30,7 +30,7 @@ type DiffViewStyle = "unified" | "split"
 
 import { profileLog } from "../../utils/profiler"
 
-const SPLIT_VIEW_THRESHOLD = 90
+const SPLIT_VIEW_THRESHOLD = 140
 
 function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 	const { colors } = useTheme()
@@ -265,12 +265,14 @@ export function MainArea() {
 
 	const [scrollTop, setScrollTop] = createSignal(0)
 	const [viewportHeight, setViewportHeight] = createSignal(30)
+	const [viewportWidth, setViewportWidth] = createSignal(80)
 	const [headerHeight, setHeaderHeight] = createSignal(0)
 	const [currentCommitId, setCurrentCommitId] = createSignal<string | null>(
 		null,
 	)
 
 	const [viewStyle, setViewStyle] = createSignal<DiffViewStyle>("unified")
+	const [wrapEnabled, setWrapEnabled] = createSignal(true)
 
 	createEffect(() => {
 		setViewStyle(mainAreaWidth() >= SPLIT_VIEW_THRESHOLD ? "split" : "unified")
@@ -464,14 +466,18 @@ export function MainArea() {
 				const currentScroll = scrollRef.scrollTop ?? 0
 				const currentViewport = scrollRef.viewport?.height ?? 30
 				const currentHeaderHeight = headerRef?.height ?? 0
+				const currentViewportWidth =
+					scrollRef.viewport?.width ?? mainAreaWidth()
 				if (
 					currentScroll !== scrollTop() ||
 					currentViewport !== viewportHeight() ||
-					currentHeaderHeight !== headerHeight()
+					currentHeaderHeight !== headerHeight() ||
+					currentViewportWidth !== viewportWidth()
 				) {
 					setViewportHeight(currentViewport)
 					setScrollTop(currentScroll)
 					setHeaderHeight(currentHeaderHeight)
+					setViewportWidth(currentViewportWidth)
 				}
 			}
 		}, 100)
@@ -543,6 +549,17 @@ export function MainArea() {
 			visibility: "help-only",
 			onSelect: () => {
 				setViewStyle((s) => (s === "unified" ? "split" : "unified"))
+			},
+		},
+		{
+			id: "detail.toggle_diff_wrap",
+			title: "toggle wrap",
+			keybind: "toggle_diff_wrap",
+			context: "detail",
+			type: "view",
+			visibility: "help-only",
+			onSelect: () => {
+				setWrapEnabled((enabled) => !enabled)
 			},
 		},
 		{
@@ -641,29 +658,34 @@ export function MainArea() {
 					</Show>
 					<Show when={!parsedDiffError()}>
 						<Show when={parsedFiles().length > 0}>
-							<FileSummary
-								files={parsedFiles()}
-								activeFileId={activeFileId()}
-							/>
-							<Show when={viewStyle() === "unified"}>
-								<VirtualizedUnifiedView
+							<box flexDirection="column">
+								<FileSummary
 									files={parsedFiles()}
-									activeFileId={null}
-									currentHunkId={activeHunkId()}
-									scrollTop={adjustedScrollTop()}
-									viewportHeight={viewportHeight()}
+									activeFileId={activeFileId()}
 								/>
-							</Show>
-							<Show when={viewStyle() === "split"}>
-								<VirtualizedSplitView
-									files={parsedFiles()}
-									activeFileId={null}
-									currentHunkId={activeHunkId()}
-									width={mainAreaWidth()}
-									scrollTop={adjustedScrollTop()}
-									viewportHeight={viewportHeight()}
-								/>
-							</Show>
+								<Show when={viewStyle() === "unified"}>
+									<VirtualizedUnifiedView
+										files={parsedFiles()}
+										activeFileId={null}
+										currentHunkId={activeHunkId()}
+										scrollTop={adjustedScrollTop()}
+										viewportHeight={viewportHeight()}
+										viewportWidth={viewportWidth()}
+										wrapEnabled={wrapEnabled()}
+									/>
+								</Show>
+								<Show when={viewStyle() === "split"}>
+									<VirtualizedSplitView
+										files={parsedFiles()}
+										activeFileId={null}
+										currentHunkId={activeHunkId()}
+										scrollTop={adjustedScrollTop()}
+										viewportHeight={viewportHeight()}
+										viewportWidth={viewportWidth()}
+										wrapEnabled={wrapEnabled()}
+									/>
+								</Show>
+							</box>
 						</Show>
 					</Show>
 				</scrollbox>

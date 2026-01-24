@@ -46,6 +46,7 @@ export type KeybindConfigKey =
 	| "bookmark_set"
 	| "bookmark_move"
 	| "toggle_diff_style"
+	| "toggle_diff_wrap"
 	| "nav_prev_hunk"
 	| "nav_next_hunk"
 	| "nav_prev_file"
@@ -96,7 +97,8 @@ export const DEFAULT_KEYBINDS: KeybindConfig = {
 	bookmark_forget: "x",
 	bookmark_set: "b",
 	bookmark_move: "m",
-	toggle_diff_style: "V",
+	toggle_diff_style: "v",
+	toggle_diff_wrap: "w",
 	nav_prev_hunk: "[",
 	nav_next_hunk: "]",
 	nav_prev_file: "{",

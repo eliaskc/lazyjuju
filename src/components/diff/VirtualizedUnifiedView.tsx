@@ -41,6 +41,7 @@ const BAR_CHAR = "▌"
 const SEPARATOR_COLOR = "#30363d"
 const FILE_HEADER_BG = "#1c2128"
 const HUNK_HEADER_BG = "#161b22"
+const RIGHT_PADDING = 3
 
 const STAT_COLORS = {
 	addition: "#3fb950",
@@ -53,7 +54,18 @@ interface VirtualizedUnifiedViewProps {
 	currentHunkId?: HunkId | null
 	scrollTop: number
 	viewportHeight: number
+	viewportWidth: number
+	wrapEnabled: boolean
 }
+
+type WrappedRow =
+	| { type: "file-header" | "hunk-header"; row: DiffRow }
+	| {
+			type: "content"
+			row: DiffRow
+			lineStart: number
+			lineLength: number
+	  }
 
 export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 	const { colors } = useTheme()
@@ -73,17 +85,27 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 		return Math.max(1, getLineNumWidth(maxLine))
 	})
 
+	const wrapWidth = createMemo(() => {
+		const width = Math.max(1, props.viewportWidth)
+		const prefixWidth = lineNumWidth() + 5
+		return Math.max(1, width - prefixWidth - RIGHT_PADDING)
+	})
+
+	const wrappedRows = createMemo(() =>
+		buildWrappedRows(rows(), wrapWidth(), props.wrapEnabled),
+	)
+
 	const visibleRange = createMemo(() =>
 		getVisibleRange({
 			scrollTop: props.scrollTop,
 			viewportHeight: props.viewportHeight,
-			totalRows: rows().length,
+			totalRows: wrappedRows().length,
 		}),
 	)
 
 	const visibleRows = createMemo(() => {
 		const { start, end } = visibleRange()
-		return rows().slice(start, end)
+		return wrappedRows().slice(start, end)
 	})
 
 	const fileStats = createMemo(() => {
@@ -120,14 +142,17 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 						/>
 					)}
 				</For>
-				<box height={rows().length - visibleRange().end} flexShrink={0} />
+				<box
+					height={wrappedRows().length - visibleRange().end}
+					flexShrink={0}
+				/>
 			</Show>
 		</box>
 	)
 }
 
 interface VirtualizedRowProps {
-	row: DiffRow
+	row: WrappedRow
 	lineNumWidth: number
 	currentHunkId?: HunkId | null
 	fileStats: Map<
@@ -141,7 +166,7 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 	const { colors } = useTheme()
 
 	if (props.row.type === "file-header") {
-		const stats = props.fileStats.get(props.row.fileId)
+		const stats = props.fileStats.get(props.row.row.fileId)
 		return (
 			<box backgroundColor={FILE_HEADER_BG} paddingLeft={1} paddingRight={1}>
 				<text>
@@ -166,7 +191,7 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 								| "deleted",
 						)}
 					</span>
-					<span style={{ fg: colors().text }}> {props.row.content}</span>
+					<span style={{ fg: colors().text }}> {props.row.row.content}</span>
 					<Show when={stats?.prevName}>
 						<span style={{ fg: colors().textMuted }}>
 							{" ← "}
@@ -193,7 +218,7 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 	}
 
 	if (props.row.type === "hunk-header") {
-		const isCurrent = props.row.hunkId === props.currentHunkId
+		const isCurrent = props.row.row.hunkId === props.currentHunkId
 		return (
 			<box backgroundColor={HUNK_HEADER_BG} paddingLeft={1}>
 				<text>
@@ -202,16 +227,21 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 							fg: isCurrent ? "#58a6ff" : "#6e7681",
 						}}
 					>
-						{props.row.content}
+						{props.row.row.content}
 					</span>
 				</text>
 			</box>
 		)
 	}
 
+	if (props.row.type !== "content") return null
+
+	const contentRow = props.row
 	return (
 		<DiffLineRow
-			row={props.row}
+			row={contentRow.row}
+			lineStart={contentRow.lineStart}
+			lineLength={contentRow.lineLength}
 			lineNumWidth={props.lineNumWidth}
 			highlighterReady={props.highlighterReady}
 		/>
@@ -220,6 +250,8 @@ function VirtualizedRow(props: VirtualizedRowProps) {
 
 interface DiffLineRowProps {
 	row: DiffRow
+	lineStart: number
+	lineLength: number
 	lineNumWidth: number
 	highlighterReady: () => boolean
 }
@@ -263,6 +295,7 @@ function DiffLineRow(props: DiffLineRowProps) {
 	})
 
 	const lineNum = createMemo(() => {
+		if (props.lineStart > 0) return " ".repeat(props.lineNumWidth)
 		const num =
 			props.row.type === "deletion"
 				? props.row.oldLineNumber
@@ -293,16 +326,92 @@ function DiffLineRow(props: DiffLineRowProps) {
 	})
 
 	return (
-		<box flexDirection="row" backgroundColor={lineBg()}>
+		<box flexDirection="row" backgroundColor={lineBg()} flexGrow={1}>
 			<text wrapMode="none">
 				<span style={{ fg: bar().color }}>{bar().char}</span>
 				<span style={{ fg: lineNumColor() }}> {lineNum()} </span>
 				<span style={{ fg: SEPARATOR_COLOR }}>│</span>
 				<span> </span>
-				<For each={tokens()}>
+				<For each={sliceTokens(tokens(), props.lineStart, props.lineLength)}>
 					{(token) => <span style={{ fg: token.color }}>{token.content}</span>}
 				</For>
+				<span> </span>
 			</text>
 		</box>
 	)
+}
+
+function buildWrappedRows(
+	rows: DiffRow[],
+	wrapWidth: number,
+	wrapEnabled: boolean,
+): WrappedRow[] {
+	const result: WrappedRow[] = []
+
+	for (const row of rows) {
+		if (row.type === "file-header" || row.type === "hunk-header") {
+			result.push({ type: row.type, row })
+			continue
+		}
+
+		const content = row.content.replace(/\n$/, "")
+		const contentLength = content.length
+		if (!wrapEnabled) {
+			result.push({
+				type: "content",
+				row,
+				lineStart: 0,
+				lineLength: contentLength,
+			})
+			continue
+		}
+
+		const width = Math.max(1, wrapWidth)
+		const totalLines = Math.max(1, Math.ceil(contentLength / width))
+
+		for (let i = 0; i < totalLines; i += 1) {
+			const start = i * width
+			const lineLength = Math.min(width, Math.max(0, contentLength - start))
+			result.push({
+				type: "content",
+				row,
+				lineStart: start,
+				lineLength,
+			})
+		}
+	}
+
+	return result
+}
+
+function sliceTokens<T extends { content: string }>(
+	tokens: T[],
+	start: number,
+	length: number,
+): T[] {
+	if (length <= 0) return []
+	const end = start + length
+	let offset = 0
+	const result: T[] = []
+
+	for (const token of tokens) {
+		const tokenLength = token.content.length
+		const tokenStart = offset
+		const tokenEnd = offset + tokenLength
+		offset = tokenEnd
+
+		if (tokenEnd <= start) continue
+		if (tokenStart >= end) break
+
+		const sliceStart = Math.max(0, start - tokenStart)
+		const sliceEnd = Math.min(tokenLength, end - tokenStart)
+		if (sliceEnd > sliceStart) {
+			result.push({
+				...token,
+				content: token.content.slice(sliceStart, sliceEnd),
+			})
+		}
+	}
+
+	return result
 }
