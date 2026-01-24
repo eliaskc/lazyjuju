@@ -28,6 +28,7 @@ import {
 	getMaxLineNumber,
 } from "../../diff"
 import { getFilePaths } from "../../utils/file-tree"
+import { truncatePathMiddle } from "../../utils/path-truncate"
 import { AnsiText } from "../AnsiText"
 import { Panel } from "../Panel"
 import { VirtualizedSplitView, VirtualizedUnifiedView } from "../diff"
@@ -77,7 +78,9 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 			<For each={s().files}>
 				{(file) => {
 					// Calculate available width for bar based on actual path length
-					const pathLen = file.path.length
+					const maxPathWidth = Math.max(1, Math.floor(props.maxWidth * 0.75))
+					const pathText = truncatePathMiddle(file.path, maxPathWidth)
+					const pathLen = pathText.length
 					const availableBarWidth = Math.max(
 						1,
 						props.maxWidth - pathLen - separatorWidth - barMargin,
@@ -89,7 +92,7 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
 					)
 					return (
 						<text wrapMode="none">
-							<span style={{ fg: colors().text }}>{file.path}</span>
+							<span style={{ fg: colors().text }}>{pathText}</span>
 							{" | "}
 							<span style={{ fg: colors().success }}>
 								{"+".repeat(bar.plus)}
