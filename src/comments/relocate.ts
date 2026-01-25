@@ -1,6 +1,10 @@
-import type { Hunk } from "../diff/parser"
-import type { DiffFile } from "../diff/parser"
-import type { CommentAnchor, HunkComments, RevisionComments } from "./types"
+import type { DiffFile, Hunk } from "../diff/parser"
+import type {
+	CommentAnchor,
+	CommentAnchorHunk,
+	CommentAnchorLine,
+	RevisionCommentsV2,
+} from "./types"
 
 export interface HunkIndexEntry {
 	id: string
@@ -11,6 +15,13 @@ export interface HunkIndexEntry {
 	newCount: number
 	contextLines: string[]
 	hunk: Hunk
+}
+
+interface LineCandidate {
+	filePath: string
+	lineNumber: number
+	side: "new" | "old"
+	contextLines: string[]
 }
 
 export function getContextLines(hunk: Hunk, maxLines = 5): string[] {
@@ -25,8 +36,14 @@ export function getContextLines(hunk: Hunk, maxLines = 5): string[] {
 	return lines
 }
 
-export function buildAnchor(filePath: string, hunk: Hunk): CommentAnchor {
+export function buildHunkAnchor(
+	id: string,
+	filePath: string,
+	hunk: Hunk,
+): CommentAnchorHunk {
 	return {
+		id,
+		type: "hunk",
 		filePath,
 		lineRange: {
 			oldStart: hunk.deletionStart,
@@ -35,6 +52,7 @@ export function buildAnchor(filePath: string, hunk: Hunk): CommentAnchor {
 			newCount: hunk.additionLines,
 		},
 		contextLines: getContextLines(hunk),
+		comments: [],
 	}
 }
 
@@ -61,6 +79,117 @@ export function buildHunkIndex(files: DiffFile[]): HunkIndexEntry[] {
 	return entries
 }
 
+function buildLineContext(
+	lines: Array<{ content: string }>,
+	index: number,
+	maxLines = 5,
+): string[] {
+	const start = Math.max(0, index - 2)
+	const end = Math.min(lines.length, index + 3)
+	const result: string[] = []
+	for (let i = start; i < end; i += 1) {
+		const text = lines[i]?.content.trim()
+		if (text) {
+			result.push(text)
+		}
+		if (result.length >= maxLines) break
+	}
+	return result
+}
+
+function buildLineCandidates(files: DiffFile[]): Map<string, LineCandidate[]> {
+	const byFile = new Map<string, LineCandidate[]>()
+	for (const file of files) {
+		const candidates: LineCandidate[] = []
+		for (const hunk of file.hunks) {
+			let oldLine = hunk.deletionStart
+			let newLine = hunk.additionStart
+			const lines: Array<{
+				type: "context" | "addition" | "deletion"
+				content: string
+				oldLineNumber?: number
+				newLineNumber?: number
+			}> = []
+
+			for (const content of hunk.hunkContent) {
+				if (content.type === "context") {
+					for (const line of content.lines) {
+						lines.push({
+							type: "context",
+							content: line,
+							oldLineNumber: oldLine,
+							newLineNumber: newLine,
+						})
+						oldLine += 1
+						newLine += 1
+					}
+					continue
+				}
+
+				for (const line of content.deletions) {
+					lines.push({
+						type: "deletion",
+						content: line,
+						oldLineNumber: oldLine,
+					})
+					oldLine += 1
+				}
+
+				for (const line of content.additions) {
+					lines.push({
+						type: "addition",
+						content: line,
+						newLineNumber: newLine,
+					})
+					newLine += 1
+				}
+			}
+
+			for (let index = 0; index < lines.length; index += 1) {
+				const entry = lines[index]
+				if (!entry) continue
+				const contextLines = buildLineContext(lines, index)
+				if (entry.type === "context") {
+					if (entry.newLineNumber) {
+						candidates.push({
+							filePath: file.name,
+							lineNumber: entry.newLineNumber,
+							side: "new",
+							contextLines,
+						})
+					}
+					if (entry.oldLineNumber) {
+						candidates.push({
+							filePath: file.name,
+							lineNumber: entry.oldLineNumber,
+							side: "old",
+							contextLines,
+						})
+					}
+				} else if (entry.type === "addition" && entry.newLineNumber) {
+					candidates.push({
+						filePath: file.name,
+						lineNumber: entry.newLineNumber,
+						side: "new",
+						contextLines,
+					})
+				} else if (entry.type === "deletion" && entry.oldLineNumber) {
+					candidates.push({
+						filePath: file.name,
+						lineNumber: entry.oldLineNumber,
+						side: "old",
+						contextLines,
+					})
+				}
+			}
+		}
+		if (candidates.length > 0) {
+			byFile.set(file.name, candidates)
+		}
+	}
+	return byFile
+}
+
 function overlapScore(a: string[], b: string[]): number {
 	if (a.length === 0 || b.length === 0) return 0
 	const aSet = new Set(a)
@@ -71,7 +200,10 @@ function overlapScore(a: string[], b: string[]): number {
 	return overlap / Math.max(a.length, b.length)
 }
 
-function lineScore(anchor: CommentAnchor, candidate: HunkIndexEntry): number {
+function lineScore(
+	anchor: CommentAnchorHunk,
+	candidate: HunkIndexEntry,
+): number {
 	const anchorStart =
 		anchor.lineRange.newCount > 0
 			? anchor.lineRange.newStart
@@ -82,7 +214,10 @@ function lineScore(anchor: CommentAnchor, candidate: HunkIndexEntry): number {
 	return 1 - Math.min(delta / 50, 1)
 }
 
-function matchScore(anchor: CommentAnchor, candidate: HunkIndexEntry): number {
+function matchScore(
+	anchor: CommentAnchorHunk,
+	candidate: HunkIndexEntry,
+): number {
 	if (anchor.contextLines.length === 0 || candidate.contextLines.length === 0) {
 		return lineScore(anchor, candidate)
 	}
@@ -91,10 +226,27 @@ function matchScore(anchor: CommentAnchor, candidate: HunkIndexEntry): number {
 	return context * 0.7 + lines * 0.3
 }
 
+function lineProximityScore(anchorLine: number, candidateLine: number): number {
+	const delta = Math.abs(anchorLine - candidateLine)
+	return 1 - Math.min(delta / 50, 1)
+}
+
+function matchLineScore(
+	anchor: CommentAnchorLine,
+	candidate: LineCandidate,
+): number {
+	if (anchor.contextLines.length === 0 || candidate.contextLines.length === 0) {
+		return lineProximityScore(anchor.lineNumber, candidate.lineNumber)
+	}
+	const context = overlapScore(anchor.contextLines, candidate.contextLines)
+	const lines = lineProximityScore(anchor.lineNumber, candidate.lineNumber)
+	return context * 0.7 + lines * 0.3
+}
+
 export function relocateRevision(
-	revision: RevisionComments,
+	revision: RevisionCommentsV2,
 	files: DiffFile[],
-): { updated: RevisionComments; changed: boolean } {
+): { updated: RevisionCommentsV2; changed: boolean } {
 	const entries = buildHunkIndex(files)
 	const byFile = new Map<string, HunkIndexEntry[]>()
 	for (const entry of entries) {
@@ -105,19 +257,77 @@ export function relocateRevision(
 			byFile.set(entry.filePath, [entry])
 		}
 	}
+	const lineCandidatesByFile = buildLineCandidates(files)
 
-	const used = new Set<string>()
-	const nextHunks: Record<string, HunkComments> = {}
+	const usedHunks = new Set<string>()
+	const usedLines = new Set<string>()
+	const nextAnchors: CommentAnchor[] = []
 	let changed = false
 
-	for (const [hunkId, hunkData] of Object.entries(revision.hunks)) {
-		const candidates = byFile.get(hunkData.anchor.filePath) ?? []
-		let best: HunkIndexEntry | null = null
-		let bestScore = -1
+	for (const anchor of revision.anchors) {
+		if (anchor.type === "hunk") {
+			const candidates = byFile.get(anchor.filePath) ?? []
+			let best: HunkIndexEntry | null = null
+			let bestScore = -1
 
+			for (const candidate of candidates) {
+				if (usedHunks.has(candidate.id)) continue
+				const score = matchScore(anchor, candidate)
+				if (score > bestScore) {
+					bestScore = score
+					best = candidate
+				}
+			}
+
+			if (best && bestScore >= 0.4) {
+				usedHunks.add(best.id)
+				const updatedAnchor: CommentAnchorHunk = {
+					id: best.id,
+					type: "hunk",
+					filePath: best.filePath,
+					lineRange: {
+						oldStart: best.oldStart,
+						oldCount: best.oldCount,
+						newStart: best.newStart,
+						newCount: best.newCount,
+					},
+					contextLines: best.contextLines,
+					comments: anchor.comments,
+					stale: false,
+				}
+
+				nextAnchors.push(updatedAnchor)
+
+				if (best.id !== anchor.id || anchor.stale) {
+					changed = true
+				}
+				continue
+			}
+
+			nextAnchors.push({
+				...anchor,
+				stale: true,
+			})
+			if (!anchor.stale) {
+				changed = true
+			}
+			continue
+		}
+
+		const candidates = lineCandidatesByFile.get(anchor.filePath)
+		if (!candidates || candidates.length === 0) {
+			nextAnchors.push(anchor)
+			continue
+		}
+
+		const allowSide = anchor.side ?? "new"
+		let best: LineCandidate | null = null
+		let bestScore = -1
 		for (const candidate of candidates) {
-			if (used.has(candidate.id)) continue
-			const score = matchScore(hunkData.anchor, candidate)
+			if (candidate.side !== allowSide) continue
+			const key = `${candidate.filePath}:${candidate.side}:${candidate.lineNumber}`
+			if (usedLines.has(key)) continue
+			const score = matchLineScore(anchor, candidate)
 			if (score > bestScore) {
 				bestScore = score
 				best = candidate
@@ -125,35 +335,31 @@ export function relocateRevision(
 		}
 
 		if (best && bestScore >= 0.4) {
-			used.add(best.id)
-			const updatedAnchor: CommentAnchor = {
+			const key = `${best.filePath}:${best.side}:${best.lineNumber}`
+			usedLines.add(key)
+			const updatedAnchor: CommentAnchorLine = {
+				...anchor,
 				filePath: best.filePath,
-				lineRange: {
-					oldStart: best.oldStart,
-					oldCount: best.oldCount,
-					newStart: best.newStart,
-					newCount: best.newCount,
-				},
+				lineNumber: best.lineNumber,
 				contextLines: best.contextLines,
-			}
-
-			nextHunks[best.id] = {
-				...hunkData,
-				anchor: updatedAnchor,
 				stale: false,
 			}
-
-			if (best.id !== hunkId || hunkData.stale) {
+			nextAnchors.push(updatedAnchor)
+			if (
+				updatedAnchor.lineNumber !== anchor.lineNumber ||
+				anchor.stale ||
+				updatedAnchor.contextLines.join("\n") !== anchor.contextLines.join("\n")
+			) {
 				changed = true
 			}
 			continue
 		}
 
-		nextHunks[hunkId] = {
-			...hunkData,
+		nextAnchors.push({
+			...anchor,
 			stale: true,
-		}
-		if (!hunkData.stale) {
+		})
+		if (!anchor.stale) {
 			changed = true
 		}
 	}
@@ -161,7 +367,7 @@ export function relocateRevision(
 	return {
 		updated: {
 			...revision,
-			hunks: nextHunks,
+			anchors: nextAnchors,
 		},
 		changed,
 	}
