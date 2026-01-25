@@ -1,6 +1,6 @@
 import { Toaster } from "@opentui-ui/toast/solid"
 import { useRenderer } from "@opentui/solid"
-import { Show, onMount } from "solid-js"
+import { Show, createSignal, onMount } from "solid-js"
 import {
 	fetchOpLog,
 	jjGitFetch,
@@ -11,10 +11,10 @@ import {
 } from "./commander/operations"
 import { ErrorScreen } from "./components/ErrorScreen"
 import { LayoutGrid } from "./components/Layout"
+import { WhatsNewScreen } from "./components/WhatsNewScreen"
 import { HelpModal } from "./components/modals/HelpModal"
 import { RecentReposModal } from "./components/modals/RecentReposModal"
 import { UndoModal } from "./components/modals/UndoModal"
-import { WhatsNewModal } from "./components/modals/WhatsNewModal"
 
 import { CommandProvider, useCommand } from "./context/command"
 import { CommandLogProvider, useCommandLog } from "./context/commandlog"
@@ -27,6 +27,7 @@ import { SyncProvider, useSync } from "./context/sync"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { setRepoPath } from "./repo"
 import { getChangesSince, parseChangelog } from "./utils/changelog"
+import type { VersionBlock } from "./utils/changelog"
 import { isCriticalStartupError, parseJjError } from "./utils/error-parser"
 import { readState, writeState } from "./utils/state"
 import { checkForUpdates, getCurrentVersion } from "./utils/update"
@@ -43,6 +44,9 @@ function AppContent() {
 	const globalLoading = useLoading()
 	const layout = useLayout()
 	const { colors, style } = useTheme()
+	const [whatsNewChanges, setWhatsNewChanges] = createSignal<
+		VersionBlock[] | null
+	>(null)
 
 	const hasCriticalError = () => {
 		const err = error()
@@ -93,26 +97,7 @@ function AppContent() {
 			const newChanges = getChangesSince(allBlocks, state.lastSeenVersion)
 
 			if (newChanges.length > 0) {
-				dialog.open(() => (
-					<WhatsNewModal
-						changes={newChanges}
-						onClose={() => {
-							dialog.close()
-							writeState({
-								...readState(),
-								lastSeenVersion: currentVersion,
-							})
-						}}
-						onDisable={() => {
-							dialog.close()
-							writeState({
-								...readState(),
-								lastSeenVersion: currentVersion,
-								whatsNewDisabled: true,
-							})
-						}}
-					/>
-				))
+				setWhatsNewChanges(newChanges)
 			} else {
 				writeState({ ...state, lastSeenVersion: currentVersion })
 			}
@@ -441,10 +426,34 @@ function AppContent() {
 	})
 
 	return (
-		<DialogContainer>
-			<LayoutGrid />
-			<Toaster {...toasterOptions()} />
-		</DialogContainer>
+		<Show
+			when={whatsNewChanges()}
+			fallback={
+				<DialogContainer>
+					<LayoutGrid />
+					<Toaster {...toasterOptions()} />
+				</DialogContainer>
+			}
+		>
+			<WhatsNewScreen
+				changes={whatsNewChanges() ?? []}
+				onClose={() => {
+					setWhatsNewChanges(null)
+					writeState({
+						...readState(),
+						lastSeenVersion: getCurrentVersion(),
+					})
+				}}
+				onDisable={() => {
+					setWhatsNewChanges(null)
+					writeState({
+						...readState(),
+						lastSeenVersion: getCurrentVersion(),
+						whatsNewDisabled: true,
+					})
+				}}
+			/>
+		</Show>
 	)
 }
 
