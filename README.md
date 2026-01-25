@@ -14,8 +14,6 @@ Why build this? While learning jj I found myself coming back to lazygit to do th
 
 Kajji is my attempt to bring the UX of lazygit to jj, while also aiming for top-class diff rendering and exploring leveraging coding agents effectively. I'm building this for myself first and foremost, but I hope it can be helpful to others too.
 
-> Disclaimer: almost all code in this project has been written by coding agents (primarily Claude Opus 4.5 through [OpenCode](https://github.com/sst/opencode) (100% via API of course 😌)).
-
 ## Installation
 
 > **Requirements**: [jj](https://github.com/martinvonz/jj)
@@ -86,6 +84,24 @@ Run `kajji` in any jj repository:
 ```bash
 kajji                    # current directory
 kajji /path/to/repo      # specific directory
+```
+
+### CLI
+
+Kajji includes a small CLI for scripting and agent workflows:
+
+```bash
+# List changes with addressable hunk IDs
+kajji changes -r @
+
+# Comments
+kajji comment list -r @
+kajji comment set -r @ --hunk h1 -m "note"
+kajji comment set -r @ --file src/App.tsx --line 12 -m "note"
+kajji comment delete -r @ --hunk h1
+kajji comment delete -r @ --file src/App.tsx --line 12
+kajji comment delete -r @ --file src/App.tsx
+kajji comment delete -r @ --all -y
 ```
 
 ### Keybindings
