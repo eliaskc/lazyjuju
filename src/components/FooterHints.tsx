@@ -56,7 +56,7 @@ export function FooterHints(props: FooterHintsProps) {
 				<box
 					border
 					borderStyle={style().panel.borderStyle}
-					borderColor={colors().border}
+					borderColor={colors().textMuted}
 					backgroundColor={colors().background}
 					paddingLeft={2}
 					paddingRight={2}

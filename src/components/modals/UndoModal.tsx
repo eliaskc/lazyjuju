@@ -45,15 +45,6 @@ export function UndoModal(props: UndoModalProps) {
 			: "Redo last operation?"
 	}
 
-	const hints = () => (
-		<text>
-			<span style={{ fg: colors().primary }}>y</span>
-			<span style={{ fg: colors().textMuted }}> confirm </span>
-			<span style={{ fg: colors().primary }}>n</span>
-			<span style={{ fg: colors().textMuted }}> cancel</span>
-		</text>
-	)
-
 	return (
 		<BorderBox
 			border
@@ -63,7 +54,6 @@ export function UndoModal(props: UndoModalProps) {
 			width="60%"
 			maxWidth={90}
 			topLeft={<text fg={colors().text}>{title()}</text>}
-			bottomRight={hints()}
 			paddingLeft={1}
 			paddingRight={1}
 		>

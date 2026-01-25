@@ -42,7 +42,7 @@ export function WhatsNewScreen(props: WhatsNewScreenProps) {
 				justifyContent="center"
 				alignItems="center"
 			>
-				<box flexDirection="column" alignItems="center" gap={1}>
+				<box flexDirection="column" alignItems="center">
 					<BorderBox
 						border
 						borderStyle={style().panel.borderStyle}
@@ -69,8 +69,8 @@ export function WhatsNewScreen(props: WhatsNewScreenProps) {
 					</BorderBox>
 					<FooterHints
 						hints={[
-							{ key: "enter", label: "dismiss" },
 							{ key: "d", label: "don't show again" },
+							{ key: "enter", label: "dismiss" },
 						]}
 						boxed
 					/>

@@ -9,7 +9,7 @@ import {
 	onMount,
 } from "solid-js"
 import { BorderBox } from "../components/BorderBox"
-import { DialogHints } from "../components/DialogHints"
+import { FooterHints } from "../components/FooterHints"
 import { createSimpleContext } from "./helper"
 import { useTheme } from "./theme"
 
@@ -204,21 +204,14 @@ function DialogBackdrop(props: { onClose: () => void; children: JSX.Element }) {
 			justifyContent="center"
 			alignItems="center"
 		>
-			<box flexDirection="column" alignItems="center" width={overlayWidth()}>
+			<box
+				flexDirection="column"
+				alignItems="center"
+				width={overlayWidth()}
+				gap={1}
+			>
 				{props.children}
-				<Show when={dialog.hints().length > 0}>
-					<box
-						border
-						borderStyle={style().panel.borderStyle}
-						borderColor={colors().border}
-						backgroundColor={colors().background}
-						paddingLeft={2}
-						paddingRight={2}
-						alignItems="center"
-					>
-						<DialogHints />
-					</box>
-				</Show>
+				<FooterHints hints={dialog.hints()} boxed />
 			</box>
 		</box>
 	)
