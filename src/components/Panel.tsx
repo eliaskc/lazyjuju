@@ -11,6 +11,8 @@ interface Tab {
 	context: Context
 }
 
+type CornerContent = JSX.Element | string | (() => JSX.Element | string)
+
 interface PanelProps {
 	title?: string
 	tabs?: Tab[]
@@ -19,6 +21,7 @@ interface PanelProps {
 	panelId?: PanelType
 	hotkey: string
 	focused: boolean
+	topRight?: CornerContent
 	children: JSX.Element
 }
 
@@ -130,6 +133,7 @@ export function Panel(props: PanelProps) {
 	return (
 		<BorderBox
 			topLeft={renderTitle}
+			topRight={props.topRight}
 			border
 			borderStyle={style().panel.borderStyle}
 			borderColor={props.focused ? colors().borderFocused : colors().border}

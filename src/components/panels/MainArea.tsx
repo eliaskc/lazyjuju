@@ -1,3 +1,4 @@
+import { basename } from "node:path"
 import type {
 	BoxRenderable,
 	MouseEvent,
@@ -27,6 +28,7 @@ import {
 	getLineNumWidth,
 	getMaxLineNumber,
 } from "../../diff"
+import { getRepoPath } from "../../repo"
 import { getFilePaths } from "../../utils/file-tree"
 import { truncatePathMiddle } from "../../utils/path-truncate"
 import { AnsiText } from "../AnsiText"
@@ -309,6 +311,21 @@ export function MainArea() {
 	)
 	const [activeFileIndex, setActiveFileIndex] = createSignal(0)
 	const [activeHunkIndex, setActiveHunkIndex] = createSignal(0)
+
+	const repoInfo = createMemo(() => {
+		activeCommit()
+		const repoPath = getRepoPath()
+		const repoName = basename(repoPath)
+		return {
+			repoName,
+		}
+	})
+
+	const renderRepoInfo = () => (
+		<text fg={isFocused() ? colors().borderFocused : colors().border}>
+			{repoInfo().repoName}
+		</text>
+	)
 
 	// Derived state
 	const activeFileId = createMemo(() => {
@@ -755,7 +772,13 @@ export function MainArea() {
 	const hasContent = () => parsedFiles().length > 0
 
 	return (
-		<Panel title="Detail" hotkey="3" panelId="detail" focused={isFocused()}>
+		<Panel
+			title="Detail"
+			hotkey="3"
+			panelId="detail"
+			focused={isFocused()}
+			topRight={renderRepoInfo}
+		>
 			<Show when={hasError()}>
 				<text>Error: {hasError()}</text>
 			</Show>
