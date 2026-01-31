@@ -210,6 +210,24 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		null,
 	)
 	const [revsetError, setRevsetError] = createSignal<string | null>(null)
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequence
+	const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, "")
+	const cleanRevsetError = (message: string) => {
+		const stripped = stripAnsi(message)
+		const firstLine =
+			stripped.split("\n").find((line) => line.trim().length > 0) ?? stripped
+		let cleaned = firstLine.trim()
+		while (true) {
+			const next = cleaned
+				.replace(/^jj log failed:\s*/i, "")
+				.replace(/^error:\s*/i, "")
+				.replace(/^fatal:\s*/i, "")
+				.trim()
+			if (next === cleaned) break
+			cleaned = next
+		}
+		return cleaned || stripped.trim() || "Failed to load log"
+	}
 
 	const setRevsetFilter = (revset: string | null) => {
 		setRevsetFilterSignal(revset)
@@ -923,14 +941,10 @@ export function SyncProvider(props: { children: JSX.Element }) {
 					},
 					onError: (error) => {
 						if (token !== logStreamToken) return
-						const msg = error.message || "Failed to load log"
+						const msg =
+							error instanceof Error ? error.message : "Failed to load log"
 						if (filter) {
-							const firstLine =
-								msg
-									.split("\n")[0]
-									?.replace(/^jj log failed:\s*/i, "")
-									.replace(/^Error:\s*/i, "") || msg
-							setRevsetError(firstLine)
+							setRevsetError(cleanRevsetError(msg))
 						} else {
 							setError(msg)
 						}
@@ -938,7 +952,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 						logStreamHandle = null
 						logStreamResolve = null
 						logStreamReject = null
-						reject(error)
+						resolve()
 					},
 				},
 			)
@@ -1010,14 +1024,10 @@ export function SyncProvider(props: { children: JSX.Element }) {
 					},
 					onError: (error) => {
 						if (token !== logStreamToken) return
-						const msg = error.message || "Failed to load log"
+						const msg =
+							error instanceof Error ? error.message : "Failed to load log"
 						if (filter) {
-							const firstLine =
-								msg
-									.split("\n")[0]
-									?.replace(/^jj log failed:\s*/i, "")
-									.replace(/^Error:\s*/i, "") || msg
-							setRevsetError(firstLine)
+							setRevsetError(cleanRevsetError(msg))
 						} else {
 							setError(msg)
 						}
@@ -1025,7 +1035,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 						logStreamHandle = null
 						logStreamResolve = null
 						logStreamReject = null
-						reject(error)
+						resolve()
 					},
 				},
 			)

@@ -39,7 +39,6 @@ import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
 import { useFocus } from "../../context/focus"
 import { useKeybind } from "../../context/keybind"
-import { useLayout } from "../../context/layout"
 import { useLoading } from "../../context/loading"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
@@ -106,7 +105,6 @@ export function LogPanel() {
 	const dialog = useDialog()
 	const globalLoading = useLoading()
 	const keybind = useKeybind()
-	const layout = useLayout()
 	const { colors } = useTheme()
 
 	const [activeTab, setActiveTab] = createSignal<LogTab>("revisions")
@@ -129,7 +127,7 @@ export function LogPanel() {
 	const errorContent = () => {
 		const err = revsetError()
 		if (err === null) return null
-		const width = Math.max(0, layout.terminalWidth() - 2)
+		const width = Math.max(0, logViewportWidth() - 2)
 		const trimmed = err.length > width ? err.slice(0, width) : err
 		const padding = " ".repeat(Math.max(0, width - trimmed.length))
 		return trimmed + padding
@@ -1171,9 +1169,11 @@ export function LogPanel() {
 				>
 					{/* Error line */}
 					<Show when={errorContent()}>
-						<text paddingLeft={1} fg={colors().error} wrapMode="none">
-							{errorContent()}
-						</text>
+						<box paddingLeft={1} paddingRight={1} height={1} overflow="hidden">
+							<text fg={colors().error} wrapMode="none">
+								{errorContent()}
+							</text>
+						</box>
 					</Show>
 
 					{/* Divider */}
