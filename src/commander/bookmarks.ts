@@ -1,10 +1,41 @@
-import { execute, executeStreaming } from "./executor"
+import { execute, executeStreaming, executeWithColor } from "./executor"
 import type { OperationResult } from "./operations"
+
+const BOOKMARK_MARKER = "__BJ__"
+const BOOKMARK_DESCRIPTION =
+	'if(normal_target, if(normal_target.empty(), label("empty", "(empty) "), "") ++ if(normal_target.description().first_line(), normal_target.description().first_line(), label("description placeholder", "(no description set)")), "")'
+
+const BOOKMARK_TEMPLATE = [
+	`"${BOOKMARK_MARKER}"`,
+	"name",
+	`"${BOOKMARK_MARKER}"`,
+	'label("bookmark name", name)',
+	`"${BOOKMARK_MARKER}"`,
+	'if(remote, remote, "")',
+	`"${BOOKMARK_MARKER}"`,
+	'pad_end(8, truncate_end(8, coalesce(if(normal_target, format_short_change_id(normal_target.change_id()), ""), self.added_targets().map(|c| format_short_change_id(c.change_id())).join(","), self.removed_targets().map(|c| format_short_change_id(c.change_id())).join(","))))',
+	`"${BOOKMARK_MARKER}"`,
+	'coalesce(if(normal_target, format_short_commit_id(normal_target.commit_id()), ""), self.added_targets().map(|c| format_short_commit_id(c.commit_id())).join(","), self.removed_targets().map(|c| format_short_commit_id(c.commit_id())).join(","))',
+	`"${BOOKMARK_MARKER}"`,
+	'coalesce(if(normal_target, normal_target.change_id(), ""), self.added_targets().map(|c| c.change_id()).join(","), self.removed_targets().map(|c| c.change_id()).join(","))',
+	`"${BOOKMARK_MARKER}"`,
+	'coalesce(if(normal_target, normal_target.commit_id(), ""), self.added_targets().map(|c| c.commit_id()).join(","), self.removed_targets().map(|c| c.commit_id()).join(","))',
+	`"${BOOKMARK_MARKER}"`,
+	`coalesce(${BOOKMARK_DESCRIPTION}, self.added_targets().map(|c| if(c.empty(), label("empty", "(empty) "), "") ++ if(c.description().first_line(), c.description().first_line(), label("description placeholder", "(no description set)"))).join(", "), self.removed_targets().map(|c| if(c.empty(), label("empty", "(empty) "), "") ++ if(c.description().first_line(), c.description().first_line(), label("description placeholder", "(no description set)"))).join(", "))`,
+	'"\\n"',
+].join(" ++ ")
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence
+const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, "")
 
 export interface Bookmark {
 	name: string
+	nameDisplay: string
 	changeId: string
 	commitId: string
+	changeIdDisplay: string
+	commitIdDisplay: string
+	descriptionDisplay: string
 	description: string
 	isLocal: boolean
 	remote?: string
@@ -18,13 +49,20 @@ export interface FetchBookmarksOptions {
 export async function fetchBookmarks(
 	options: FetchBookmarksOptions = {},
 ): Promise<Bookmark[]> {
-	const args = ["bookmark", "list", "--sort", "committer-date-"]
+	const args = [
+		"bookmark",
+		"list",
+		"--sort",
+		"committer-date-",
+		"--template",
+		BOOKMARK_TEMPLATE,
+	]
 
 	if (options.allRemotes) {
 		args.push("--all-remotes")
 	}
 
-	const result = await execute(args, { cwd: options.cwd })
+	const result = await executeWithColor(args, { cwd: options.cwd })
 
 	// Check for critical errors in both stdout and stderr (jj sometimes outputs errors to stdout)
 	const combinedOutput = result.stdout + result.stderr
@@ -49,7 +87,16 @@ export function fetchBookmarksStream(
 	options: FetchBookmarksOptions,
 	callbacks: BookmarkStreamCallbacks,
 ): { cancel: () => void } {
-	const args = ["bookmark", "list", "--sort", "committer-date-"]
+	const args = [
+		"--color",
+		"always",
+		"bookmark",
+		"list",
+		"--sort",
+		"committer-date-",
+		"--template",
+		BOOKMARK_TEMPLATE,
+	]
 	if (options.allRemotes) {
 		args.push("--all-remotes")
 	}
@@ -97,34 +144,33 @@ export function parseBookmarkOutput(output: string): Bookmark[] {
 	const lines = output.split("\n")
 
 	for (const line of lines) {
-		if (!line.trim()) continue
+		if (!line.includes(BOOKMARK_MARKER)) continue
+		const parts = line.split(BOOKMARK_MARKER)
+		if (parts.length < 9) continue
 
-		const isRemote = line.startsWith("  @")
+		const name = stripAnsi(parts[1] ?? "")
+		const nameDisplay = parts[2] ?? ""
+		const remote = stripAnsi(parts[3] ?? "")
+		const changeIdDisplay = parts[4] ?? ""
+		const commitIdDisplay = parts[5] ?? ""
+		const changeId = stripAnsi(parts[6] ?? "")
+		const commitId = stripAnsi(parts[7] ?? "")
+		const descriptionDisplay = parts[8] ?? ""
+		const description = stripAnsi(descriptionDisplay).trim()
+		const isLocal = remote.length === 0
 
-		if (isRemote) {
-			const match = line.match(/^\s+@(\S+):\s+(\S+)\s+(\S+)\s*(.*)$/)
-			if (match) {
-				bookmarks.push({
-					name: match[1] ?? "",
-					changeId: match[2] ?? "",
-					commitId: match[3] ?? "",
-					description: match[4]?.trim() ?? "",
-					isLocal: false,
-					remote: match[1],
-				})
-			}
-		} else {
-			const match = line.match(/^(\S+):\s+(\S+)\s+(\S+)\s*(.*)$/)
-			if (match) {
-				bookmarks.push({
-					name: match[1] ?? "",
-					changeId: match[2] ?? "",
-					commitId: match[3] ?? "",
-					description: match[4]?.trim() ?? "",
-					isLocal: true,
-				})
-			}
-		}
+		bookmarks.push({
+			name,
+			nameDisplay,
+			changeId,
+			commitId,
+			changeIdDisplay,
+			commitIdDisplay,
+			descriptionDisplay,
+			description,
+			isLocal,
+			remote: isLocal ? undefined : remote,
+		})
 	}
 
 	return bookmarks

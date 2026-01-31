@@ -44,6 +44,7 @@ import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { createDoubleClickDetector } from "../../utils/double-click"
 import { FUZZY_THRESHOLD, scrollIntoView } from "../../utils/scroll"
+import { AnsiText } from "../AnsiText"
 import { FilterInput } from "../FilterInput"
 import {
 	FilterableFileTree,
@@ -62,7 +63,6 @@ export function BookmarksPanel() {
 		commits,
 		bookmarks,
 		visibleBookmarks,
-		bookmarkLimit,
 		loadMoreBookmarks,
 		bookmarksHasMore,
 		bookmarksLoadingMore,
@@ -118,9 +118,18 @@ export function BookmarksPanel() {
 
 	const isFocused = () => focus.isPanel("refs")
 	const localBookmarks = () => bookmarks().filter((b) => b.isLocal)
-	const visibleLocalBookmarks = createMemo(() =>
-		visibleBookmarks().filter((bookmark) => bookmark.isLocal),
+
+	const activeLocalBookmarks = createMemo(() =>
+		visibleBookmarks().filter((b) => b.isLocal && b.changeId),
 	)
+	const deletedLocalBookmarks = createMemo(() =>
+		visibleBookmarks().filter((b) => b.isLocal && !b.changeId),
+	)
+
+	const visibleLocalBookmarks = createMemo(() => [
+		...activeLocalBookmarks(),
+		...deletedLocalBookmarks(),
+	])
 
 	const [filterMode, setFilterModeInternal] = createSignal(false)
 	const [filterQuery, setFilterQuery] = createSignal("")
@@ -193,7 +202,6 @@ export function BookmarksPanel() {
 		),
 	)
 
-	// Sync filter selection back to parent
 	createEffect(
 		on(
 			() =>
@@ -1107,6 +1115,7 @@ export function BookmarksPanel() {
 												}
 												handleDoubleClick()
 											}
+											const isDeleted = () => !bookmark.changeId
 											return (
 												<box
 													backgroundColor={
@@ -1117,15 +1126,53 @@ export function BookmarksPanel() {
 													overflow="hidden"
 													onMouseDown={handleMouseDown}
 												>
-													<text>
-														<span style={{ fg: colors().primary }}>
-															{bookmark.name}
-														</span>
-														<span style={{ fg: colors().textMuted }}>
-															{" "}
-															{bookmark.changeId.slice(0, 8)}
-														</span>
-													</text>
+													<box
+														flexDirection="row"
+														flexGrow={1}
+														overflow="hidden"
+													>
+														<box flexDirection="row" flexShrink={0}>
+															<Show
+																when={!isDeleted()}
+																fallback={
+																	<text fg={colors().error} wrapMode="none">
+																		{"–deleted "}
+																	</text>
+																}
+															>
+																<AnsiText
+																	content={
+																		bookmark.changeIdDisplay ||
+																		bookmark.changeId
+																	}
+																	wrapMode="none"
+																/>
+																<text fg={colors().textMuted} wrapMode="none">
+																	{" "}
+																</text>
+															</Show>
+															<AnsiText
+																content={bookmark.nameDisplay || bookmark.name}
+																wrapMode="none"
+															/>
+															<Show when={!isDeleted()}>
+																<text fg={colors().textMuted} wrapMode="none">
+																	{" "}
+																</text>
+															</Show>
+														</box>
+														<Show when={!isDeleted()}>
+															<box flexGrow={1} overflow="hidden">
+																<AnsiText
+																	content={
+																		bookmark.descriptionDisplay ||
+																		bookmark.description
+																	}
+																	wrapMode="none"
+																/>
+															</box>
+														</Show>
+													</box>
 												</box>
 											)
 										}}
