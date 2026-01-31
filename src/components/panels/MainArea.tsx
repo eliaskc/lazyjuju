@@ -272,14 +272,7 @@ function CommitHeader(props: {
 }
 
 export function MainArea() {
-	const {
-		activeCommit,
-		commitDetails,
-		viewMode,
-		selectedFile,
-		bookmarkViewMode,
-		selectedBookmarkFile,
-	} = useSync()
+	const { activeCommit, commitDetails, viewMode, selectedFile } = useSync()
 	const layout = useLayout()
 	const { mainAreaWidth } = layout
 	const { colors } = useTheme()
@@ -493,22 +486,12 @@ export function MainArea() {
 	createEffect(() => {
 		const commit = activeCommit()
 		const vMode = viewMode()
-		const bmMode = bookmarkViewMode()
-		const focusedPanel = focus.panel()
-
 		if (!commit) return
 
 		let paths: string[] | undefined
 
 		// Determine file paths based on context (mirrors sync.tsx logic)
-		if (focusedPanel === "refs" && bmMode === "files") {
-			const file = selectedBookmarkFile()
-			if (file) {
-				paths = file.node.isDirectory
-					? getFilePaths(file.node)
-					: [file.node.path]
-			}
-		} else if (vMode === "files") {
+		if (vMode === "files") {
 			const file = selectedFile()
 			if (file) {
 				paths = file.node.isDirectory
@@ -802,9 +785,7 @@ export function MainArea() {
 						<Show when={activeCommit()}>
 							{(commit: () => Commit) => (
 								<Show
-									when={
-										viewMode() !== "files" && bookmarkViewMode() !== "files"
-									}
+									when={viewMode() !== "files"}
 									fallback={
 										<MinimalCommitHeader
 											commit={commit()}

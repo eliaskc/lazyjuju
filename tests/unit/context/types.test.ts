@@ -20,8 +20,6 @@ describe("panelFromContext", () => {
 	test("returns refs for refs panel contexts", () => {
 		expect(panelFromContext("refs")).toBe("refs")
 		expect(panelFromContext("refs.bookmarks")).toBe("refs")
-		expect(panelFromContext("refs.revisions")).toBe("refs")
-		expect(panelFromContext("refs.files")).toBe("refs")
 	})
 
 	test("returns detail for detail panel context", () => {

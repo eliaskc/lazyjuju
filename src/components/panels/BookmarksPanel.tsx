@@ -1,11 +1,9 @@
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useKeyboard } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import {
 	For,
-	Match,
 	Show,
-	Switch,
 	createEffect,
 	createMemo,
 	createSignal,
@@ -20,20 +18,7 @@ import {
 	jjBookmarkRename,
 	jjBookmarkSet,
 } from "../../commander/bookmarks"
-import {
-	type OperationResult,
-	isImmutableError,
-	jjAbandon,
-	jjDescribe,
-	jjEdit,
-	jjNew,
-	jjNewBefore,
-	jjRebase,
-	jjRestore,
-	jjShowDescription,
-	jjSplitInteractive,
-	jjSquash,
-} from "../../commander/operations"
+import type { OperationResult } from "../../commander/operations"
 import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
@@ -46,19 +31,11 @@ import { createDoubleClickDetector } from "../../utils/double-click"
 import { FUZZY_THRESHOLD, scrollIntoView } from "../../utils/scroll"
 import { AnsiText } from "../AnsiText"
 import { FilterInput } from "../FilterInput"
-import {
-	FilterableFileTree,
-	type FilterableFileTreeApi,
-} from "../FilterableFileTree"
 import { Panel } from "../Panel"
 import { BookmarkNameModal } from "../modals/BookmarkNameModal"
-import { DescribeModal } from "../modals/DescribeModal"
-import { RebaseModal } from "../modals/RebaseModal"
 import { RevisionPickerModal } from "../modals/RevisionPickerModal"
-import { SetBookmarkModal } from "../modals/SetBookmarkModal"
 
 export function BookmarksPanel() {
-	const renderer = useRenderer()
 	const {
 		commits,
 		bookmarks,
@@ -73,28 +50,8 @@ export function BookmarksPanel() {
 		bookmarksError,
 		selectNextBookmark,
 		selectPrevBookmark,
-		bookmarkViewMode,
-		bookmarkCommits,
-		selectedBookmarkCommitIndex,
-		setSelectedBookmarkCommitIndex,
-		bookmarkCommitsLoading,
-		bookmarkCommitsHasMore,
-		loadMoreBookmarkCommits,
-		bookmarkFlatFiles,
-		selectedBookmarkFileIndex,
-		setSelectedBookmarkFileIndex,
-		bookmarkFilesLoading,
-		bookmarkCollapsedPaths,
-		activeBookmarkName,
-		selectedBookmarkCommit,
-		enterBookmarkCommitsView,
-		enterBookmarkFilesView,
-		exitBookmarkView,
-		selectPrevBookmarkCommit,
-		selectNextBookmarkCommit,
-		selectPrevBookmarkFile,
-		selectNextBookmarkFile,
-		toggleBookmarkFolder,
+		setRevsetFilter,
+		loadLog,
 	} = useSync()
 	const focus = useFocus()
 	const command = useCommand()
@@ -282,7 +239,6 @@ export function BookmarksPanel() {
 
 	useKeyboard((evt) => {
 		if (!isFocused()) return
-		if (bookmarkViewMode() !== "list") return
 
 		if (!filterMode() && hasActiveFilter() && evt.name === "escape") {
 			evt.preventDefault()
@@ -331,15 +287,9 @@ export function BookmarksPanel() {
 	})
 
 	let listScrollRef: ScrollBoxRenderable | undefined
-	let commitsScrollRef: ScrollBoxRenderable | undefined
-	let filesScrollRef: ScrollBoxRenderable | undefined
-	let filesFilterApi: FilterableFileTreeApi | undefined
 
 	const [listScrollTop, setListScrollTop] = createSignal(0)
 	const [listViewportHeight, setListViewportHeight] = createSignal(30)
-	const [commitsScrollTop, setCommitsScrollTop] = createSignal(0)
-	const [filesScrollTop, setFilesScrollTop] = createSignal(0)
-
 	const listThreshold = createMemo(() => {
 		const buffer = Math.max(20, listViewportHeight() * 4)
 		return Math.max(0, listTotalRows() - buffer)
@@ -349,7 +299,6 @@ export function BookmarksPanel() {
 		on(
 			() => currentSelectedIndex(),
 			(index) => {
-				if (bookmarkViewMode() !== "list") return
 				scrollIntoView({
 					ref: listScrollRef,
 					index,
@@ -366,33 +315,9 @@ export function BookmarksPanel() {
 		setListViewportHeight(30)
 	})
 
-	createEffect(
-		on(selectedBookmarkCommitIndex, (index) => {
-			scrollIntoView({
-				ref: commitsScrollRef,
-				index,
-				currentScrollTop: commitsScrollTop(),
-				listLength: bookmarkCommits().length,
-				setScrollTop: setCommitsScrollTop,
-			})
-		}),
-	)
-
-	createEffect(
-		on(selectedBookmarkFileIndex, (index) => {
-			scrollIntoView({
-				ref: filesScrollRef,
-				index,
-				currentScrollTop: filesScrollTop(),
-				listLength: bookmarkFlatFiles().length,
-				setScrollTop: setFilesScrollTop,
-			})
-		}),
-	)
-
 	onMount(() => {
 		const pollInterval = setInterval(() => {
-			if (bookmarkViewMode() !== "list" || !listScrollRef) return
+			if (!listScrollRef) return
 			const currentScroll = listScrollRef.scrollTop ?? 0
 			const currentViewport = listScrollRef.viewport?.height ?? 30
 			if (currentScroll !== listScrollTop()) {
@@ -411,897 +336,328 @@ export function BookmarksPanel() {
 		onCleanup(() => clearInterval(pollInterval))
 	})
 
-	const title = () => {
-		const mode = bookmarkViewMode()
-		if (mode === "files") {
-			const commit = selectedBookmarkCommit()
-			return commit ? `Files (${commit.changeId.slice(0, 8)})` : "Files"
-		}
-		if (mode === "commits") {
-			return `Revisions (${activeBookmarkName()})`
-		}
-		return "Bookmarks"
-	}
+	const title = () => "Bookmarks"
 
 	const handleListEnter = () => {
-		enterBookmarkCommitsView()
+		const bookmark = selectedBookmark()
+		if (!bookmark) return
+		setRevsetFilter(`::${bookmark.name}`)
+		loadLog()
+		focus.setActiveContext("log.revisions")
 	}
 
-	const handleCommitsEnter = () => {
-		enterBookmarkFilesView()
-	}
-
-	const selectNextBookmarkCommitWithLoad = () => {
-		if (bookmarkCommitsLoading()) return
-		selectNextBookmarkCommit()
-		const list = bookmarkCommits()
-		const index = selectedBookmarkCommitIndex()
-		if (list.length - index <= 5 && bookmarkCommitsHasMore()) {
-			loadMoreBookmarkCommits()
-		}
-	}
-
-	const handleFilesEnter = () => {
-		const file = bookmarkFlatFiles()[selectedBookmarkFileIndex()]
-		if (file?.node.isDirectory) {
-			toggleBookmarkFolder(file.node.path)
-		}
-	}
-
-	command.register(() => {
-		const mode = bookmarkViewMode()
-
-		if (mode === "files") {
-			return [
-				{
-					id: "refs.files.next",
-					title: "next file",
-					keybind: "nav_down",
-					context: "refs.files",
-					type: "navigation",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: () => {
-						if (filesFilterApi) {
-							filesFilterApi.selectNext()
-						} else {
-							selectNextBookmarkFile()
-						}
-					},
-				},
-				{
-					id: "refs.files.prev",
-					title: "previous file",
-					keybind: "nav_up",
-					context: "refs.files",
-					type: "navigation",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: () => {
-						if (filesFilterApi) {
-							filesFilterApi.selectPrev()
-						} else {
-							selectPrevBookmarkFile()
-						}
-					},
-				},
-				{
-					id: "refs.files.toggle",
-					title: "toggle folder",
-					keybind: "enter",
-					context: "refs.files",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: handleFilesEnter,
-				},
-				{
-					id: "refs.files.back",
-					title: "back",
-					keybind: "escape",
-					context: "refs.files",
-					type: "view",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: exitBookmarkView,
-				},
-				{
-					id: "refs.files.filter",
-					title: "filter",
-					keybind: "search",
-					context: "refs.files",
-					type: "view",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: () => filesFilterApi?.activateFilter(),
-				},
-				{
-					id: "refs.files.restore",
-					title: "restore",
-					keybind: "jj_restore",
-					context: "refs.files",
-					type: "action",
-					panel: "refs",
-					onSelect: async () => {
-						const file = bookmarkFlatFiles()[selectedBookmarkFileIndex()]
-						if (!file) return
-						const node = file.node
-						const pathType = node.isDirectory ? "folder" : "file"
-						const confirmed = await dialog.confirm({
-							message: `Restore ${pathType} "${node.path}"? This will discard changes.`,
-						})
-						if (confirmed) {
-							await runOperation("Restoring...", () => jjRestore([node.path]))
-						}
-					},
-				},
-			]
-		}
-
-		if (mode === "commits") {
-			return [
-				{
-					id: "refs.revisions.next",
-					title: "down",
-					keybind: "nav_down",
-					context: "refs.revisions",
-					type: "navigation",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: selectNextBookmarkCommitWithLoad,
-				},
-				{
-					id: "refs.revisions.prev",
-					title: "up",
-					keybind: "nav_up",
-					context: "refs.revisions",
-					type: "navigation",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: selectPrevBookmarkCommit,
-				},
-				{
-					id: "refs.revisions.view_files",
-					title: "view files",
-					keybind: "enter",
-					context: "refs.revisions",
-					type: "view",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: handleCommitsEnter,
-				},
-				{
-					id: "refs.revisions.back",
-					title: "back",
-					keybind: "escape",
-					context: "refs.revisions",
-					type: "view",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: exitBookmarkView,
-				},
-				{
-					id: "refs.revisions.new",
-					title: "new",
-					keybind: "jj_new",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					onSelect: () => {
-						const commit = selectedBookmarkCommit()
-						if (commit)
-							runOperation("Creating...", () => jjNew(commit.changeId))
-					},
-				},
-				{
-					id: "refs.revisions.new_before",
-					title: "new before",
-					keybind: "jj_new_before",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: () => {
-						const commit = selectedBookmarkCommit()
-						if (commit)
-							runOperation("Creating...", () => jjNewBefore(commit.changeId))
-					},
-				},
-				{
-					id: "refs.revisions.edit",
-					title: "edit",
-					keybind: "jj_edit",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: async () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-						const result = await jjEdit(commit.changeId)
-						if (isImmutableError(result)) {
-							const confirmed = await dialog.confirm({
-								message: "Commit is immutable. Edit anyway?",
-							})
-							if (confirmed) {
-								await runOperation("Editing...", () =>
-									jjEdit(commit.changeId, { ignoreImmutable: true }),
+	command.register(() => [
+		{
+			id: "refs.bookmarks.next",
+			title: "down",
+			keybind: "nav_down",
+			context: "refs.bookmarks",
+			type: "navigation",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: selectNextBookmarkInView,
+		},
+		{
+			id: "refs.bookmarks.prev",
+			title: "up",
+			keybind: "nav_up",
+			context: "refs.bookmarks",
+			type: "navigation",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: selectPrevBookmarkInView,
+		},
+		{
+			id: "refs.bookmarks.view_revisions",
+			title: "view revisions",
+			keybind: "enter",
+			context: "refs.bookmarks",
+			type: "view",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: handleListEnter,
+		},
+		{
+			id: "refs.bookmarks.filter",
+			title: "filter",
+			keybind: "search",
+			context: "refs.bookmarks",
+			type: "view",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: activateBookmarkFilter,
+		},
+		{
+			id: "refs.bookmarks.create",
+			title: "create",
+			keybind: "bookmark_create",
+			context: "refs.bookmarks",
+			type: "action",
+			panel: "refs",
+			onSelect: () => {
+				const workingCopy = commits().find((c) => c.isWorkingCopy)
+				dialog.open(
+					() => (
+						<BookmarkNameModal
+							title="Create Bookmark"
+							commits={commits()}
+							defaultRevision={workingCopy?.changeId}
+							onSave={(name, revision) => {
+								runOperation("Creating bookmark...", () =>
+									jjBookmarkCreate(name, { revision }),
 								)
-							}
-						} else {
-							commandLog.addEntry(result)
-							if (result.success) {
-								refresh()
-							}
-						}
+							}}
+						/>
+					),
+					{
+						id: "bookmark-create",
+						hints: [
+							{ key: "tab", label: "switch field" },
+							{ key: "enter", label: "save" },
+						],
 					},
-				},
-				{
-					id: "refs.revisions.squash",
-					title: "squash",
-					keybind: "jj_squash",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					onSelect: async () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-						const result = await jjSquash(commit.changeId)
-						if (isImmutableError(result)) {
-							const confirmed = await dialog.confirm({
-								message: "Parent is immutable. Squash anyway?",
-							})
-							if (confirmed) {
-								await runOperation("Squashing...", () =>
-									jjSquash(commit.changeId, { ignoreImmutable: true }),
-								)
-							}
-						} else {
-							commandLog.addEntry(result)
-							if (result.success) {
-								refresh()
-							}
-						}
-					},
-				},
-				{
-					id: "refs.revisions.rebase",
-					title: "rebase",
-					keybind: "jj_rebase",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					onSelect: () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-						dialog.open(
-							() => (
-								<RebaseModal
-									source={commit}
-									commits={commits()}
-									defaultTarget={commit.changeId}
-									onRebase={async (destination, options) => {
-										const result = await jjRebase(
-											commit.changeId,
-											destination,
-											{
-												mode: options.mode,
-												targetMode: options.targetMode,
-												skipEmptied: options.skipEmptied,
-											},
-										)
-										if (isImmutableError(result)) {
-											const confirmed = await dialog.confirm({
-												message: "Target is immutable. Rebase anyway?",
-											})
-											if (confirmed) {
-												await runOperation("Rebasing...", () =>
-													jjRebase(commit.changeId, destination, {
-														mode: options.mode,
-														targetMode: options.targetMode,
-														skipEmptied: options.skipEmptied,
-														ignoreImmutable: true,
-													}),
-												)
-											}
-										} else {
-											commandLog.addEntry(result)
-											if (result.success) {
-												refresh()
-											}
-										}
-									}}
-								/>
-							),
-							{
-								id: "rebase",
-								hints: [
-									{ key: "s", label: "descendants" },
-									{ key: "b", label: "branch" },
-									{ key: "e", label: "skip emptied" },
-									{ key: "a", label: "insert after" },
-									{ key: "B", label: "insert before" },
-									{ key: "enter", label: "rebase" },
-								],
-							},
-						)
-					},
-				},
-				{
-					id: "refs.revisions.split",
-					title: "split",
-					keybind: "jj_split",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: async () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-
-						if (commit.empty) {
-							await dialog.confirm({
-								message: "Cannot split an empty commit.",
-							})
-							return
-						}
-
-						// Check if immutable first (before suspending TUI)
-						let ignoreImmutable = false
-						if (commit.immutable) {
-							const confirmed = await dialog.confirm({
-								message: "Commit is immutable. Split anyway?",
-							})
-							if (!confirmed) return
-							ignoreImmutable = true
-						}
-
-						renderer.suspend?.()
-						try {
-							await jjSplitInteractive(commit.changeId, { ignoreImmutable })
-						} finally {
-							renderer.resume?.()
-							refresh()
-						}
-					},
-				},
-				{
-					id: "refs.revisions.describe",
-					title: "describe",
-					keybind: "jj_describe",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					onSelect: async () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-
-						let ignoreImmutable = false
-						if (commit.immutable) {
-							const confirmed = await dialog.confirm({
-								message: "Commit is immutable. Describe anyway?",
-							})
-							if (!confirmed) return
-							ignoreImmutable = true
-						}
-
-						const desc = await jjShowDescription(commit.changeId)
-						dialog.open(
-							() => (
-								<DescribeModal
-									initialSubject={desc.subject}
-									initialBody={desc.body}
-									onSave={(subject, body) => {
-										const message = body ? `${subject}\n\n${body}` : subject
-										runOperation("Describing...", () =>
-											jjDescribe(commit.changeId, message, { ignoreImmutable }),
-										)
-									}}
-								/>
-							),
-							{
-								id: "describe",
-								hints: [
-									{ key: "tab", label: "switch field" },
-									{ key: "enter", label: "save" },
-								],
-							},
-						)
-					},
-				},
-				{
-					id: "refs.revisions.abandon",
-					title: "abandon",
-					keybind: "jj_abandon",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: async () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-						const confirmed = await dialog.confirm({
-							message: `Abandon change ${commit.changeId.slice(0, 8)}?`,
-						})
-						if (!confirmed) return
-						const result = await jjAbandon(commit.changeId)
-						if (isImmutableError(result)) {
-							const immutableConfirmed = await dialog.confirm({
-								message: "Commit is immutable. Abandon anyway?",
-							})
-							if (immutableConfirmed) {
-								await runOperation("Abandoning...", () =>
-									jjAbandon(commit.changeId, { ignoreImmutable: true }),
-								)
-							}
-						} else {
-							commandLog.addEntry(result)
-							if (result.success) {
-								refresh()
-							}
-						}
-					},
-				},
-				{
-					id: "refs.revisions.set_bookmark",
-					title: "set bookmark",
-					keybind: "bookmark_set",
-					context: "refs.revisions",
-					type: "action",
-					panel: "refs",
-					visibility: "help-only",
-					onSelect: () => {
-						const commit = selectedBookmarkCommit()
-						if (!commit) return
-						dialog.open(
-							() => (
-								<SetBookmarkModal
-									title={`Set bookmark on ${commit.changeId.slice(0, 8)}`}
-									bookmarks={localBookmarks()}
-									changeId={commit.changeId}
-									onMove={(bookmark) => {
-										runOperation("Moving bookmark...", () =>
-											jjBookmarkSet(bookmark.name, commit.changeId),
-										)
-									}}
-									onCreate={(name) => {
-										runOperation("Creating bookmark...", () =>
-											jjBookmarkCreate(name, { revision: commit.changeId }),
-										)
-									}}
-								/>
-							),
-							{
-								id: "set-bookmark",
-								hints: [
-									{ key: "up/down", label: "navigate" },
-									{ key: "enter", label: "confirm" },
-								],
-							},
-						)
-					},
-				},
-			]
-		}
-
-		return [
-			{
-				id: "refs.bookmarks.next",
-				title: "down",
-				keybind: "nav_down",
-				context: "refs.bookmarks",
-				type: "navigation",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: selectNextBookmarkInView,
+				)
 			},
-			{
-				id: "refs.bookmarks.prev",
-				title: "up",
-				keybind: "nav_up",
-				context: "refs.bookmarks",
-				type: "navigation",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: selectPrevBookmarkInView,
-			},
-			{
-				id: "refs.bookmarks.view_revisions",
-				title: "view revisions",
-				keybind: "enter",
-				context: "refs.bookmarks",
-				type: "view",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: handleListEnter,
-			},
-			{
-				id: "refs.bookmarks.filter",
-				title: "filter",
-				keybind: "search",
-				context: "refs.bookmarks",
-				type: "view",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: activateBookmarkFilter,
-			},
-			{
-				id: "refs.bookmarks.create",
-				title: "create",
-				keybind: "bookmark_create",
-				context: "refs.bookmarks",
-				type: "action",
-				panel: "refs",
-				onSelect: () => {
-					const workingCopy = commits().find((c) => c.isWorkingCopy)
-					dialog.open(
-						() => (
-							<BookmarkNameModal
-								title="Create Bookmark"
-								commits={commits()}
-								defaultRevision={workingCopy?.changeId}
-								onSave={(name, revision) => {
-									runOperation("Creating bookmark...", () =>
-										jjBookmarkCreate(name, { revision }),
-									)
-								}}
-							/>
-						),
-						{
-							id: "bookmark-create",
-							hints: [
-								{ key: "tab", label: "switch field" },
-								{ key: "enter", label: "save" },
-							],
-						},
+		},
+		{
+			id: "refs.bookmarks.delete",
+			title: "delete",
+			keybind: "bookmark_delete",
+			context: "refs.bookmarks",
+			type: "action",
+			panel: "refs",
+			onSelect: async () => {
+				const bookmark = selectedBookmark()
+				if (!bookmark) return
+				const currentIndex = selectedBookmarkIndex()
+				const totalBookmarks = localBookmarks().length
+				const confirmed = await dialog.confirm({
+					message: `Delete bookmark "${bookmark.name}"?`,
+				})
+				if (confirmed) {
+					await runOperation("Deleting bookmark...", () =>
+						jjBookmarkDelete(bookmark.name),
 					)
-				},
-			},
-			{
-				id: "refs.bookmarks.delete",
-				title: "delete",
-				keybind: "bookmark_delete",
-				context: "refs.bookmarks",
-				type: "action",
-				panel: "refs",
-				onSelect: async () => {
-					const bookmark = selectedBookmark()
-					if (!bookmark) return
-					const currentIndex = selectedBookmarkIndex()
-					const totalBookmarks = localBookmarks().length
-					const confirmed = await dialog.confirm({
-						message: `Delete bookmark "${bookmark.name}"?`,
-					})
-					if (confirmed) {
-						await runOperation("Deleting bookmark...", () =>
-							jjBookmarkDelete(bookmark.name),
-						)
-						if (currentIndex >= totalBookmarks - 1 && currentIndex > 0) {
-							setSelectedBookmarkIndex(currentIndex - 1)
-						}
+					if (currentIndex >= totalBookmarks - 1 && currentIndex > 0) {
+						setSelectedBookmarkIndex(currentIndex - 1)
 					}
-				},
+				}
 			},
-			{
-				id: "refs.bookmarks.rename",
-				title: "rename",
-				keybind: "bookmark_rename",
-				context: "refs.bookmarks",
-				type: "action",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: () => {
-					const bookmark = selectedBookmark()
-					if (!bookmark) return
-					dialog.open(
-						() => (
-							<BookmarkNameModal
-								title="Rename Bookmark"
-								initialValue={bookmark.name}
-								onSave={(newName) => {
-									runOperation("Renaming bookmark...", () =>
-										jjBookmarkRename(bookmark.name, newName),
-									)
-								}}
-							/>
-						),
-						{
-							id: "bookmark-rename",
-							hints: [{ key: "enter", label: "save" }],
-						},
+		},
+		{
+			id: "refs.bookmarks.rename",
+			title: "rename",
+			keybind: "bookmark_rename",
+			context: "refs.bookmarks",
+			type: "action",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: () => {
+				const bookmark = selectedBookmark()
+				if (!bookmark) return
+				dialog.open(
+					() => (
+						<BookmarkNameModal
+							title="Rename Bookmark"
+							initialValue={bookmark.name}
+							onSave={(newName) => {
+								runOperation("Renaming bookmark...", () =>
+									jjBookmarkRename(bookmark.name, newName),
+								)
+							}}
+						/>
+					),
+					{
+						id: "bookmark-rename",
+						hints: [{ key: "enter", label: "save" }],
+					},
+				)
+			},
+		},
+		{
+			id: "refs.bookmarks.forget",
+			title: "forget",
+			keybind: "bookmark_forget",
+			context: "refs.bookmarks",
+			type: "action",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: async () => {
+				const bookmark = selectedBookmark()
+				if (!bookmark) return
+				const confirmed = await dialog.confirm({
+					message: `Forget bookmark "${bookmark.name}"? (local only)`,
+				})
+				if (confirmed) {
+					await runOperation("Forgetting bookmark...", () =>
+						jjBookmarkForget(bookmark.name),
 					)
-				},
+				}
 			},
-			{
-				id: "refs.bookmarks.forget",
-				title: "forget",
-				keybind: "bookmark_forget",
-				context: "refs.bookmarks",
-				type: "action",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: async () => {
-					const bookmark = selectedBookmark()
-					if (!bookmark) return
-					const confirmed = await dialog.confirm({
-						message: `Forget bookmark "${bookmark.name}"? (local only)`,
-					})
-					if (confirmed) {
-						await runOperation("Forgetting bookmark...", () =>
-							jjBookmarkForget(bookmark.name),
-						)
-					}
-				},
+		},
+		{
+			id: "refs.bookmarks.move",
+			title: "move",
+			keybind: "bookmark_move",
+			context: "refs.bookmarks",
+			type: "action",
+			panel: "refs",
+			visibility: "help-only",
+			onSelect: () => {
+				const bookmark = selectedBookmark()
+				if (!bookmark) return
+				dialog.open(
+					() => (
+						<RevisionPickerModal
+							title={`Move "${bookmark.name}" to`}
+							commits={commits()}
+							defaultRevision={bookmark.changeId}
+							onSelect={(revision) => {
+								runOperation("Moving bookmark...", () =>
+									jjBookmarkSet(bookmark.name, revision),
+								)
+							}}
+						/>
+					),
+					{
+						id: "bookmark-move",
+						hints: [{ key: "enter", label: "confirm" }],
+					},
+				)
 			},
-			{
-				id: "refs.bookmarks.move",
-				title: "move",
-				keybind: "bookmark_move",
-				context: "refs.bookmarks",
-				type: "action",
-				panel: "refs",
-				visibility: "help-only",
-				onSelect: () => {
-					const bookmark = selectedBookmark()
-					if (!bookmark) return
-					dialog.open(
-						() => (
-							<RevisionPickerModal
-								title={`Move "${bookmark.name}" to`}
-								commits={commits()}
-								defaultRevision={bookmark.changeId}
-								onSelect={(revision) => {
-									runOperation("Moving bookmark...", () =>
-										jjBookmarkSet(bookmark.name, revision),
-									)
-								}}
-							/>
-						),
-						{
-							id: "bookmark-move",
-							hints: [{ key: "enter", label: "confirm" }],
-						},
-					)
-				},
-			},
-		]
-	})
+		},
+	])
 
 	return (
 		<Panel title={title()} hotkey="2" panelId="refs" focused={isFocused()}>
-			<Switch>
-				<Match when={bookmarkViewMode() === "list"}>
-					<Show when={bookmarksError() && localBookmarks().length === 0}>
-						<text fg={colors().error}>Error: {bookmarksError()}</text>
-					</Show>
-					<Show
-						when={localBookmarks().length > 0}
-						fallback={
-							!bookmarksLoading() && !bookmarksError() ? (
-								<text fg={colors().textMuted}>No bookmarks</text>
-							) : null
-						}
-					>
-						<box flexDirection="column" flexGrow={1}>
-							{/* Empty state - outside scrollbox */}
-							<Show when={currentBookmarks().length === 0 && hasActiveFilter()}>
-								<box paddingLeft={1} flexGrow={1}>
-									<text fg={colors().textMuted}>No matching bookmarks</text>
-								</box>
-							</Show>
-
-							{/* Bookmark list - only render scrollbox when we have bookmarks */}
-							<Show when={currentBookmarks().length > 0}>
-								<scrollbox
-									ref={listScrollRef}
-									flexGrow={1}
-									scrollbarOptions={{ visible: false }}
-								>
-									<For each={currentBookmarks()}>
-										{(bookmark, index) => {
-											const isSelected = () =>
-												index() === currentSelectedIndex()
-											const showSelection = () => isSelected() && isFocused()
-											const handleDoubleClick = createDoubleClickDetector(
-												() => {
-													enterBookmarkCommitsView()
-												},
-											)
-											const handleMouseDown = () => {
-												if (hasActiveFilter()) {
-													setFilterSelectedIndex(index())
-												} else {
-													setSelectedBookmarkIndex(index())
-												}
-												handleDoubleClick()
-											}
-											const isDeleted = () => !bookmark.changeId
-											return (
-												<box
-													backgroundColor={
-														showSelection()
-															? colors().selectionBackground
-															: undefined
-													}
-													overflow="hidden"
-													onMouseDown={handleMouseDown}
-												>
-													<box
-														flexDirection="row"
-														flexGrow={1}
-														overflow="hidden"
-													>
-														<box flexDirection="row" flexShrink={0}>
-															<Show
-																when={!isDeleted()}
-																fallback={
-																	<text fg={colors().error} wrapMode="none">
-																		{"–deleted "}
-																	</text>
-																}
-															>
-																<AnsiText
-																	content={
-																		bookmark.changeIdDisplay ||
-																		bookmark.changeId
-																	}
-																	wrapMode="none"
-																/>
-																<text fg={colors().textMuted} wrapMode="none">
-																	{" "}
-																</text>
-															</Show>
-															<AnsiText
-																content={bookmark.nameDisplay || bookmark.name}
-																wrapMode="none"
-															/>
-															<Show when={!isDeleted()}>
-																<text fg={colors().textMuted} wrapMode="none">
-																	{" "}
-																</text>
-															</Show>
-														</box>
-														<Show when={!isDeleted()}>
-															<box flexGrow={1} overflow="hidden">
-																<AnsiText
-																	content={
-																		bookmark.descriptionDisplay ||
-																		bookmark.description
-																	}
-																	wrapMode="none"
-																/>
-															</box>
-														</Show>
-													</box>
-												</box>
-											)
-										}}
-									</For>
-								</scrollbox>
-							</Show>
-
-							{/* Filter input/display at bottom */}
-							<Show when={hasActiveFilter() || filterMode()}>
-								<Show
-									when={filterMode()}
-									fallback={
-										<>
-											<box height={1} overflow="hidden">
-												<text fg={colors().textMuted} wrapMode="none">
-													{"─".repeat(200)}
-												</text>
-											</box>
-											<box paddingLeft={1} height={1}>
-												<text fg={colors().textMuted}>/</text>
-												<text fg={colors().text}>{appliedFilter()}</text>
-											</box>
-										</>
-									}
-								>
-									<FilterInput
-										ref={(r) => {
-											filterInputRef = r
-										}}
-										onInput={setFilterQuery}
-										dividerPosition="above"
-										initialValue={appliedFilter()}
-									/>
-								</Show>
-							</Show>
+			<Show when={bookmarksError() && localBookmarks().length === 0}>
+				<text fg={colors().error}>Error: {bookmarksError()}</text>
+			</Show>
+			<Show
+				when={localBookmarks().length > 0}
+				fallback={
+					!bookmarksLoading() && !bookmarksError() ? (
+						<text fg={colors().textMuted}>No bookmarks</text>
+					) : null
+				}
+			>
+				<box flexDirection="column" flexGrow={1}>
+					<Show when={currentBookmarks().length === 0 && hasActiveFilter()}>
+						<box paddingLeft={1} flexGrow={1}>
+							<text fg={colors().textMuted}>No matching bookmarks</text>
 						</box>
 					</Show>
-				</Match>
 
-				<Match when={bookmarkViewMode() === "commits"}>
-					<Show when={!bookmarkCommitsLoading()}>
-						<Show
-							when={bookmarkCommits().length > 0}
-							fallback={<text fg={colors().textMuted}>No commits</text>}
+					<Show when={currentBookmarks().length > 0}>
+						<scrollbox
+							ref={listScrollRef}
+							flexGrow={1}
+							scrollbarOptions={{ visible: false }}
 						>
-							<scrollbox
-								ref={commitsScrollRef}
-								flexGrow={1}
-								scrollbarOptions={{ visible: false }}
-							>
-								<For each={bookmarkCommits()}>
-									{(commit, index) => {
-										const isSelected = () =>
-											index() === selectedBookmarkCommitIndex()
-										const showSelection = () => isSelected() && isFocused()
-										const icon = commit.isWorkingCopy ? "◆" : "○"
-										const handleDoubleClick = createDoubleClickDetector(() => {
-											enterBookmarkFilesView()
-										})
-										const handleMouseDown = () => {
-											setSelectedBookmarkCommitIndex(index())
-											if (
-												!bookmarkCommitsLoading() &&
-												bookmarkCommitsHasMore() &&
-												bookmarkCommits().length - index() <= 5
-											) {
-												loadMoreBookmarkCommits()
-											}
-
-											handleDoubleClick()
+							<For each={currentBookmarks()}>
+								{(bookmark, index) => {
+									const isSelected = () => index() === currentSelectedIndex()
+									const showSelection = () => isSelected() && isFocused()
+									const handleDoubleClick = createDoubleClickDetector(() => {
+										handleListEnter()
+									})
+									const handleMouseDown = () => {
+										if (hasActiveFilter()) {
+											setFilterSelectedIndex(index())
+										} else {
+											setSelectedBookmarkIndex(index())
 										}
-
-										return (
-											<box
-												backgroundColor={
-													showSelection()
-														? colors().selectionBackground
-														: undefined
-												}
-												overflow="hidden"
-												onMouseDown={handleMouseDown}
-											>
-												<text wrapMode="none">
-													<span
-														style={{
-															fg: commit.isWorkingCopy
-																? colors().primary
-																: colors().textMuted,
-														}}
+										handleDoubleClick()
+									}
+									const isDeleted = () => !bookmark.changeId
+									return (
+										<box
+											backgroundColor={
+												showSelection()
+													? colors().selectionBackground
+													: undefined
+											}
+											overflow="hidden"
+											onMouseDown={handleMouseDown}
+										>
+											<box flexDirection="row" flexGrow={1} overflow="hidden">
+												<box flexDirection="row" flexShrink={0}>
+													<Show
+														when={!isDeleted()}
+														fallback={
+															<text fg={colors().error} wrapMode="none">
+																{"–deleted "}
+															</text>
+														}
 													>
-														{icon}{" "}
-													</span>
-													<span style={{ fg: colors().warning }}>
-														{commit.changeId.slice(0, 8)}
-													</span>
-													<span style={{ fg: colors().text }}>
-														{" "}
-														{commit.description}
-													</span>
-												</text>
+														<AnsiText
+															content={
+																bookmark.changeIdDisplay || bookmark.changeId
+															}
+															wrapMode="none"
+														/>
+														<text fg={colors().textMuted} wrapMode="none">
+															{" "}
+														</text>
+													</Show>
+													<AnsiText
+														content={bookmark.nameDisplay || bookmark.name}
+														wrapMode="none"
+													/>
+													<Show when={!isDeleted()}>
+														<text fg={colors().textMuted} wrapMode="none">
+															{" "}
+														</text>
+													</Show>
+												</box>
+												<Show when={!isDeleted()}>
+													<box flexGrow={1} overflow="hidden">
+														<AnsiText
+															content={
+																bookmark.descriptionDisplay ||
+																bookmark.description
+															}
+															wrapMode="none"
+														/>
+													</box>
+												</Show>
 											</box>
-										)
-									}}
-								</For>
-							</scrollbox>
+										</box>
+									)
+								}}
+							</For>
+						</scrollbox>
+					</Show>
+
+					<Show when={hasActiveFilter() || filterMode()}>
+						<Show
+							when={filterMode()}
+							fallback={
+								<>
+									<box height={1} overflow="hidden">
+										<text fg={colors().textMuted} wrapMode="none">
+											{"─".repeat(200)}
+										</text>
+									</box>
+									<box paddingLeft={1} height={1}>
+										<text fg={colors().textMuted}>/</text>
+										<text fg={colors().text}>{appliedFilter()}</text>
+									</box>
+								</>
+							}
+						>
+							<FilterInput
+								ref={(r) => {
+									filterInputRef = r
+								}}
+								onInput={setFilterQuery}
+								dividerPosition="above"
+								initialValue={appliedFilter()}
+							/>
 						</Show>
 					</Show>
-				</Match>
-
-				<Match when={bookmarkViewMode() === "files"}>
-					<Show when={!bookmarkFilesLoading()}>
-						<FilterableFileTree
-							files={bookmarkFlatFiles}
-							selectedIndex={selectedBookmarkFileIndex}
-							setSelectedIndex={setSelectedBookmarkFileIndex}
-							collapsedPaths={bookmarkCollapsedPaths}
-							toggleFolder={toggleBookmarkFolder}
-							isFocused={isFocused}
-							focusContext="refs.files"
-							filterApiRef={(api) => {
-								filesFilterApi = api
-							}}
-							scrollRef={(r) => {
-								filesScrollRef = r
-							}}
-						/>
-					</Show>
-				</Match>
-			</Switch>
+				</box>
+			</Show>
 		</Panel>
 	)
 }

@@ -85,9 +85,8 @@ const NAVIGATION_KEYBINDS = new Set([
 ])
 
 function contextToGroup(context: Context): ContextGroup {
-	if (context === "log.revisions" || context === "refs.revisions")
-		return "revisions"
-	if (context === "log.files" || context === "refs.files") return "files"
+	if (context === "log.revisions") return "revisions"
+	if (context === "log.files") return "files"
 	if (context === "refs.bookmarks") return "bookmarks"
 	if (context === "log.oplog") return "oplog"
 	if (context === "detail" || context === "commandlog") return "detail"

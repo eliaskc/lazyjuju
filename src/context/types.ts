@@ -22,8 +22,6 @@ export type Context =
 	// Refs panel modes
 	| "refs"
 	| "refs.bookmarks"
-	| "refs.revisions"
-	| "refs.files"
 	// Detail panel
 	| "detail"
 	// Command log panel
