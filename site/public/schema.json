@@ -3,6 +3,7 @@
 	"type": "object",
 	"properties": {
 		"$schema": {
+			"description": "JSON Schema reference for editor autocomplete",
 			"type": "string"
 		},
 		"ui": {
