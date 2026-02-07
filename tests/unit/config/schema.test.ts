@@ -7,7 +7,7 @@ describe("ConfigSchema", () => {
 		expect(config.ui.theme).toBe("lazygit")
 		expect(config.diff.defaultMode).toBe("unified")
 		expect(config.diff.autoSwitchWidth).toBe(120)
-		expect(config.files.showTree).toBe(true)
+		expect(config.ui.showFileTree).toBe(true)
 		expect(config.whatsNewDisabled).toBe(false)
 	})
 
@@ -17,7 +17,7 @@ describe("ConfigSchema", () => {
 		})
 		expect(config.ui.theme).toBe("opencode")
 		expect(config.diff.defaultMode).toBe("unified")
-		expect(config.files.showTree).toBe(true)
+		expect(config.ui.showFileTree).toBe(true)
 	})
 
 	test("partial nested config merges with defaults", () => {

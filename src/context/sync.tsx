@@ -148,7 +148,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 	)
 	const [filesLoading, setFilesLoading] = createSignal(false)
 	const [filesError, setFilesError] = createSignal<string | null>(null)
-	const [showTree, setShowTree] = createSignal(readConfig().files.showTree)
+	const [showTree, setShowTree] = createSignal(readConfig().ui.showFileTree)
 
 	const [bookmarks, setBookmarks] = createSignal<Bookmark[]>([])
 	const [remoteBookmarks, setRemoteBookmarks] = createSignal<Bookmark[]>([])

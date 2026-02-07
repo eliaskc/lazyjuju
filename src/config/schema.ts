@@ -7,6 +7,10 @@ export const UiSchema = z.object({
 		.enum(["lazygit", "opencode"])
 		.default("lazygit")
 		.describe("Color theme"),
+	showFileTree: z
+		.boolean()
+		.default(true)
+		.describe("Show files as tree (false for flat list)"),
 })
 
 export const DiffSchema = z.object({
@@ -25,13 +29,6 @@ export const DiffSchema = z.object({
 	wrap: z.boolean().default(true).describe("Wrap long lines in diff view"),
 })
 
-export const FilesSchema = z.object({
-	showTree: z
-		.boolean()
-		.default(true)
-		.describe("Show files as tree (false for flat list)"),
-})
-
 export const ConfigSchema = z
 	.object({
 		$schema: z
@@ -40,16 +37,12 @@ export const ConfigSchema = z
 			.describe("JSON Schema reference for editor autocomplete"),
 
 		ui: UiSchema.optional()
-			.default({ theme: "lazygit" })
+			.default({ theme: "lazygit", showFileTree: true })
 			.describe("UI settings"),
 
 		diff: DiffSchema.optional()
 			.default({ defaultMode: "unified", autoSwitchWidth: 120, wrap: true })
 			.describe("Diff display settings"),
-
-		files: FilesSchema.optional()
-			.default({ showTree: true })
-			.describe("File list settings"),
 
 		whatsNewDisabled: z
 			.boolean()

@@ -8,7 +8,8 @@
 		},
 		"ui": {
 			"default": {
-				"theme": "lazygit"
+				"theme": "lazygit",
+				"showFileTree": true
 			},
 			"description": "UI settings",
 			"type": "object",
@@ -21,6 +22,11 @@
 						"lazygit",
 						"opencode"
 					]
+				},
+				"showFileTree": {
+					"default": true,
+					"description": "Show files as tree (false for flat list)",
+					"type": "boolean"
 				}
 			}
 		},
@@ -52,20 +58,6 @@
 				"wrap": {
 					"default": true,
 					"description": "Wrap long lines in diff view",
-					"type": "boolean"
-				}
-			}
-		},
-		"files": {
-			"default": {
-				"showTree": true
-			},
-			"description": "File list settings",
-			"type": "object",
-			"properties": {
-				"showTree": {
-					"default": true,
-					"description": "Show files as tree (false for flat list)",
 					"type": "boolean"
 				}
 			}
