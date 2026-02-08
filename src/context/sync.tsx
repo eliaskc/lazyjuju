@@ -29,7 +29,7 @@ import {
 	jjNew,
 	jjSquash,
 } from "../commander/operations"
-import type { Commit, FileChange } from "../commander/types"
+import { type Commit, type FileChange, getRevisionId } from "../commander/types"
 import { onConfigChange, readConfig } from "../config"
 import {
 	type FileTreeNode,
@@ -309,7 +309,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 			if (viewMode() === "files") {
 				const commit = selectedCommit()
 				if (commit) {
-					const result = await fetchFiles(commit.changeId, {
+					const result = await fetchFiles(getRevisionId(commit), {
 						ignoreWorkingCopy: true,
 					})
 					setFiles(result)
@@ -447,15 +447,15 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		if (cacheKey === currentDetailsCacheKey) return
 		currentDetailsCacheKey = cacheKey
 
-		const changeId = commit.changeId
+		const revId = getRevisionId(commit)
 
-		profileMsg(`--- select commit: ${changeId.slice(0, 8)}`)
-		const endDetails = profile(`commitDetails(${changeId.slice(0, 8)})`)
-		jjCommitDetails(changeId).then((details) => {
+		profileMsg(`--- select commit: ${commit.changeId.slice(0, 8)}`)
+		const endDetails = profile(`commitDetails(${commit.changeId.slice(0, 8)})`)
+		jjCommitDetails(revId).then((details) => {
 			endDetails()
 			if (currentDetailsCacheKey === cacheKey) {
 				setCommitDetails({
-					changeId,
+					changeId: commit.changeId,
 					subject: details.subject,
 					body: details.body,
 				})
@@ -826,7 +826,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 		setFilesLoading(true)
 		setFilesError(null)
 		try {
-			const result = await fetchFiles(commit.changeId, {
+			const result = await fetchFiles(getRevisionId(commit), {
 				ignoreWorkingCopy: true,
 			})
 			setFiles(result)

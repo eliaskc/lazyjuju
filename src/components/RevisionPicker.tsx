@@ -1,7 +1,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { For, Show, createEffect, createSignal, onMount } from "solid-js"
-import type { Commit } from "../commander/types"
+import { type Commit, getRevisionId } from "../commander/types"
 import { useTheme } from "../context/theme"
 import { calculateScrollPosition } from "../utils/scroll"
 import { AnsiText } from "./AnsiText"
@@ -21,7 +21,9 @@ export function RevisionPicker(props: RevisionPickerProps) {
 	const findDefaultIndex = () => {
 		if (props.defaultRevision) {
 			const idx = props.commits.findIndex(
-				(c) => c.changeId === props.defaultRevision,
+				(c) =>
+					c.changeId === props.defaultRevision ||
+					c.commitId === props.defaultRevision,
 			)
 			return idx >= 0 ? idx : 0
 		}

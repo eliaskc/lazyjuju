@@ -69,11 +69,11 @@ export interface FetchFilesOptions {
 }
 
 export async function fetchFiles(
-	changeId: string,
+	revision: string,
 	options: FetchFilesOptions = {},
 ): Promise<FileChange[]> {
-	const summaryArgs = ["diff", "--summary", "-r", changeId]
-	const binaryArgs = ["diff", "--git", "-r", changeId]
+	const summaryArgs = ["diff", "--summary", "-r", revision]
+	const binaryArgs = ["diff", "--git", "-r", revision]
 
 	if (options.ignoreWorkingCopy) {
 		summaryArgs.push("--ignore-working-copy")

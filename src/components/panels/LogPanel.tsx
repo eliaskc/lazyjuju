@@ -46,6 +46,7 @@ import {
 	jjSquashInteractive,
 	parseOpLog,
 } from "../../commander/operations"
+import { getRevisionId } from "../../commander/types"
 import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
@@ -456,7 +457,7 @@ export function LogPanel() {
 			})
 			if (!confirmed) return
 			const pushResult = await globalLoading.run("Pushing...", () =>
-				jjGitPushChange(commit.changeId),
+				jjGitPushChange(getRevisionId(commit)),
 			)
 			commandLog.addEntry(pushResult)
 			if (!pushResult.success) return
@@ -818,7 +819,8 @@ export function LogPanel() {
 			panel: "log",
 			onSelect: () => {
 				const commit = selectedCommit()
-				if (commit) runOperation("Creating...", () => jjNew(commit.changeId))
+				if (commit)
+					runOperation("Creating...", () => jjNew(getRevisionId(commit)))
 			},
 		},
 		{
@@ -836,13 +838,17 @@ export function LogPanel() {
 					() => (
 						<NewChangeModal
 							onNew={() =>
-								runOperation("Creating...", () => jjNew(commit.changeId))
+								runOperation("Creating...", () => jjNew(getRevisionId(commit)))
 							}
 							onNewAfter={() =>
-								runOperation("Creating...", () => jjNewAfter(commit.changeId))
+								runOperation("Creating...", () =>
+									jjNewAfter(getRevisionId(commit)),
+								)
 							}
 							onNewBefore={() =>
-								runOperation("Creating...", () => jjNewBefore(commit.changeId))
+								runOperation("Creating...", () =>
+									jjNewBefore(getRevisionId(commit)),
+								)
 							}
 						/>
 					),
@@ -868,7 +874,7 @@ export function LogPanel() {
 			onSelect: () => {
 				const commit = selectedCommit()
 				if (!commit) return
-				runOperation("Duplicating...", () => jjDuplicate(commit.changeId))
+				runOperation("Duplicating...", () => jjDuplicate(getRevisionId(commit)))
 			},
 		},
 		{
@@ -883,12 +889,13 @@ export function LogPanel() {
 				const commit = selectedCommit()
 				if (!commit) return
 				renderer.suspend?.()
+				const revId = getRevisionId(commit)
 				const result = await jjResolveInteractive({
-					revision: commit.changeId,
+					revision: revId,
 				})
 				renderer.resume?.()
 				commandLog.addEntry({
-					command: `jj resolve -r ${commit.changeId}`,
+					command: `jj resolve -r ${revId}`,
 					success: result.success,
 					exitCode: result.success ? 0 : 1,
 					stdout: "",
@@ -909,14 +916,15 @@ export function LogPanel() {
 			onSelect: async () => {
 				const commit = selectedCommit()
 				if (!commit) return
-				const result = await jjEdit(commit.changeId)
+				const revId = getRevisionId(commit)
+				const result = await jjEdit(revId)
 				if (isImmutableError(result)) {
 					const confirmed = await dialog.confirm({
 						message: "Commit is immutable. Edit anyway?",
 					})
 					if (confirmed) {
 						await runOperation("Editing...", () =>
-							jjEdit(commit.changeId, { ignoreImmutable: true }),
+							jjEdit(revId, { ignoreImmutable: true }),
 						)
 					}
 				} else {
@@ -941,6 +949,7 @@ export function LogPanel() {
 
 				// Find parent (next commit in list is typically the parent)
 				const commitList = commits()
+				const revId = getRevisionId(commit)
 				const currentIndex = commitList.findIndex(
 					(c) => c.changeId === commit.changeId,
 				)
@@ -954,7 +963,9 @@ export function LogPanel() {
 						<SquashModal
 							source={commit}
 							commits={commitList}
-							defaultTarget={parentCommit?.changeId}
+							defaultTarget={
+								parentCommit ? getRevisionId(parentCommit) : undefined
+							}
 							onSquash={async (target, options) => {
 								if (options.interactive) {
 									// Check if immutable first (before suspending TUI)
@@ -970,8 +981,8 @@ export function LogPanel() {
 									// Interactive mode needs to suspend the TUI
 									renderer.suspend?.()
 									try {
-										await jjSquashInteractive(commit.changeId, {
-											into: target !== commit.changeId ? target : undefined,
+										await jjSquashInteractive(revId, {
+											into: target !== revId ? target : undefined,
 											useDestinationMessage: options.useDestinationMessage,
 											keepEmptied: options.keepEmptied,
 											ignoreImmutable,
@@ -983,7 +994,7 @@ export function LogPanel() {
 									}
 								} else {
 									// Non-interactive squash
-									const result = await jjSquash(commit.changeId, {
+									const result = await jjSquash(revId, {
 										into: target,
 										useDestinationMessage: options.useDestinationMessage,
 										keepEmptied: options.keepEmptied,
@@ -994,7 +1005,7 @@ export function LogPanel() {
 										})
 										if (confirmed) {
 											await runOperation("Squashing...", () =>
-												jjSquash(commit.changeId, {
+												jjSquash(revId, {
 													into: target,
 													useDestinationMessage: options.useDestinationMessage,
 													keepEmptied: options.keepEmptied,
@@ -1035,14 +1046,15 @@ export function LogPanel() {
 			onSelect: () => {
 				const commit = selectedCommit()
 				if (!commit) return
+				const revId = getRevisionId(commit)
 				dialog.open(
 					() => (
 						<RebaseModal
 							source={commit}
 							commits={commits()}
-							defaultTarget={commit.changeId}
+							defaultTarget={revId}
 							onRebase={async (destination, options) => {
-								const result = await jjRebase(commit.changeId, destination, {
+								const result = await jjRebase(revId, destination, {
 									mode: options.mode,
 									targetMode: options.targetMode,
 									skipEmptied: options.skipEmptied,
@@ -1053,7 +1065,7 @@ export function LogPanel() {
 									})
 									if (confirmed) {
 										await runOperation("Rebasing...", () =>
-											jjRebase(commit.changeId, destination, {
+											jjRebase(revId, destination, {
 												mode: options.mode,
 												targetMode: options.targetMode,
 												skipEmptied: options.skipEmptied,
@@ -1116,7 +1128,7 @@ export function LogPanel() {
 
 				renderer.suspend?.()
 				try {
-					await jjSplitInteractive(commit.changeId, { ignoreImmutable })
+					await jjSplitInteractive(getRevisionId(commit), { ignoreImmutable })
 				} finally {
 					renderer.resume?.()
 					refresh()
@@ -1144,7 +1156,8 @@ export function LogPanel() {
 					ignoreImmutable = true
 				}
 
-				const desc = await jjShowDescription(commit.changeId)
+				const revId = getRevisionId(commit)
+				const desc = await jjShowDescription(revId)
 				dialog.open(
 					() => (
 						<DescribeModal
@@ -1153,7 +1166,7 @@ export function LogPanel() {
 							onSave={(subject, body) => {
 								const message = body ? `${subject}\n\n${body}` : subject
 								runOperation("Describing...", () =>
-									jjDescribe(commit.changeId, message, { ignoreImmutable }),
+									jjDescribe(revId, message, { ignoreImmutable }),
 								)
 							}}
 						/>
@@ -1192,14 +1205,15 @@ export function LogPanel() {
 					message: `Abandon change ${commit.changeId.slice(0, 8)}?`,
 				})
 				if (!confirmed) return
-				const result = await jjAbandon(commit.changeId)
+				const revId = getRevisionId(commit)
+				const result = await jjAbandon(revId)
 				if (isImmutableError(result)) {
 					const immutableConfirmed = await dialog.confirm({
 						message: "Commit is immutable. Abandon anyway?",
 					})
 					if (immutableConfirmed) {
 						await runOperation("Abandoning...", () =>
-							jjAbandon(commit.changeId, { ignoreImmutable: true }),
+							jjAbandon(revId, { ignoreImmutable: true }),
 						)
 					}
 				} else {
@@ -1222,6 +1236,7 @@ export function LogPanel() {
 			onSelect: async () => {
 				const commit = selectedCommit()
 				if (!commit) return
+				const revId = getRevisionId(commit)
 				const selectedShortChangeId = commit.changeId.slice(0, 8)
 				const localBookmarks = bookmarks().filter((b) => b.isLocal)
 				const currentRevisionBookmarks = localBookmarks.filter((b) =>
@@ -1232,9 +1247,8 @@ export function LogPanel() {
 				)
 				let nearestHeadBookmarkNames: string[] = []
 				try {
-					nearestHeadBookmarkNames = await fetchNearestAncestorBookmarkNames(
-						commit.changeId,
-					)
+					nearestHeadBookmarkNames =
+						await fetchNearestAncestorBookmarkNames(revId)
 				} catch {
 					nearestHeadBookmarkNames = []
 				}
@@ -1259,12 +1273,12 @@ export function LogPanel() {
 							changeId={commit.changeId}
 							onMove={(bookmark) => {
 								runOperation("Moving bookmark...", () =>
-									jjBookmarkSet(bookmark.name, commit.changeId),
+									jjBookmarkSet(bookmark.name, revId),
 								)
 							}}
 							onCreate={(name) => {
 								runOperation("Creating bookmark...", () =>
-									jjBookmarkCreate(name, { revision: commit.changeId }),
+									jjBookmarkCreate(name, { revision: revId }),
 								)
 							}}
 						/>

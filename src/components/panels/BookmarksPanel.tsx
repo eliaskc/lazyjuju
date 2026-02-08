@@ -28,6 +28,7 @@ import {
 	jjIsInTrunk,
 	jjNew,
 } from "../../commander/operations"
+import { getRevisionId } from "../../commander/types"
 import { useCommand } from "../../context/command"
 import { useCommandLog } from "../../context/commandlog"
 import { useDialog } from "../../context/dialog"
@@ -666,7 +667,9 @@ export function BookmarksPanel() {
 						<BookmarkNameModal
 							title="Create Bookmark"
 							commits={commits()}
-							defaultRevision={workingCopy?.changeId}
+							defaultRevision={
+								workingCopy ? getRevisionId(workingCopy) : undefined
+							}
 							onSave={(name, revision) => {
 								runOperation("Creating bookmark...", () =>
 									jjBookmarkCreate(name, { revision }),

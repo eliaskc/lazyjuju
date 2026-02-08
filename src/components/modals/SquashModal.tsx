@@ -1,6 +1,6 @@
 import { useKeyboard } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import type { Commit } from "../../commander/types"
+import { type Commit, getRevisionId } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
 import { BorderBox } from "../BorderBox"
@@ -26,7 +26,8 @@ export function SquashModal(props: SquashModalProps) {
 	const { colors, style } = useTheme()
 
 	const [selectedRevision, setSelectedRevision] = createSignal(
-		props.defaultTarget ?? props.commits[0]?.changeId ?? "",
+		props.defaultTarget ??
+			(props.commits[0] ? getRevisionId(props.commits[0]) : ""),
 	)
 
 	let executing = false
@@ -72,7 +73,7 @@ export function SquashModal(props: SquashModalProps) {
 	})
 
 	const handleRevisionSelect = (commit: Commit) => {
-		setSelectedRevision(commit.changeId)
+		setSelectedRevision(getRevisionId(commit))
 	}
 
 	const pickerHeight = () => props.height ?? 20

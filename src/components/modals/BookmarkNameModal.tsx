@@ -1,7 +1,7 @@
 import { RGBA, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { Show, createSignal, onMount } from "solid-js"
-import type { Commit } from "../../commander/types"
+import { type Commit, getRevisionId } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
 import { BorderBox } from "../BorderBox"
@@ -30,7 +30,8 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 	const hasRevisionPicker = () => (props.commits?.length ?? 0) > 0
 
 	const [selectedRevision, setSelectedRevision] = createSignal(
-		props.defaultRevision ?? props.commits?.[0]?.changeId ?? "",
+		props.defaultRevision ??
+			(props.commits?.[0] ? getRevisionId(props.commits[0]) : ""),
 	)
 	const [name, setName] = createSignal(props.initialValue ?? "")
 	const [error, setError] = createSignal<string | null>(null)
@@ -102,7 +103,7 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
 	})
 
 	const handleRevisionSelect = (commit: Commit) => {
-		setSelectedRevision(commit.changeId)
+		setSelectedRevision(getRevisionId(commit))
 	}
 
 	const pickerHeight = () => props.height ?? 10

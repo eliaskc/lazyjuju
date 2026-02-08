@@ -1,6 +1,6 @@
 import { useKeyboard } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import type { Commit } from "../../commander/types"
+import { type Commit, getRevisionId } from "../../commander/types"
 import { useDialog } from "../../context/dialog"
 import { useTheme } from "../../context/theme"
 import { BorderBox } from "../BorderBox"
@@ -20,7 +20,8 @@ export function RevisionPickerModal(props: RevisionPickerModalProps) {
 	const { colors, style } = useTheme()
 
 	const [selectedRevision, setSelectedRevision] = createSignal(
-		props.defaultRevision ?? props.commits[0]?.changeId ?? "",
+		props.defaultRevision ??
+			(props.commits[0] ? getRevisionId(props.commits[0]) : ""),
 	)
 
 	const handleConfirm = () => {
@@ -43,7 +44,7 @@ export function RevisionPickerModal(props: RevisionPickerModalProps) {
 	})
 
 	const handleRevisionSelect = (commit: Commit) => {
-		setSelectedRevision(commit.changeId)
+		setSelectedRevision(getRevisionId(commit))
 	}
 
 	const pickerHeight = () => props.height ?? 12

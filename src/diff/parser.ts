@@ -33,10 +33,10 @@ export interface ParseDiffOptions {
  * Uses --git format for proper parsing (no ANSI colors).
  */
 export async function fetchParsedDiff(
-	changeId: string,
+	revision: string,
 	options: ParseDiffOptions = {},
 ): Promise<DiffFile[]> {
-	const args = ["diff", "-r", changeId, "--git", "--ignore-working-copy"]
+	const args = ["diff", "-r", revision, "--git", "--ignore-working-copy"]
 
 	// Add specific file paths if provided
 	if (options.paths && options.paths.length > 0) {

@@ -106,7 +106,7 @@ export const changesCommand = defineCommand({
 		const output: RevisionOutput[] = []
 
 		for (const revision of revisions) {
-			const files = await fetchParsedDiff(revision.changeId)
+			const files = await fetchParsedDiff(revision.commitId)
 			let hunkCounter = 0
 			const fileOutputs = files.map((file) => {
 				const hunks = file.hunks.map((hunk) => {

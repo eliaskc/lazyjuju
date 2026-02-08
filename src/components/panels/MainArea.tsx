@@ -15,7 +15,7 @@ import {
 } from "solid-js"
 
 import type { DiffStats } from "../../commander/operations"
-import type { Commit } from "../../commander/types"
+import { type Commit, getRevisionId } from "../../commander/types"
 import { onConfigChange, readConfig } from "../../config"
 import { useCommand } from "../../context/command"
 import { useFocus } from "../../context/focus"
@@ -533,7 +533,7 @@ export function MainArea() {
 		setParsedDiffError(null)
 
 		const fetchStart = performance.now()
-		fetchParsedDiff(commit.changeId, { paths })
+		fetchParsedDiff(getRevisionId(commit), { paths })
 			.then((files) => {
 				if (currentFetchKey !== fetchKey) return
 

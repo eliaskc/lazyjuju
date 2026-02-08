@@ -267,7 +267,7 @@ export const commentCommand = defineCommand({
 				revisionEntry.commitHash = revision.commitId
 
 				if (hunk) {
-					const files = await fetchParsedDiff(revision.changeId)
+					const files = await fetchParsedDiff(revision.commitId)
 					const hunks = buildHunkIndex(files)
 					const target = hunks.find((entry) => entry.id === hunk)
 					if (!target) {
@@ -313,7 +313,7 @@ export const commentCommand = defineCommand({
 				const lineNumber = parseLineNumber(lineInput)
 				const filePath = file ?? ""
 				const fileLines = await readFileLinesAtRevision(
-					revision.changeId,
+					revision.commitId,
 					filePath,
 				)
 				const contextLines = getLineContextLines(fileLines, lineNumber)
@@ -577,7 +577,7 @@ async function listComments(args: {
 		if (!stored) continue
 
 		if (stored.commitHash !== revision.commitId) {
-			const files = await fetchParsedDiff(revision.changeId)
+			const files = await fetchParsedDiff(revision.commitId)
 			const relocation = relocateRevision(stored, files)
 			state.revisions[revision.changeId] = {
 				...relocation.updated,
