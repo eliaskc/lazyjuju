@@ -285,6 +285,7 @@ export function MainArea() {
 	const [scrollTop, setScrollTop] = createSignal(0)
 	const [viewportHeight, setViewportHeight] = createSignal(30)
 	const [viewportWidth, setViewportWidth] = createSignal(80)
+	const [scrollHeight, setScrollHeight] = createSignal(0)
 	const [scrollLeft, setScrollLeft] = createSignal(0)
 	const [headerHeight, setHeaderHeight] = createSignal(0)
 	const [currentCommitId, setCurrentCommitId] = createSignal<string | null>(
@@ -586,17 +587,20 @@ export function MainArea() {
 				const currentScroll = scrollRef.scrollTop ?? 0
 				const currentViewport = scrollRef.viewport?.height ?? 30
 				const currentHeaderHeight = headerRef?.height ?? 0
+				const currentScrollHeight = scrollRef.scrollHeight ?? 0
 				const currentViewportWidth =
 					scrollRef.viewport?.width ?? mainAreaWidth()
 				if (
 					currentScroll !== scrollTop() ||
 					currentViewport !== viewportHeight() ||
 					currentHeaderHeight !== headerHeight() ||
+					currentScrollHeight !== scrollHeight() ||
 					currentViewportWidth - SCROLLBAR_GUTTER !== viewportWidth()
 				) {
 					setViewportHeight(currentViewport)
 					setScrollTop(currentScroll)
 					setHeaderHeight(currentHeaderHeight)
+					setScrollHeight(currentScrollHeight)
 					setViewportWidth(Math.max(1, currentViewportWidth - SCROLLBAR_GUTTER))
 				}
 			}
@@ -753,6 +757,9 @@ export function MainArea() {
 	const isLoading = () => parsedDiffLoading()
 	const hasError = () => parsedDiffError()
 	const hasContent = () => parsedFiles().length > 0
+	const needsVerticalScrollbar = createMemo(
+		() => scrollHeight() > viewportHeight(),
+	)
 
 	return (
 		<Panel
@@ -773,7 +780,7 @@ export function MainArea() {
 					flexGrow={1}
 					scrollX={false}
 					verticalScrollbarOptions={{
-						visible: hasContent() || headerHeight() > viewportHeight(),
+						visible: needsVerticalScrollbar(),
 						trackOptions: {
 							backgroundColor: colors().scrollbarTrack,
 							foregroundColor: colors().scrollbarThumb,
