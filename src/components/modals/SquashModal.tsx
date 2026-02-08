@@ -59,7 +59,7 @@ export function SquashModal(props: SquashModalProps) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeSquash({ useDestinationMessage: true })
-		} else if (evt.name === "K") {
+		} else if (evt.name === "k" && evt.shift) {
 			// Shift+K for keep-emptied (k conflicts with navigation)
 			evt.preventDefault()
 			evt.stopPropagation()

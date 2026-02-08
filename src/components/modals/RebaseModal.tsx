@@ -57,23 +57,23 @@ export function RebaseModal(props: RebaseModalProps) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase()
-		} else if (evt.name === "s") {
+		} else if (evt.name === "s" && !evt.shift) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase({ mode: "descendants" })
-		} else if (evt.name === "b") {
+		} else if (evt.name === "b" && !evt.shift) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase({ mode: "branch" })
-		} else if (evt.name === "e") {
+		} else if (evt.name === "e" && !evt.shift) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase({ skipEmptied: true })
-		} else if (evt.name === "A") {
+		} else if (evt.name === "a" && evt.shift) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase({ targetMode: "insertAfter" })
-		} else if (evt.name === "B") {
+		} else if (evt.name === "b" && evt.shift) {
 			evt.preventDefault()
 			evt.stopPropagation()
 			executeRebase({ targetMode: "insertBefore" })
