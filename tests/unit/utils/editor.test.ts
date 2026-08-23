@@ -10,13 +10,13 @@ const originalEditor = process.env.EDITOR
 const originalSuspend = process.env.KAJJI_EDITOR_SUSPEND
 
 afterEach(() => {
-    if (originalVisual === undefined) process.env.VISUAL = undefined
+    if (originalVisual === undefined) delete process.env.VISUAL
     else process.env.VISUAL = originalVisual
 
-    if (originalEditor === undefined) process.env.EDITOR = undefined
+    if (originalEditor === undefined) delete process.env.EDITOR
     else process.env.EDITOR = originalEditor
 
-    if (originalSuspend === undefined) process.env.KAJJI_EDITOR_SUSPEND = undefined
+    if (originalSuspend === undefined) delete process.env.KAJJI_EDITOR_SUSPEND
     else process.env.KAJJI_EDITOR_SUSPEND = originalSuspend
 })
 
@@ -29,15 +29,15 @@ describe("getPreferredEditor", () => {
     })
 
     it("uses EDITOR when VISUAL is not set", () => {
-        process.env.VISUAL = undefined
+        delete process.env.VISUAL
         process.env.EDITOR = "nvim"
 
         expect(getPreferredEditor()).toBe("nvim")
     })
 
     it("falls back to vi when neither VISUAL nor EDITOR is set", () => {
-        process.env.VISUAL = undefined
-        process.env.EDITOR = undefined
+        delete process.env.VISUAL
+        delete process.env.EDITOR
 
         expect(getPreferredEditor()).toBe("vi")
     })
