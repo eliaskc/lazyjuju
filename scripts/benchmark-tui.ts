@@ -6,15 +6,16 @@ import { dirname, join, resolve } from "node:path"
 import { parseArgs } from "node:util"
 import { TerminalControl } from "@kitlangton/terminal-control"
 
-interface MemorySample {
+interface ResourceSample {
     elapsedMs: number
     phase: string
     kajjiRssKiB: number
     treeRssKiB: number
     processCount: number
+    kajjiCpuTimeMs: number
 }
 
-interface MemorySummary {
+interface ResourceSummary {
     startupKajjiRssMiB: number
     peakKajjiRssMiB: number
     peakTreeRssMiB: number
@@ -22,6 +23,8 @@ interface MemorySummary {
     endingTreeRssMiB: number
     rssGrowthMiB: number
     maxProcessCount: number
+    kajjiCpuTimeMs: number
+    averageKajjiCpuPercent: number
 }
 
 interface BenchmarkRun {
@@ -29,7 +32,7 @@ interface BenchmarkRun {
     fetchMs: number
     navigationMs: number[]
     shutdownMs: number
-    memory: MemorySummary
+    resources: ResourceSummary
 }
 
 interface MetricSummary {
@@ -172,22 +175,35 @@ function createBenchmarkHome(root: string, iteration: number): string {
     return home
 }
 
-function readProcessTree(rootPid: number): Omit<MemorySample, "elapsedMs" | "phase"> {
-    const result = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,rss="], {
+function parseCpuTime(value: string): number {
+    const parts = value.split(":").map(Number)
+    if (parts.some(Number.isNaN)) return 0
+    const seconds = parts.reduce((total, part) => total * 60 + part, 0)
+    return seconds * 1_000
+}
+
+function readProcessTree(rootPid: number): Omit<ResourceSample, "elapsedMs" | "phase"> {
+    const result = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,rss=,time="], {
         stdout: "pipe",
         stderr: "ignore",
     })
     if (!result.success) {
-        return { kajjiRssKiB: 0, treeRssKiB: 0, processCount: 0 }
+        return {
+            kajjiRssKiB: 0,
+            treeRssKiB: 0,
+            processCount: 0,
+            kajjiCpuTimeMs: 0,
+        }
     }
 
-    const processes = new Map<number, { parentPid: number; rssKiB: number }>()
+    const processes = new Map<number, { parentPid: number; rssKiB: number; cpuTimeMs: number }>()
     for (const line of result.stdout.toString().split("\n")) {
-        const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)$/)
+        const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+([\d:.]+)$/)
         if (!match) continue
         processes.set(Number(match[1]), {
             parentPid: Number(match[2]),
             rssKiB: Number(match[3]),
+            cpuTimeMs: parseCpuTime(match[4]),
         })
     }
 
@@ -209,6 +225,7 @@ function readProcessTree(rootPid: number): Omit<MemorySample, "elapsedMs" | "pha
         kajjiRssKiB: processes.get(rootPid)?.rssKiB ?? 0,
         treeRssKiB,
         processCount: processIds.size,
+        kajjiCpuTimeMs: processes.get(rootPid)?.cpuTimeMs ?? 0,
     }
 }
 
@@ -225,7 +242,7 @@ async function waitForPid(path: string): Promise<number> {
 }
 
 function startMemorySampler(pid: number) {
-    const samples: MemorySample[] = []
+    const samples: ResourceSample[] = []
     const startedAt = performance.now()
     let phase = "startup"
     let stopped = false
@@ -253,20 +270,23 @@ function startMemorySampler(pid: number) {
             sample()
         },
         stop() {
-            stopped = true
             clearInterval(timer)
             sample()
+            stopped = true
             return samples
         },
     }
 }
 
-function summarizeMemory(samples: MemorySample[]): MemorySummary {
+function summarizeResources(samples: ResourceSample[]): ResourceSummary {
     const valid = samples.filter((sample) => sample.kajjiRssKiB > 0)
     const startup = valid.filter((sample) => sample.phase === "startup").at(-1)
     const ending = valid.at(-1)
     const startupKajjiRssMiB = kibToMib(startup?.kajjiRssKiB ?? 0)
     const endingKajjiRssMiB = kibToMib(ending?.kajjiRssKiB ?? 0)
+    const first = valid[0]
+    const elapsedMs = Math.max(1, (ending?.elapsedMs ?? 0) - (first?.elapsedMs ?? 0))
+    const kajjiCpuTimeMs = Math.max(0, (ending?.kajjiCpuTimeMs ?? 0) - (first?.kajjiCpuTimeMs ?? 0))
     return {
         startupKajjiRssMiB,
         peakKajjiRssMiB: kibToMib(Math.max(0, ...valid.map((sample) => sample.kajjiRssKiB))),
@@ -275,6 +295,8 @@ function summarizeMemory(samples: MemorySample[]): MemorySummary {
         endingTreeRssMiB: kibToMib(ending?.treeRssKiB ?? 0),
         rssGrowthMiB: Math.round((endingKajjiRssMiB - startupKajjiRssMiB) * 100) / 100,
         maxProcessCount: Math.max(0, ...valid.map((sample) => sample.processCount)),
+        kajjiCpuTimeMs,
+        averageKajjiCpuPercent: Math.round((kajjiCpuTimeMs / elapsedMs) * 10_000) / 100,
     }
 }
 
@@ -370,7 +392,7 @@ async function runBenchmark(
             fetchMs,
             navigationMs,
             shutdownMs,
-            memory: summarizeMemory(sampler.stop()),
+            resources: summarizeResources(sampler.stop()),
         }
     } finally {
         sampler.stop()
@@ -397,11 +419,13 @@ function aggregate(runs: BenchmarkRun[]): Record<string, MetricSummary> {
         fetchMs: summarize(runs.map((run) => run.fetchMs)),
         navigationMs: summarize(runs.flatMap((run) => run.navigationMs)),
         shutdownMs: summarize(runs.map((run) => run.shutdownMs)),
-        peakKajjiRssMiB: summarize(runs.map((run) => run.memory.peakKajjiRssMiB)),
-        startupKajjiRssMiB: summarize(runs.map((run) => run.memory.startupKajjiRssMiB)),
-        peakTreeRssMiB: summarize(runs.map((run) => run.memory.peakTreeRssMiB)),
-        endingKajjiRssMiB: summarize(runs.map((run) => run.memory.endingKajjiRssMiB)),
-        rssGrowthMiB: summarize(runs.map((run) => run.memory.rssGrowthMiB)),
+        peakKajjiRssMiB: summarize(runs.map((run) => run.resources.peakKajjiRssMiB)),
+        startupKajjiRssMiB: summarize(runs.map((run) => run.resources.startupKajjiRssMiB)),
+        peakTreeRssMiB: summarize(runs.map((run) => run.resources.peakTreeRssMiB)),
+        endingKajjiRssMiB: summarize(runs.map((run) => run.resources.endingKajjiRssMiB)),
+        rssGrowthMiB: summarize(runs.map((run) => run.resources.rssGrowthMiB)),
+        kajjiCpuTimeMs: summarize(runs.map((run) => run.resources.kajjiCpuTimeMs)),
+        averageKajjiCpuPercent: summarize(runs.map((run) => run.resources.averageKajjiCpuPercent)),
     }
 }
 
@@ -432,7 +456,7 @@ function metadata() {
 function printSummary(report: BenchmarkReport, output: string) {
     console.log(`\nTUI benchmark: ${report.metadata.revision}`)
     for (const [name, result] of Object.entries(report.aggregate)) {
-        const unit = name.endsWith("Ms") ? "ms" : " MiB"
+        const unit = name.endsWith("Ms") ? "ms" : name.endsWith("Percent") ? "%" : " MiB"
         console.log(
             `${name.padEnd(22)} median ${result.median.toFixed(2)}${unit}, p95 ${result.p95.toFixed(2)}${unit}`,
         )
@@ -450,7 +474,7 @@ try {
         const run = await runBenchmark(fixture, iteration)
         runs.push(run)
         console.log(
-            `startup ${run.startupMs.toFixed(0)}ms, peak ${run.memory.peakKajjiRssMiB.toFixed(1)} MiB`,
+            `startup ${run.startupMs.toFixed(0)}ms, peak ${run.resources.peakKajjiRssMiB.toFixed(1)} MiB, CPU ${run.resources.averageKajjiCpuPercent.toFixed(1)}%`,
         )
     }
 
