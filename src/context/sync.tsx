@@ -126,10 +126,8 @@ interface SyncContextValue {
     selectFirstFile: () => void
     selectLastFile: () => void
 
+    /** Local bookmarks plus every remote-tracking entry (`jj bookmark list --all-remotes`). */
     bookmarks: () => Bookmark[]
-    remoteBookmarks: () => Bookmark[]
-    remoteBookmarksLoading: () => boolean
-    remoteBookmarksError: () => string | null
     visibleBookmarks: () => Bookmark[]
     bookmarkLimit: () => number
     loadMoreBookmarks: () => Promise<void>
@@ -141,7 +139,6 @@ interface SyncContextValue {
     bookmarksError: () => string | null
     selectedBookmark: () => Bookmark | undefined
     loadBookmarks: () => Promise<void>
-    loadRemoteBookmarks: () => Promise<void>
     selectPrevBookmark: () => void
     selectNextBookmark: () => void
     selectFirstBookmark: () => void
@@ -204,12 +201,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
     })
 
     const [bookmarks, setBookmarks] = createSignal<Bookmark[]>([])
-    const [remoteBookmarks, setRemoteBookmarks] = createSignal<Bookmark[]>([])
     const [selectedBookmarkIndex, setSelectedBookmarkIndex] = createSignal(0)
     const [bookmarksLoading, setBookmarksLoading] = createSignal(false)
     const [bookmarksError, setBookmarksError] = createSignal<string | null>(null)
-    const [remoteBookmarksLoading, setRemoteBookmarksLoading] = createSignal(false)
-    const [remoteBookmarksError, setRemoteBookmarksError] = createSignal<string | null>(null)
     const [bookmarkLimit, setBookmarkLimit] = createSignal(100)
     const [bookmarksHasMore, setBookmarksHasMore] = createSignal(true)
     const [bookmarksLoadingMore, setBookmarksLoadingMore] = createSignal(false)
@@ -342,7 +336,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         setRefreshCounter((c) => c + 1)
 
         try {
-            await Promise.all([loadLog(options), loadBookmarks(), loadRemoteBookmarks()])
+            await Promise.all([loadLog(options), loadBookmarks()])
             const refreshState = await app.jjRefreshState({
                 cwd: getRepoPath(),
             })
@@ -894,7 +888,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
             setBookmarksHasMore(localCount > bookmarkLimit())
         }
 
-        const stream = app.jjStreamBookmarks({ cwd: getRepoPath() }, (batch) => {
+        // Local and remote bookmarks come from one process so the two views can
+        // never disagree mid-refresh (which showed a transient "*" after fetch).
+        const stream = app.jjStreamBookmarks({ cwd: getRepoPath(), allRemotes: true }, (batch) => {
             if (token !== bookmarksStreamToken || batch.length === 0) return
             if (previousBookmarks.length === 0 || batch.length >= previousBookmarks.length) {
                 updateBookmarkState(batch)
@@ -911,11 +907,16 @@ export function SyncProvider(props: { children: JSX.Element }) {
             const lastBatchIndex = lastBatch
                 ? (previousIndex.get(bookmarkKey(lastBatch)) ?? -1)
                 : -1
+            // A batch can end between a local bookmark and its remote entries.
+            // Never keep stale entries for a name the batch already started, or
+            // the fresh local target would be compared against an old remote.
+            const batchNames = new Set(batch.map((bookmark) => bookmark.name))
             const merged = batch.concat(
                 previousBookmarks.filter((bookmark) => {
                     const key = bookmarkKey(bookmark)
                     const index = previousIndex.get(key) ?? -1
                     if (lastBatchIndex >= 0 && index <= lastBatchIndex) return false
+                    if (batchNames.has(bookmark.name)) return false
                     return !batchKeys.has(key)
                 }),
             )
@@ -962,25 +963,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
             setBookmarksError(e instanceof Error ? e.message : "Failed to load bookmarks")
         } finally {
             setBookmarksLoadingMore(false)
-        }
-    }
-
-    const loadRemoteBookmarks = async (): Promise<void> => {
-        if (remoteBookmarksLoading()) return
-        setRemoteBookmarksLoading(true)
-        setRemoteBookmarksError(null)
-        try {
-            const result = await app.jjBookmarks({
-                cwd: getRepoPath(),
-                allRemotes: true,
-            })
-            setRemoteBookmarks(result)
-        } catch (e) {
-            setRemoteBookmarksError(
-                e instanceof Error ? e.message : "Failed to load remote bookmarks",
-            )
-        } finally {
-            setRemoteBookmarksLoading(false)
         }
     }
 
@@ -1283,9 +1265,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
         selectLastFile,
 
         bookmarks,
-        remoteBookmarks,
-        remoteBookmarksLoading,
-        remoteBookmarksError,
         visibleBookmarks,
         bookmarkLimit,
         loadMoreBookmarks,
@@ -1297,7 +1276,6 @@ export function SyncProvider(props: { children: JSX.Element }) {
         bookmarksError,
         selectedBookmark,
         loadBookmarks,
-        loadRemoteBookmarks,
         selectPrevBookmark,
         selectNextBookmark,
         selectFirstBookmark,

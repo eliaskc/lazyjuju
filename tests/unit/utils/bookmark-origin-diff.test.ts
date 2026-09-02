@@ -43,49 +43,40 @@ function makeBookmark(overrides: Partial<Bookmark> = {}): Bookmark {
 
 describe("findCommitBookmarkWithOriginDiff", () => {
     test("returns a selected commit bookmark that differs from origin", () => {
-        const result = findCommitBookmarkWithOriginDiff(
-            makeCommit({ bookmarks: ["feature"] }),
-            [makeBookmark()],
-            [
-                makeBookmark({
-                    isLocal: false,
-                    remote: "origin",
-                    commitId: "remote-commit",
-                }),
-            ],
-        )
+        const result = findCommitBookmarkWithOriginDiff(makeCommit({ bookmarks: ["feature"] }), [
+            makeBookmark(),
+            makeBookmark({
+                isLocal: false,
+                remote: "origin",
+                commitId: "remote-commit",
+            }),
+        ])
 
         expect(result).toBe("feature")
     })
 
     test("returns null when the local bookmark matches origin", () => {
-        const result = findCommitBookmarkWithOriginDiff(
-            makeCommit({ bookmarks: ["feature"] }),
-            [makeBookmark({ commitId: "same-commit" })],
-            [
-                makeBookmark({
-                    isLocal: false,
-                    remote: "origin",
-                    commitId: "same-commit",
-                }),
-            ],
-        )
+        const result = findCommitBookmarkWithOriginDiff(makeCommit({ bookmarks: ["feature"] }), [
+            makeBookmark({ commitId: "same-commit" }),
+            makeBookmark({
+                isLocal: false,
+                remote: "origin",
+                commitId: "same-commit",
+            }),
+        ])
 
         expect(result).toBeNull()
     })
 
     test("returns a selected commit bookmark when there is no origin bookmark", () => {
-        const result = findCommitBookmarkWithOriginDiff(
-            makeCommit({ bookmarks: ["feature"] }),
-            [makeBookmark()],
-            [
-                makeBookmark({
-                    isLocal: false,
-                    remote: "upstream",
-                    commitId: "remote-commit",
-                }),
-            ],
-        )
+        const result = findCommitBookmarkWithOriginDiff(makeCommit({ bookmarks: ["feature"] }), [
+            makeBookmark(),
+            makeBookmark({
+                isLocal: false,
+                remote: "upstream",
+                commitId: "remote-commit",
+            }),
+        ])
 
         expect(result).toBe("feature")
     })

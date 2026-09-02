@@ -178,12 +178,8 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         selectNextFile,
         selectPrevFile,
         bookmarks,
-        remoteBookmarks,
-        remoteBookmarksLoading,
-        remoteBookmarksError,
         revsetFilter,
         loadBookmarks,
-        loadRemoteBookmarks,
         setRevsetFilter,
         revsetError,
         clearRevsetFilter,
@@ -739,11 +735,12 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             // fall through to PR open
         }
 
-        await loadRemoteBookmarks()
-
         let needsPush = false
-        if (!remoteBookmarksLoading() && !remoteBookmarksError()) {
-            needsPush = hasOriginDiff(bookmark, remoteBookmarks())
+        try {
+            await loadBookmarks()
+            needsPush = hasOriginDiff(bookmark, bookmarks())
+        } catch {
+            // Bookmarks failed to reload; fall through without pushing.
         }
 
         if (needsPush) {
@@ -1232,7 +1229,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     }
 
     const selectedOriginDiffBookmark = createMemo(() =>
-        findCommitBookmarkWithOriginDiff(selectedLogCommit(), bookmarks(), remoteBookmarks()),
+        findCommitBookmarkWithOriginDiff(selectedLogCommit(), bookmarks()),
     )
 
     const openBookmarkOriginDiff = () => {

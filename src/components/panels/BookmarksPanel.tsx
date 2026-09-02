@@ -42,9 +42,6 @@ export function BookmarksPanel() {
     const {
         commits,
         bookmarks,
-        remoteBookmarks,
-        remoteBookmarksLoading,
-        remoteBookmarksError,
         visibleBookmarks,
         loadMoreBookmarks,
         bookmarksHasMore,
@@ -65,7 +62,7 @@ export function BookmarksPanel() {
         selectedCommit,
         selectedIndex,
         loadLog,
-        loadRemoteBookmarks,
+        loadBookmarks,
         activeBookmarkDiff,
         enterBookmarkDiffView,
         pullRequestsByHead,
@@ -135,11 +132,12 @@ export function BookmarksPanel() {
             return
         }
 
-        await loadRemoteBookmarks()
-
         let needsPush = false
-        if (!remoteBookmarksLoading() && !remoteBookmarksError()) {
-            needsPush = hasOriginDiff(bookmark, remoteBookmarks())
+        try {
+            await loadBookmarks()
+            needsPush = hasOriginDiff(bookmark, bookmarks())
+        } catch {
+            // Bookmarks failed to reload; fall through without pushing.
         }
 
         if (needsPush) {
@@ -172,7 +170,7 @@ export function BookmarksPanel() {
     )
     const originChangedBookmarkNames = createMemo(() => {
         const originByName = new Map(
-            remoteBookmarks()
+            bookmarks()
                 .filter((bookmark) => !bookmark.isLocal && bookmark.remote === "origin")
                 .map((bookmark) => [bookmark.name, bookmark]),
         )
@@ -190,7 +188,7 @@ export function BookmarksPanel() {
     )
     const remoteOnlyBookmarks = createMemo(() => {
         const localNames = new Set(localBookmarks().map((b) => b.name))
-        return remoteBookmarks().filter((b) => !b.isLocal && !localNames.has(b.name))
+        return bookmarks().filter((b) => !b.isLocal && !localNames.has(b.name))
     })
 
     const visibleLocalBookmarks = createMemo(() => [
@@ -805,7 +803,7 @@ export function BookmarksPanel() {
     const openSelectedBookmarkOriginDiff = () => {
         if (showRemoteOnly()) return
         const bookmark = selectedBookmark()
-        if (!bookmark || !hasOriginDiff(bookmark, remoteBookmarks())) {
+        if (!bookmark || !hasOriginDiff(bookmark, bookmarks())) {
             status.show("No changes compared to origin.")
             return
         }

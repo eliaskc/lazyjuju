@@ -56,7 +56,6 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
     const {
         loadLog,
         loadBookmarks,
-        loadRemoteBookmarks,
         refresh,
         error,
         loading,
@@ -120,7 +119,7 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
         !loading() && shouldShowCriticalError(error(), commits().length > 0)
 
     const handleRetry = async () => {
-        await Promise.all([loadLog(), loadBookmarks(), loadRemoteBookmarks()])
+        await Promise.all([loadLog(), loadBookmarks()])
     }
 
     const handleFix = async () => {
@@ -150,7 +149,6 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
 
         loadLog()
         loadBookmarks()
-        loadRemoteBookmarks()
         let updateLogId: string | null = null
         checkForUpdates({
             onChecking: () => update.setChecking(),

@@ -1,9 +1,14 @@
 import type { Bookmark } from "../commander/bookmarks"
 import type { Commit } from "../commander/types"
 
-export function hasOriginDiff(bookmark: Bookmark, remoteBookmarks: Bookmark[]) {
+/**
+ * `bookmarks` is the combined local + remote list from
+ * `jj bookmark list --all-remotes`, so both sides of the comparison come from
+ * the same snapshot.
+ */
+export function hasOriginDiff(bookmark: Bookmark, bookmarks: Bookmark[]) {
     if (!bookmark.isLocal || !bookmark.changeId) return false
-    const remote = remoteBookmarks.find(
+    const remote = bookmarks.find(
         (remoteBookmark) =>
             !remoteBookmark.isLocal &&
             remoteBookmark.remote === "origin" &&
@@ -15,7 +20,6 @@ export function hasOriginDiff(bookmark: Bookmark, remoteBookmarks: Bookmark[]) {
 export function findCommitBookmarkWithOriginDiff(
     commit: Commit | undefined,
     bookmarks: Bookmark[],
-    remoteBookmarks: Bookmark[],
 ) {
     if (!commit) return null
     const localByName = new Map(
@@ -26,7 +30,7 @@ export function findCommitBookmarkWithOriginDiff(
     return (
         commit.bookmarks.find((name) => {
             const local = localByName.get(name)
-            return local && hasOriginDiff(local, remoteBookmarks)
+            return local && hasOriginDiff(local, bookmarks)
         }) ?? null
     )
 }
