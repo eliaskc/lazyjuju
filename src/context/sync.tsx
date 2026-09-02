@@ -54,6 +54,11 @@ interface RefreshOptions {
     selectIndex?: (commits: Commit[]) => number | null | undefined
 }
 
+export interface LogSelection {
+    changeId: string | null
+    index: number
+}
+
 interface SyncContextValue {
     commits: () => Commit[]
     selectedIndex: () => number
@@ -87,11 +92,13 @@ interface SyncContextValue {
     revsetFilter: () => string | null
     setRevsetFilter: (revset: string | null) => void
     revsetError: () => string | null
-    clearRevsetFilter: () => void
+    clearRevsetFilter: (options?: RefreshOptions) => void
     activeBookmarkFilter: () => string | null
     setActiveBookmarkFilter: (bookmark: string | null) => void
     previousRevsetFilter: () => string | null
     setPreviousRevsetFilter: (revset: string | null) => void
+    previousLogSelection: () => LogSelection | null
+    setPreviousLogSelection: (selection: LogSelection | null) => void
     clearBookmarkFilterState: () => void
 
     viewMode: () => ViewMode
@@ -237,6 +244,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
     const [revsetError, setRevsetError] = createSignal<string | null>(null)
     const [activeBookmarkFilter, setActiveBookmarkFilterSignal] = createSignal<string | null>(null)
     const [previousRevsetFilter, setPreviousRevsetFilterSignal] = createSignal<string | null>(null)
+    const [previousLogSelection, setPreviousLogSelectionSignal] = createSignal<LogSelection | null>(
+        null,
+    )
     // oxlint-disable-next-line no-control-regex -- ANSI escape sequence
     const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, "")
     const cleanRevsetError = (message: string) => {
@@ -265,6 +275,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
     const clearBookmarkFilterState = () => {
         setActiveBookmarkFilterSignal(null)
         setPreviousRevsetFilterSignal(null)
+        setPreviousLogSelectionSignal(null)
     }
 
     const collapsedPaths = userCollapsedPaths
@@ -1105,13 +1116,13 @@ export function SyncProvider(props: { children: JSX.Element }) {
         }
     }
 
-    const clearRevsetFilter = () => {
+    const clearRevsetFilter = (options?: RefreshOptions) => {
         setRevsetFilterSignal(null)
         setRevsetError(null)
         setLogLimit(50)
         setLogHasMore(true)
         setLogLoadingMore(false)
-        loadLog()
+        loadLog(options)
     }
 
     const showFiles = (result: FileChange[]) => {
@@ -1242,6 +1253,8 @@ export function SyncProvider(props: { children: JSX.Element }) {
         setActiveBookmarkFilter: setActiveBookmarkFilterSignal,
         previousRevsetFilter,
         setPreviousRevsetFilter: setPreviousRevsetFilterSignal,
+        previousLogSelection,
+        setPreviousLogSelection: setPreviousLogSelectionSignal,
         clearBookmarkFilterState,
 
         viewMode,

@@ -189,6 +189,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         clearRevsetFilter,
         activeBookmarkFilter,
         previousRevsetFilter,
+        previousLogSelection,
         clearBookmarkFilterState,
         loadLog,
         loadMoreLog,
@@ -430,13 +431,34 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             setRevsetFilter(query)
         } else if (!query && revsetFilter()) {
             if (activeBookmarkFilter()) {
+                const restoreSelection = takePreviousLogSelection()
                 clearBookmarkFilterState()
+                setAppliedFilterGroups([])
+                setAppliedFilterNoMatch(false)
+                clearRevsetFilter({ selectIndex: restoreSelection })
+            } else {
+                setAppliedFilterGroups([])
+                setAppliedFilterNoMatch(false)
+                clearRevsetFilter()
             }
-            setAppliedFilterGroups([])
-            setAppliedFilterNoMatch(false)
-            clearRevsetFilter()
         }
         setFilterMode(false)
+    }
+
+    // Builds a selectIndex callback that puts the cursor back on the commit
+    // that was selected before a bookmark filter was applied. Falls back to
+    // the previous index when the commit is no longer in the list.
+    const takePreviousLogSelection = () => {
+        const previous = previousLogSelection()
+        if (!previous) return undefined
+        return (commitList: Commit[]) => {
+            if (commitList.length === 0) return 0
+            if (previous.changeId) {
+                const index = commitList.findIndex((c) => c.changeId === previous.changeId)
+                if (index >= 0) return index
+            }
+            return Math.min(previous.index, commitList.length - 1)
+        }
     }
 
     const handleClearFilter = async () => {
@@ -448,14 +470,15 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             return
         }
         const previousFilter = previousRevsetFilter()
+        const restoreSelection = takePreviousLogSelection()
         clearBookmarkFilterState()
         if (previousFilter) {
             setRevsetFilter(previousFilter)
-            await loadLog()
+            await loadLog({ selectIndex: restoreSelection })
         } else {
             setAppliedFilterGroups([])
             setAppliedFilterNoMatch(false)
-            clearRevsetFilter()
+            clearRevsetFilter({ selectIndex: restoreSelection })
         }
         focus.setActiveContext("refs.bookmarks")
     }

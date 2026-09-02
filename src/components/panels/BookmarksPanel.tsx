@@ -61,6 +61,9 @@ export function BookmarksPanel() {
         activeBookmarkFilter,
         setActiveBookmarkFilter,
         setPreviousRevsetFilter,
+        setPreviousLogSelection,
+        selectedCommit,
+        selectedIndex,
         loadLog,
         loadRemoteBookmarks,
         activeBookmarkDiff,
@@ -815,10 +818,16 @@ export function BookmarksPanel() {
         if (showRemoteOnly()) return
         const bookmark = selectedBookmark()
         if (!bookmark) return
-        setPreviousRevsetFilter(revsetFilter())
+        if (!activeBookmarkFilter()) {
+            setPreviousRevsetFilter(revsetFilter())
+            setPreviousLogSelection({
+                changeId: selectedCommit()?.changeId ?? null,
+                index: selectedIndex(),
+            })
+        }
         setActiveBookmarkFilter(bookmark.name)
         setRevsetFilter(`::${bookmark.name}`)
-        loadLog()
+        loadLog({ selectIndex: () => 0 })
         focus.setActiveContext("log.revisions")
     }
 
