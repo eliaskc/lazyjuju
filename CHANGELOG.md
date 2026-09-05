@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.17.1
+
+### improved
+- build: installer shows download progress, distinguishes installs and upgrades, and configures more shells ([`8ba1f69`](../../commit/8ba1f69))
+
+### fixed
+- ux: bookmark indicators and detail header metadata stay synchronized after fetch and push ([`ccdd8f9`](../../commit/ccdd8f9), [`cd9ec7d`](../../commit/cd9ec7d))
+- ux: log position is restored after filtering by bookmark ([`5773c0f`](../../commit/5773c0f))
+- ux: multi-select actions target divergent revisions independently ([`31e86d4`](../../commit/31e86d4))
+- jj 0.43 compatibility restored for log loading ([`902cb12`](../../commit/902cb12))
+- layout: diff file headers stay aligned while scrolling ([`3d608e8`](../../commit/3d608e8))
+
 ## 0.17.0
 
 ### new
