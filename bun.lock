@@ -24,7 +24,7 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
-        "@kitlangton/terminal-control": "0.3.1",
+        "@kitlangton/terminal-control": "1.2.1",
         "@types/bun": "1.3.14",
         "@types/diff": "^8.0.0",
         "oxfmt": "0.63.0",
@@ -104,15 +104,15 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@kitlangton/terminal-control": ["@kitlangton/terminal-control@0.3.1", "", { "optionalDependencies": { "@kitlangton/terminal-control-darwin-arm64": "0.3.1", "@kitlangton/terminal-control-darwin-x64": "0.3.1", "@kitlangton/terminal-control-linux-arm64-gnu": "0.3.1", "@kitlangton/terminal-control-linux-x64-gnu": "0.3.1" }, "peerDependencies": { "vitest": ">=3.0.0" }, "optionalPeers": ["vitest"] }, "sha512-bazg6iuFXDkT50fkzCaHj4DezhJpCf+AA1mnfHc9L38LWpn7ZEMpHGp3ogUE9ldz096PpE41QVyTffshm8gp2g=="],
+    "@kitlangton/terminal-control": ["@kitlangton/terminal-control@1.2.1", "", { "optionalDependencies": { "@kitlangton/terminal-control-darwin-arm64": "1.2.1", "@kitlangton/terminal-control-darwin-x64": "1.2.1", "@kitlangton/terminal-control-linux-arm64-gnu": "1.2.1", "@kitlangton/terminal-control-linux-x64-gnu": "1.2.1" }, "peerDependencies": { "vitest": ">=3.0.0" }, "optionalPeers": ["vitest"] }, "sha512-xLHRikahSWCRAGr6QHegmVrDGHOBFDzcn+Xm5d5KhbcZ0zaBfeVND7jDNAzSdqW/llHjVdvCDWsP6MgH5VNWTA=="],
 
-    "@kitlangton/terminal-control-darwin-arm64": ["@kitlangton/terminal-control-darwin-arm64@0.3.1", "", { "os": "darwin", "cpu": "arm64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-ZnNJpghqIUxoi0LeBIybBmBU18lt8vRGna23SShMW6kTiwvBXPG8dwojbC1UmbHhW2GpM8roaYOvdNGhmwFQeg=="],
+    "@kitlangton/terminal-control-darwin-arm64": ["@kitlangton/terminal-control-darwin-arm64@1.2.1", "", { "os": "darwin", "cpu": "arm64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-iKsdk5FGSNbhYirbv1UH3lCQ0zxDCLymKFEQqifVGLj9rZQl+Qr32jzR5yLZVO7d10EzjiNUag1Rkn4hXC7JCg=="],
 
-    "@kitlangton/terminal-control-darwin-x64": ["@kitlangton/terminal-control-darwin-x64@0.3.1", "", { "os": "darwin", "cpu": "x64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-Yv5BcgJLDQG520SYDCOZ7u7ReV/Ay2jVhnbdIEZHjhwRpYlWj1sMJRvZGkwFEGcKXVS/1m5r+DIb59CCxQ2d9A=="],
+    "@kitlangton/terminal-control-darwin-x64": ["@kitlangton/terminal-control-darwin-x64@1.2.1", "", { "os": "darwin", "cpu": "x64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-cwU6UDWWF8x5SrE/+oqmUTAik8Gj8dj4jDftbzCaZkNTUKPkxbSyRyWUlOtCQEC0R5c3lD63riIqwXOLmxig3g=="],
 
-    "@kitlangton/terminal-control-linux-arm64-gnu": ["@kitlangton/terminal-control-linux-arm64-gnu@0.3.1", "", { "os": "linux", "cpu": "arm64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-zwWPmw6GGyWDXTAu7UTMcmBOzC1mmCfzs66fyZ8fVADYXmKnj2e+Nqpclel1Cajp1PFE2bIX88r4/zM58BF3uw=="],
+    "@kitlangton/terminal-control-linux-arm64-gnu": ["@kitlangton/terminal-control-linux-arm64-gnu@1.2.1", "", { "os": "linux", "cpu": "arm64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-+HsI5ifWOHj463OfxDwjcJtfJmrXrHLcPoO+lgq+cgOfGkKvhad0oU9O2w71jZjIcpqL+Q20gtMzzPycm01Jgw=="],
 
-    "@kitlangton/terminal-control-linux-x64-gnu": ["@kitlangton/terminal-control-linux-x64-gnu@0.3.1", "", { "os": "linux", "cpu": "x64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-09tVwkapRjgXddYPJ3L2PMMhV+49meD0KCuDnzh3/FpK9IuW7svbrvn830J8ztudfOThNIT91zxiddBAgA/aCw=="],
+    "@kitlangton/terminal-control-linux-x64-gnu": ["@kitlangton/terminal-control-linux-x64-gnu@1.2.1", "", { "os": "linux", "cpu": "x64", "bin": { "termctrl": "bin/termctrl" } }, "sha512-2qKEK/CGaXx5P8XXCCXAPWmjucE+QRSJ3iM8Zguig0FVJtsYn2qvhNyGMqh9txB/kS8JJLmo/ATWmMN6z9xPLg=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 

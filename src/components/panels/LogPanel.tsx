@@ -17,6 +17,7 @@ import type { Context } from "../../context/types"
 import { HookOperation } from "../../hooks/types"
 import type { OperationResult } from "../../process/operation-result"
 import { getRepoPath } from "../../repo"
+import { benchmarkRegion, registerBenchmarkState } from "../../utils/benchmark"
 import { findCommitBookmarkWithOriginDiff, hasOriginDiff } from "../../utils/bookmark-origin-diff"
 import { blendColors } from "../../utils/color"
 import { createDoubleClickDetector } from "../../utils/double-click"
@@ -832,6 +833,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     }
 
     let scrollRef: ScrollBoxRenderable | undefined
+    onCleanup(registerBenchmarkState(() => benchmarkRegion("log", scrollRef)))
     const [scrollTop, setScrollTop] = createSignal(0)
     const [logViewportHeight, setLogViewportHeight] = createSignal(30)
     const [logViewportWidth, setLogViewportWidth] = createSignal(80)

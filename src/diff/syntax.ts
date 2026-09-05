@@ -1,6 +1,7 @@
 import { type SupportedLanguages, getFiletypeFromFileName } from "@pierre/diffs"
 import { createSignal } from "solid-js"
 import type { SyntaxThemeName } from "../theme/syntax"
+import { registerBenchmarkState } from "../utils/benchmark"
 import type { WorkerRequest, WorkerResponse } from "./syntax-worker"
 
 export interface SyntaxToken {
@@ -72,6 +73,10 @@ export function getTokenCacheStats(): {
 
 // Pending tokenization requests to avoid duplicates
 const pendingRequests = new Set<string>()
+registerBenchmarkState(() => ({
+    syntaxReady: highlighterReady(),
+    syntaxPending: pendingRequests.size,
+}))
 
 // Request ID counter
 let requestId = 0

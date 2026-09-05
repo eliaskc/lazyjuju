@@ -1,0 +1,26 @@
+Usage:
+  bun bench:prepare [--fixture PATH] [--source PATH] [--revision REV] [fixture options]
+  bun bench:tui [--fixture PATH] [run options]
+  bun bench:compare BASELINE.json CANDIDATE.json [--all]
+
+Prepare once; reuse the same fixture for every candidate. Preparation is not timed.
+--source makes a private, independent full copy of a standalone jj repository.
+It includes ignored files, can require substantial disk space, and never runs jj
+against the source. Without --source, generate a fixed-content stress repository.
+
+Fixture options: --commits 300 --bookmarks 500 --files 10000
+                 --diff-files 12 --diff-lines 1500
+Run options: --runs 5 --warmups 1 --steps 40 --interval-ms 16 --passes 2
+             --scenarios diff,log,bookmarks --diff-input line|page|wheel
+             --layout unified|split [--no-wrap]
+             --sample-ms 0 --cols 120 --rows 36 --bun PATH --output PATH
+
+--sample-ms 0 (default): capture only at each burst's start and end. Native frame
+and input timing remain continuous. No visible-gap estimates are made.
+--sample-ms 128: also sample the screen during scrolling, for diagnostics.
+Startup observation remains enabled in both modes.
+
+Inputs run on an absolute schedule without waiting for rendering.
+Content readiness and completed highlighting are separate startup measurements.
+Reports contain state, revision IDs, and cell hashes, not source text or screenshots.
+See docs/BENCHMARKING.md for metric definitions, limits, and comparison procedure.

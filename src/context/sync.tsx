@@ -34,6 +34,7 @@ import { useApplication } from "./application"
 import { useFocus } from "./focus"
 import { useLayout } from "./layout"
 
+import { registerBenchmarkState } from "../utils/benchmark"
 import { profile, profileMsg } from "../utils/profiler"
 
 export type ViewMode = "log" | "files"
@@ -230,6 +231,19 @@ export function SyncProvider(props: { children: JSX.Element }) {
         }
     }
     onCleanup(clearPrMetadataRefreshTimers)
+
+    let benchmarkLogReady = false
+    let benchmarkBookmarksReady = false
+    onCleanup(
+        registerBenchmarkState(() => ({
+            logReady: benchmarkLogReady,
+            bookmarksReady: benchmarkBookmarksReady,
+            logCount: commits().length,
+            bookmarkCount: bookmarks().length,
+            logIndex: selectedIndex(),
+            loadError: !!error() || !!bookmarksError(),
+        })),
+    )
 
     const [commitDetails, setCommitDetails] = createSignal<CommitDetails | null>(null)
     const [refreshCounter, setRefreshCounter] = createSignal(0)
@@ -928,6 +942,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
             const final = await stream.result
             if (token !== bookmarksStreamToken) return
             updateBookmarkState(final)
+            benchmarkBookmarksReady = true
             if (isInitialLoad) {
                 setSelectedBookmarkIndex(0)
             } else {
@@ -1003,6 +1018,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
         try {
             const result = await stream.result
             if (token !== logStreamToken) return
+            // A streamed initial batch can trigger prefetch before loadLog
+            // completes. The replacement page then owns startup completion.
+            benchmarkLogReady = true
             setCommits(result.commits)
             setLogHasMore(result.hasMore)
             setSelectedIndex((index) =>
@@ -1081,6 +1099,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 )
             })
             setRevsetError(null)
+            benchmarkLogReady = true
             if (isInitialLoad) {
                 setSelectedIndex(0)
                 addRecentRepo(getRepoPath())

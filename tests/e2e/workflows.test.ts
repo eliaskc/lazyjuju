@@ -11,6 +11,7 @@ const openTuiPreload = Bun.resolveSync("@opentui/solid/preload", projectRoot)
 function runJj(cwd: string, ...args: string[]) {
     const result = Bun.spawnSync(["jj", ...args], {
         cwd,
+        env: { ...process.env, JJ_CONFIG: join(cwd, "..", "jj.toml") },
         stdout: "pipe",
         stderr: "pipe",
     })
@@ -24,10 +25,12 @@ function runJj(cwd: string, ...args: string[]) {
 
 function createRepository(root: string) {
     const repository = join(root, "repo")
+    writeFileSync(
+        join(root, "jj.toml"),
+        '[user]\nname = "Kajji E2E"\nemail = "kajji-e2e@example.com"\n',
+    )
     mkdirSync(repository)
     runJj(repository, "git", "init")
-    runJj(repository, "config", "set", "--repo", "user.name", "Kajji E2E")
-    runJj(repository, "config", "set", "--repo", "user.email", "kajji-e2e@example.com")
 
     writeFileSync(join(repository, "base.txt"), "base\n")
     runJj(repository, "commit", "-m", "fixture: base")
@@ -78,6 +81,7 @@ async function withKajji(run: (session: Session, repository: string) => Promise<
                 XDG_CONFIG_HOME: join(home, ".config"),
                 XDG_STATE_HOME: join(home, ".local/state"),
                 NODE_ENV: "development",
+                JJ_CONFIG: join(root, "jj.toml"),
             },
         })
 
@@ -93,6 +97,14 @@ async function withKajji(run: (session: Session, repository: string) => Promise<
                 timeoutMs: 5_000,
             })
             await run(session, repository)
+        } catch (error) {
+            // These repositories contain generated test data only.
+            const screen = await session.screen.capture({
+                settleMs: 0,
+                deadlineMs: 0,
+                allowIncomplete: true,
+            })
+            throw new Error(`${String(error)}\nVisible screen:\n${screen.text}`)
         } finally {
             await session.stop()
         }
@@ -106,7 +118,48 @@ async function waitForInput(session: Session) {
     await session.screen.waitUntil((snapshot) => snapshot.frame.cursor !== null, {
         timeoutMs: 5_000,
     })
+    // Cursor visibility alone can precede deferred modal focus/input guards.
+    // These are correctness tests; sustained input timing is tested separately.
+    await session.screen.waitForIdle({ quietForMs: 50, timeoutMs: 5_000 })
 }
+
+test("accepts text at the first visible bookmark modal cursor", async () => {
+    await withKajji(async (session) => {
+        await session.keyboard.type("2")
+        await session.keyboard.type("c")
+        await session.screen.waitUntil(
+            (snapshot) =>
+                snapshot.text.includes("Create Bookmark") && snapshot.frame.cursor !== null,
+            { timeoutMs: 5_000 },
+        )
+        // No idle wait or focus delay: a visible cursor must accept input.
+        await session.keyboard.type("immediate-input")
+        await session.screen.waitForText("immediate-input", { timeoutMs: 5_000 })
+        await session.keyboard.press("Escape")
+    })
+}, 45_000)
+
+test("submits bookmark text and Enter in one input packet", async () => {
+    await withKajji(async (session, repository) => {
+        await session.keyboard.type("2")
+        await session.keyboard.type("c")
+        await session.screen.waitForText("Create Bookmark", { timeoutMs: 5_000 })
+        // Isolate submission from initial focus readiness. After this point,
+        // there is no screen wait between the text and Enter.
+        await waitForInput(session)
+        await session.keyboard.write(Buffer.from("immediate-submit\r"))
+        await session.screen.waitUntil((snapshot) => !snapshot.text.includes("Create Bookmark"), {
+            timeoutMs: 5_000,
+        })
+        await session.screen.waitUntil(
+            () =>
+                runJj(repository, "bookmark", "list", "--template", 'name ++ "\\n"')
+                    .split("\n")
+                    .includes("immediate-submit"),
+            { timeoutMs: 10_000 },
+        )
+    })
+}, 45_000)
 
 test("browses revisions and keeps the detail panel in sync", async () => {
     await withKajji(async (session) => {
@@ -159,6 +212,9 @@ test("enters diff mode for the selected revision and returns to normal mode", as
             { timeoutMs: 10_000 },
         )
 
+        // Test a completed layout transition, not two rapid toggles while
+        // deferred scroll-anchor restoration is still active.
+        await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
         await session.keyboard.press("Control+X")
         const screen = await session.screen.waitUntil(
             (snapshot) =>
@@ -271,6 +327,7 @@ test("creates and deletes a bookmark", async () => {
         })
         await waitForInput(session)
         await session.keyboard.type("e2e-bookmark")
+        await session.screen.waitForText("e2e-bookmark", { timeoutMs: 5_000 })
         await session.keyboard.press("Enter")
 
         await session.screen.waitUntil(
@@ -322,7 +379,16 @@ test("navigates between files in diff mode", async () => {
             await session.screen.waitForText("Commands", { timeoutMs: 5_000 })
             await waitForInput(session)
             await session.keyboard.type(query)
-            await session.screen.waitForText(title, { timeoutMs: 5_000 })
+            // The title also exists in the unfiltered palette. Wait for the
+            // query and filtered, enabled result before submitting it.
+            await session.screen.waitUntil(
+                (snapshot) =>
+                    snapshot.text.includes(query) &&
+                    snapshot.text.includes(title) &&
+                    !snapshot.text.includes("Unavailable") &&
+                    !snapshot.text.includes("Open (direct)"),
+                { timeoutMs: 5_000 },
+            )
             await session.keyboard.press("Enter")
         }
 
@@ -330,6 +396,8 @@ test("navigates between files in diff mode", async () => {
         await waitForNavigation(
             "entering diff mode",
             (text) =>
+                text.includes("1 Files (") &&
+                text.includes("DIFF") &&
                 text.includes("ui.txt") &&
                 text.includes("view.txt") &&
                 text.includes("ui detail marker") &&

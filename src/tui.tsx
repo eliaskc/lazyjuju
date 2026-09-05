@@ -22,6 +22,7 @@ import { initHighlighter } from "./diff"
 import { type MockMode, mockMode, setMockMode } from "./mock"
 import { disableOpenTuiSelection } from "./opentui-selection"
 import { getRepoPath, setRepoPath } from "./repo"
+import { attachBenchmark } from "./utils/benchmark"
 import { getChangesSince, parseChangelog } from "./utils/changelog"
 import { getRecentRepos } from "./utils/state"
 
@@ -49,13 +50,20 @@ export async function runTui(args: string[]): Promise<void> {
     const isDev = Bun.env.NODE_ENV === "development"
     const application = makeApplicationClient()
     let destroyRenderer = () => {}
+    let stopBenchmark = async () => {}
     let shutdownPromise: Promise<void> | undefined
     const shutdown = (exitCode = 0) => {
         if (shutdownPromise) return shutdownPromise
-        shutdownPromise = application.dispose().finally(() => {
+        shutdownPromise = application.dispose().finally(async () => {
             process.off("SIGINT", handleSigint)
             process.off("SIGTERM", handleSigterm)
             destroyRenderer()
+            try {
+                await stopBenchmark()
+            } catch {
+                console.error("Could not write the benchmark trace")
+                process.exit(1)
+            }
             process.exit(exitCode)
         })
         return shutdownPromise
@@ -119,6 +127,7 @@ export async function runTui(args: string[]): Promise<void> {
     function Root() {
         _trace("Root() called")
         const renderer = useRenderer()
+        stopBenchmark = attachBenchmark(renderer)
         destroyRenderer = () => renderer.destroy()
         const [isJjRepo, setIsJjRepo] = createSignal(initialStatus.isJjRepo)
         const [hasGitRepo, setHasGitRepo] = createSignal(initialStatus.hasGitRepo)

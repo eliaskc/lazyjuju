@@ -11,6 +11,7 @@ import {
     onCleanup,
     onMount,
 } from "solid-js"
+import { benchmarkRegion, registerBenchmarkState } from "../../utils/benchmark"
 
 import type { JjDiffTarget } from "../../commander/jj"
 import { type Commit, getRevisionId } from "../../commander/types"
@@ -689,6 +690,17 @@ export function MainArea() {
 
     // Track current fetch to prevent stale updates
     let currentFetchKey: string | null = null
+    let benchmarkDiffReady = false
+    onCleanup(
+        registerBenchmarkState(() => ({
+            diffReady: benchmarkDiffReady,
+            diffRevision: activeCommit()?.commitId ?? "",
+            diffError: !!parsedDiffError(),
+            diffPosition: scrollRef?.scrollTop ?? 0,
+            context: focus.activeContext(),
+            ...benchmarkRegion("diff", scrollRef),
+        })),
+    )
 
     // Mode of the content currently painted; a fetch that changes the mode
     // clears stale content and shows the loading state instead of silently
@@ -799,6 +811,7 @@ export function MainArea() {
         const fetchKey = `${sourceKey}:all:${mode}`
         if (fetchKey === currentFetchKey) return
         currentFetchKey = fetchKey
+        benchmarkDiffReady = false
         structuralAbort?.abort()
         setFileLineStats(new Map())
 
@@ -869,6 +882,7 @@ export function MainArea() {
                         setDiffLoading(false)
                         updateDisplayedSource(commit, bookmarkDiff, multi, true)
                     })
+                    benchmarkDiffReady = true
                     displayedContentMode = "jj"
                     const signalMs = performance.now() - renderStart
 
@@ -910,6 +924,7 @@ export function MainArea() {
                         setDiffLoading(false)
                         updateDisplayedSource(commit, bookmarkDiff, multi, true)
                     })
+                    benchmarkDiffReady = true
                     displayedContentMode = mode
                     releaseScrollAnchorSoon()
                 }
@@ -933,6 +948,7 @@ export function MainArea() {
                                 setDiffLoading(false)
                                 updateDisplayedSource(commit, bookmarkDiff, multi, true)
                             })
+                            benchmarkDiffReady = true
                             displayedContentMode = mode
                             releaseScrollAnchorSoon()
                         },

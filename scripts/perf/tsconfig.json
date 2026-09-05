@@ -1,0 +1,5 @@
+{
+    "extends": "../../tsconfig.json",
+    "include": ["../benchmark.ts", "./**/*.ts"],
+    "compilerOptions": { "noUnusedLocals": true }
+}

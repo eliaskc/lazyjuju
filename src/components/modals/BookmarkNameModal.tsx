@@ -56,7 +56,9 @@ export function BookmarkNameModal(props: BookmarkNameModalProps) {
     }
 
     const handleSave = () => {
-        const trimmed = name().trim()
+        // Enter can arrive before the content-change notification updates the
+        // signal. Submit the current buffer, including text from this input batch.
+        const trimmed = (inputRef?.plainText ?? name()).trim()
         const finalName = trimmed || generatedName()
 
         if (!finalName) {

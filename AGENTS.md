@@ -23,7 +23,9 @@ Project work may be tracked in [GitHub Issues](https://github.com/eliaskc/kajji/
 - **Dev**: `bun dev` (runs TUI)
 - **Test**: `bun test` (runs unit tests)
 - **E2E test**: `bun test:e2e` (runs Terminal Control TUI workflows)
-- **Benchmarks**: `bun test:bench` (runs benchmark tests)
+- **Microbenchmarks**: `bun test:bench` (parser/token/diff-data tests, not whole-TUI scrolling)
+- **TUI benchmarks**: `bun bench:prepare`, `bun bench:tui`, `bun bench:compare` (see `docs/BENCHMARKING.md`)
+- **Benchmark typecheck**: `bun bench:check`
 - **Typecheck**: `bun check` (tsc --noEmit)
 - **Lint**: `bun lint` (oxlint + oxfmt --check)
 - **Lint fix**: `bun lint:fix` (oxlint --fix + oxfmt)
@@ -105,7 +107,11 @@ This project uses Solid.js, NOT React. Key differences:
 - **Benchmarks**: `tests/bench/` - performance tests with threshold assertions
 - Run unit tests: `bun test`
 - Run E2E tests sparingly: use `bun test:e2e` near task completion or when changes directly affect TUI workflows; do not run them after routine intermediate edits
-- Run benchmarks: `bun test tests/bench/`
+- Run microbenchmarks: `bun test tests/bench/`
+- For performance work, read `docs/BENCHMARKING.md`, reuse a prepared fixture, and record a real-TUI baseline before changes
+- Do not run E2E tests or other CPU-heavy work concurrently with measured benchmarks
+- Keep controller Bun and Terminal Control fixed when comparing target Bun/OpenTUI versions
+- Changes to benchmark readiness/position hooks require a new baseline; do not compare measurements with different definitions
 
 ## Key Patterns
 

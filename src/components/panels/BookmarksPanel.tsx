@@ -21,6 +21,7 @@ import { buildBookmarkStackModel } from "../../stack/discovery"
 import type { BookmarkStackModel, BookmarkStackRow, StackPlan } from "../../stack/model"
 import { resolveAnsiForeground } from "../../theme/ansi"
 import { getVisibleWidth } from "../../utils/ansi"
+import { benchmarkRegion, registerBenchmarkState } from "../../utils/benchmark"
 import { hasOriginDiff } from "../../utils/bookmark-origin-diff"
 import { createDoubleClickDetector } from "../../utils/double-click"
 import { isImmutableError } from "../../utils/error-parser"
@@ -667,6 +668,13 @@ export function BookmarksPanel() {
     })
 
     let listScrollRef: ScrollBoxRenderable | undefined
+    onCleanup(
+        registerBenchmarkState(() => ({
+            bookmarkIndex: currentSelectedIndex(),
+            bookmarkRows: listTotalRows(),
+            ...benchmarkRegion("bookmarks", listScrollRef),
+        })),
+    )
     let listScrollResizeCleanup: (() => void) | undefined
 
     const [listScrollTop, setListScrollTop] = createSignal(0)
