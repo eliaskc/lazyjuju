@@ -112,6 +112,8 @@ for (const target of targets) {
         const message = error instanceof Error ? error.message : String(error)
         results.push({ name, success: false, error: message })
         console.error(`  -> FAILED: ${message}`)
+        // Bun.build can throw an AggregateError with diagnostics in error.errors.
+        console.error(error)
     }
 }
 
