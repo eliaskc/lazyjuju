@@ -1,5 +1,5 @@
 import type { BoxRenderable, MouseEvent } from "@opentui/core"
-import { For, Show, createSignal } from "solid-js"
+import { Show, createSignal } from "solid-js"
 import { useFocus } from "../context/focus"
 import { useTheme } from "../context/theme"
 import type { Context } from "../context/types"
@@ -7,6 +7,8 @@ import { blendColors } from "../utils/color"
 import { createDoubleClickDetector } from "../utils/double-click"
 import type { FileLineStats, FlatFileNode } from "../utils/file-tree"
 import { type FileStatus, getStatusColor } from "../utils/status-colors"
+
+import { VirtualList } from "./VirtualList"
 
 const STATUS_CHARS: Record<string, string> = {
     added: "A",
@@ -18,6 +20,8 @@ const STATUS_CHARS: Record<string, string> = {
 
 export interface FileTreeListProps {
     files: () => FlatFileNode[]
+    scrollTop: () => number
+    viewportHeight: () => number
     fileLineStats?: () => ReadonlyMap<string, FileLineStats>
     selectedIndex: () => number
     setSelectedIndex: (index: number) => void
@@ -36,20 +40,25 @@ export function FileTreeList(props: FileTreeListProps) {
     const [hoveredPath, setHoveredPath] = createSignal<string | null>(null)
 
     return (
-        <For each={props.files()}>
+        <VirtualList
+            items={props.files()}
+            scrollTop={props.scrollTop()}
+            viewportHeight={props.viewportHeight()}
+            itemKey={(item) => item.node.path}
+        >
             {(item, index) => {
                 const isSelected = () => index() === props.selectedIndex()
                 const node = item.node
-                const isTree = props.showTree?.() ?? true
+                const isTree = () => props.showTree?.() ?? true
                 const indent = "  ".repeat(item.visualDepth)
-                const isCollapsed = props.collapsedPaths().has(node.path)
+                const isCollapsed = () => props.collapsedPaths().has(node.path)
                 const isBinary = () => Boolean(node.isBinary)
                 const lineStats = () => props.fileLineStats?.().get(node.path)
                 const visibleLineStats = () =>
                     node.path === "" || hoveredPath() === node.path ? lineStats() : undefined
 
-                const icon = node.isDirectory ? (isCollapsed ? "▶" : "▼") : " "
-                const displayName = isTree ? node.name : node.path
+                const icon = () => (node.isDirectory ? (isCollapsed() ? "▶" : "▼") : " ")
+                const displayName = () => (isTree() ? node.name : node.path)
 
                 const statusChar = node.status ? (STATUS_CHARS[node.status] ?? " ") : " "
                 const statusColor = node.status
@@ -109,6 +118,8 @@ export function FileTreeList(props: FileTreeListProps) {
                         onMouseOver={() => setHoveredPath(node.path)}
                         onMouseOut={handleMouseOut}
                         flexDirection="row"
+                        height={1}
+                        flexShrink={0}
                     >
                         <text
                             wrapMode="none"
@@ -118,13 +129,13 @@ export function FileTreeList(props: FileTreeListProps) {
                             overflow="hidden"
                         >
                             <span style={{ fg: colors().textMuted }}>{indent}</span>
-                            <Show when={isTree}>
+                            <Show when={isTree()}>
                                 <span
                                     style={{
                                         fg: node.isDirectory ? colors().info : colors().textMuted,
                                     }}
                                 >
-                                    {icon}{" "}
+                                    {icon()}{" "}
                                 </span>
                             </Show>
                             <Show when={!node.isDirectory}>
@@ -139,7 +150,7 @@ export function FileTreeList(props: FileTreeListProps) {
                                           : colors().text,
                                 }}
                             >
-                                {displayName}
+                                {displayName()}
                             </span>
                             <Show when={isBinary()}>
                                 <span style={{ fg: colors().textMuted }}> (binary)</span>
@@ -177,6 +188,6 @@ export function FileTreeList(props: FileTreeListProps) {
                     </box>
                 )
             }}
-        </For>
+        </VirtualList>
     )
 }

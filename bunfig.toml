@@ -1,4 +1,5 @@
 preload = ["@opentui/solid/preload"]
 
 [test]
+preload = ["@opentui/solid/preload"]
 pathIgnorePatterns = ["tests/e2e/**"]

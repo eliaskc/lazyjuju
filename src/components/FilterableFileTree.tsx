@@ -6,6 +6,7 @@ import { useCommand } from "../context/command"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import type { Context } from "../context/types"
+import { createScrollViewport } from "../hooks/scroll-viewport"
 import type { FileLineStats, FlatFileNode } from "../utils/file-tree"
 import { FUZZY_THRESHOLD, scrollIntoView } from "../utils/scroll"
 import { FileTreeList } from "./FileTreeList"
@@ -54,10 +55,10 @@ export function FilterableFileTree(props: FilterableFileTreeProps) {
     const [query, setQuery] = createSignal("")
     const [appliedQuery, setAppliedQuery] = createSignal("")
     const [filterSelectedIndex, setFilterSelectedIndex] = createSignal(0)
-    const [scrollTop, setScrollTop] = createSignal(0)
 
     let inputRef: TextareaRenderable | undefined
     let scrollRef: ScrollBoxRenderable | undefined
+    const viewport = createScrollViewport()
 
     const activeQuery = createMemo(() => (filterMode() ? query() : appliedQuery()))
     const hasActiveFilter = createMemo(() => activeQuery().trim().length > 0)
@@ -177,9 +178,9 @@ export function FilterableFileTree(props: FilterableFileTreeProps) {
         scrollIntoView({
             ref: scrollRef,
             index: currentSelectedIndex(),
-            currentScrollTop: untrack(scrollTop),
+            currentScrollTop: untrack(viewport.top),
             listLength: currentFiles().length,
-            setScrollTop,
+            setScrollTop: viewport.sync,
         })
     })
 
@@ -288,6 +289,7 @@ export function FilterableFileTree(props: FilterableFileTreeProps) {
                 <scrollbox
                     ref={(r) => {
                         scrollRef = r
+                        viewport.attach(r)
                         props.scrollRef?.(r)
                     }}
                     flexGrow={1}
@@ -295,6 +297,8 @@ export function FilterableFileTree(props: FilterableFileTreeProps) {
                 >
                     <FileTreeList
                         files={currentFiles}
+                        scrollTop={viewport.top}
+                        viewportHeight={viewport.height}
                         fileLineStats={props.fileLineStats}
                         selectedIndex={currentSelectedIndex}
                         setSelectedIndex={handleSetSelectedIndex}

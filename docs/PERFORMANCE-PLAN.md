@@ -1,6 +1,6 @@
 # Performance improvement plan
 
-Status: P01 implemented and measured. P02–P16 remain open.
+Status: P01 and P02 implemented and measured. P03–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
 See [BENCHMARKING.md](BENCHMARKING.md) for measurement rules and
@@ -32,7 +32,7 @@ change is rejected after measurement, record that decision instead of marking
 an optimization as delivered.
 
 - [x] **P01 — Coordinated, cancellable, cached detail loading**
-- [ ] **P02 — Virtualize log, bookmark, file, and summary lists**
+- [x] **P02 — Virtualize log, bookmark, file, and summary lists**
 - [ ] **P03 — Remove full-diff work from scroll updates**
 - [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
 - [ ] **P05 — Coordinate working-copy snapshots and repository reads**
@@ -167,13 +167,13 @@ does not remove already-created Solid components and renderables. `AnsiText`
 parses its complete input before any `maxLines` limit and can mount all lines.
 
 **Change:**
-- [ ] Render visible slices with spacers and bounded overscan.
-- [ ] Use row-height prefix sums for variable-height log/operation-log entries.
+- [x] Render visible slices with spacers and bounded overscan.
+- [x] Use row-height prefix sums for variable-height log/operation-log entries.
   Replace per-selection summation of preceding entry heights.
-- [ ] Virtualize or collapse large file-stat summaries without hiding access to files.
-- [ ] Cover the jj-formatter path, not only the custom diff views.
-- [ ] Preserve unchanged row identity across stream batches and refreshes.
-- [ ] Cache stable display widths/ANSI parsing where useful. Do not parse or
+- [x] Virtualize or collapse large file-stat summaries without hiding access to files.
+- [x] Cover the jj-formatter path, not only the custom diff views.
+- [x] Preserve unchanged row identity across stream batches and refreshes.
+- [x] Cache stable display widths/ANSI parsing where useful. Do not parse or
   recrop every offscreen row on horizontal movement.
 
 **Accept when:** mounted row counts remain proportional to viewport size as
@@ -680,3 +680,120 @@ The original P01 measurement limits still apply.
 **Local evidence:** `/tmp/kajji-p01-effect-{a1,b1,a2}.json`,
 `/tmp/kajji-p01-effect-comparison.txt`, `/tmp/kajji-p01-effect-unit.log`, and
 `/tmp/kajji-p01-effect-e2e.log`.
+
+### P02 — List virtualization, 2026-09-06
+
+**Decision:** retain the implementation. Native component tests confirm bounded
+mounted rows. Repeated TUI comparisons support lower memory use and faster log
+and bookmark navigation. They do not establish a general diff-scroll improvement.
+
+**Changes:**
+- `VirtualList` uses visible slices, height-preserving spacers, and eight lines
+  of overscan on each side. Native scrollbar-change and viewport-resize events
+  update the slice; virtualization does not wait for a polling timer.
+- Revision, filtered-revision, operation-log, bookmark, and file-tree paths use
+  the shared component. Log height indexes are independent of selection. A very
+  tall entry also mounts only its visible inner lines. Mouse handlers retain
+  absolute list indexes, not indexes within the visible slice.
+- Equal rows retain their objects across replacement batches and refreshes.
+  The retention map contains only the current collection. Changed graph data
+  and metadata replace the affected row. File-tree collapse indicators remain
+  reactive when the row object is retained.
+- `AnsiText` can mount a visible line slice for the jj-formatter path. Parsed
+  ANSI data has a shared LRU cache, limited to 512 entries and an estimated
+  2 MiB. Oversized results are not cached. Theme foreground resolution remains
+  separate from parsing. Horizontal cropping only affects mounted lines.
+- File summaries with more than 20 files show the first eight plus an omitted
+  count and a file-view instruction. All files remain available in file view.
+  Summaries of 20 files or fewer are unchanged, including the stress fixture.
+- Removed the duplicate parent file-selection scroll effect; the filterable
+  file list owns scrolling in both filtered and unfiltered modes.
+
+**Validation:** `bun test` (417 tests), `bun test:e2e` (19 tests), `bun check`,
+`bun bench:check`, and `bun lint` pass. The test-specific OpenTUI preload was
+added to `bunfig.toml`: without it, Bun tests used Solid's non-reactive server
+implementation. The new tests now exercise real reactive components.
+
+Native-renderer checks load 10,000 rows in a 12-line viewport and assert at most
+28 mounted rows, including after a jump to row 5,000. They cover wheel scrolling,
+mouse selection, resize, list shrinkage, unchanged refreshes, appended rows,
+a 10,000-line entry, and large ANSI output with horizontal cropping. Pure tests
+cover height indexes up to 100,000 rows, row replacement, ANSI state across
+lines, eviction, and oversized-cache rejection. Live TUI tests cover 70 added
+history entries, exact revset filtering, operation-log navigation, 100 local and
+100 remote-only bookmarks, file filtering, tree collapse/expansion, a 122-file
+summary, and jj-formatter scrolling/resizing. Existing graph, multi-selection,
+layout, file-navigation, and immediate-input tests remain in place. The new
+functional tests use completed-state checks; they are not new claims about
+immediate filter dismissal or pagination correctness.
+
+**Measurement:** A1 → B1 → A2 → B2, with source `81d3e830` for both A groups.
+A2 ran from a temporary jj workspace with the same dependencies. B2 includes
+an additional filtered-row equality correction: each row stores only its group
+revset, not the group's full commit array. Both comparisons passed the harness
+compatibility checks. Controller and target Bun were fixed at 1.4.2; OpenTUI was
+0.5.10, Effect was 4.0.0-rc.112, and Terminal Control was 1.2.1. No tests or builds
+ran concurrently with measured benchmarks.
+
+```sh
+/Users/elias/.local/share/mise/installs/bun/1.4.2/bin/bun scripts/benchmark.ts run \
+  --bun /Users/elias/.local/share/mise/installs/bun/1.4.2/bin/bun \
+  --fixture .kajji-benchmarks/fixtures/stress \
+  --scenarios log,bookmarks,diff --runs 3 --warmups 1 \
+  --passes 2 --steps 20 --interval-ms 16 \
+  --output /tmp/kajji-p02-GROUP.json
+```
+
+Settings: 120×36 cells, textual unified diff, wrapping, dark theme, endpoint-only
+screen capture (`--sample-ms 0`), prepared fixture and warm filesystem caches.
+Each group has one excluded warmup and three measured processes per scenario.
+The 20-step log workload stays within loaded rows; P08 remains open. Each report
+contains 720 measured inputs and 720 applied positions, with no position-update
+gap over 100 ms. An initial A1 attempt was rejected for 31.2 ms sender lateness;
+the same configuration was repeated before code changes. The failed report is
+not included in the comparisons.
+
+Per-group process medians:
+
+| Metric | A1 | B1 | A2 | B2 |
+| --- | ---: | ---: | ---: | ---: |
+| Log first content observed, ms | 781 | 805 | 899 | 782 |
+| Log content ready, ms | 1,148 | 1,073 | 1,262 | 999 |
+| Log highlighted ready, ms | 1,823 | 1,788 | 2,014 | 1,706 |
+| Bookmark content ready, ms | 1,144 | 1,052 | 1,213 | 1,058 |
+| Diff content ready, ms | 1,085 | 1,091 | 1,359 | 1,051 |
+| Log first-pass Down input-to-output p95, ms | 24.5 | 16.3 | 23.9 | 17.7 |
+| Bookmark first-pass Down input-to-output p95, ms | 19.0 | 16.7 | 20.1 | 16.9 |
+| Diff first-pass Down input-to-output p95, ms | 11.1 | 6.9 | 15.6 | 13.8 |
+| Log first-pass Down recovery, ms | 105 | 109 | 123 | 105 |
+| Log first-pass Up recovery, ms | 22 | 16 | 28 | 14 |
+| Log second-pass Down recovery, ms | 22 | 22 | 17 | 10 |
+| Log second-pass Up recovery, ms | 20 | 19 | 25 | 11 |
+| Bookmark first-pass Down recovery, ms | 16.6 | 7.4 | 14.6 | 6.7 |
+| Diff second-pass Up recovery, ms | 12.4 | 15.1 | 8.9 | 5.9 |
+| Log Kajji peak RSS, MiB | 483 | 414 | 507 | 427 |
+| Bookmark Kajji peak RSS, MiB | 462 | 398 | 437 | 406 |
+| Diff Kajji peak RSS, MiB | 458 | 386 | 427 | 401 |
+
+Both B groups reduce log/bookmark first-pass Down p95 and sampled Kajji peak
+RSS against both A groups. B2 peak RSS is about 6–16% lower, depending on scenario
+and reference group. Startup varied between groups; first observed output did
+not consistently improve. Diff timing also varied: B1's slower second-pass Up
+recovery did not recur in B2, while B2's first-pass Down p95 was higher than A1.
+No broad diff-scroll speed claim is made. B2 log first-pass Down recovery ranged
+from 99 to 141 ms; the similar median does not mean every run recovered faster.
+
+**Remaining limits:** loaded arrays, equality checks, and height-index preparation
+still scale with loaded content when that content changes. Virtualization bounds
+mounted components, not all data preparation. Full jj-formatted ANSI output is
+still parsed once before line slicing, to retain terminal state and total line
+count; `maxLines` is not a streaming parser limit. Large-output preparation and
+long-line policies remain P11/P04. The short timed diff run does not cover file
+boundaries or structural/compiled/network performance. Local and remote list
+functional checks do not establish network performance. P08's pagination
+correctness requirement remains open.
+
+**Local evidence:** `/tmp/kajji-p02-{a1,b1,a2,b2}.json`,
+`/tmp/kajji-p02-compare-{a1,a2}-{b1,b2}.txt`, `/tmp/kajji-p02-unit.log`,
+`/tmp/kajji-p02-e2e.log`, and `/tmp/kajji-p02-final.diff`. Fixtures and reports
+remain local.

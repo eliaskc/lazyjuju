@@ -14,6 +14,7 @@ import { useStatus } from "../../context/status"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import type { Context } from "../../context/types"
+import { createScrollViewport } from "../../hooks/scroll-viewport"
 import { HookOperation } from "../../hooks/types"
 import type { OperationResult } from "../../process/operation-result"
 import { getRepoPath } from "../../repo"
@@ -22,6 +23,7 @@ import { findCommitBookmarkWithOriginDiff, hasOriginDiff } from "../../utils/boo
 import { blendColors } from "../../utils/color"
 import { createDoubleClickDetector } from "../../utils/double-click"
 import { isImmutableError } from "../../utils/error-parser"
+import { buildRowOffsets } from "../../utils/list-window"
 import { getRevisionRestorePlan } from "../../utils/revision-restore"
 import { type SelectionSource, shouldAutoScrollSelection } from "../../utils/scroll"
 import { AnsiText } from "../AnsiText"
@@ -36,6 +38,7 @@ import { SetBookmarkModal } from "../modals/SetBookmarkModal"
 import { SquashModal } from "../modals/SquashModal"
 import { UndoModal } from "../modals/UndoModal"
 import { Panel } from "../Panel"
+import { VirtualList } from "../VirtualList"
 
 type LogTab = "revisions" | "oplog"
 
@@ -401,7 +404,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     }
 
     const selectGroupedCommit = async (
-        group: FilterPreviewGroup,
+        group: Pick<FilterPreviewGroup, "revset">,
         commit: Commit,
         openFiles = false,
     ) => {
@@ -855,19 +858,23 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
 
     let scrollRef: ScrollBoxRenderable | undefined
     onCleanup(registerBenchmarkState(() => benchmarkRegion("log", scrollRef)))
-    const [scrollTop, setScrollTop] = createSignal(0)
     const [logViewportHeight, setLogViewportHeight] = createSignal(30)
     const [logViewportWidth, setLogViewportWidth] = createSignal(80)
     const [logScrollLeft, setLogScrollLeft] = createSignal(0)
     const [logSelectionSource, setLogSelectionSource] =
         createSignal<SelectionSource>("programmatic")
 
-    const logTotalLines = createMemo(() =>
-        commits().reduce((sum, commit) => sum + commit.lines.length, 0),
+    const logViewport = createScrollViewport()
+    const opLogViewport = createScrollViewport()
+    const logOffsets = createMemo(() =>
+        buildRowOffsets(commits(), (commit) => commit.displayLines.length),
     )
+    const opLogOffsets = createMemo(() =>
+        buildRowOffsets(opLogEntries(), (entry) => entry.lines.length),
+    )
+    const logTotalLines = () => logOffsets().at(-1) ?? 0
 
     let opLogScrollRef: ScrollBoxRenderable | undefined
-    const [opLogScrollTop, setOpLogScrollTop] = createSignal(0)
     const [opLogViewportWidth, setOpLogViewportWidth] = createSignal(80)
     const [opLogScrollLeft, setOpLogScrollLeft] = createSignal(0)
     let filesFilterApi: FilterableFileTreeApi | undefined
@@ -967,15 +974,12 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             if (!scrollRef || commitList.length === 0) return
             if (!shouldAutoScrollSelection(logSelectionSource())) return
 
-            let lineOffset = 0
             const clampedIndex = Math.min(index, commitList.length)
-            for (const commit of commitList.slice(0, clampedIndex)) {
-                lineOffset += commit.lines.length
-            }
+            const lineOffset = logOffsets()[clampedIndex] ?? 0
 
             const margin = 2
-            const viewportHeight = logViewportHeight()
-            const currentScrollTop = scrollTop()
+            const viewportHeight = logViewport.height()
+            const currentScrollTop = logViewport.top()
 
             const visibleStart = currentScrollTop
             const visibleEnd = currentScrollTop + viewportHeight - 1
@@ -991,7 +995,6 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
 
             if (newScrollTop !== currentScrollTop) {
                 scrollRef.scrollTo(newScrollTop)
-                setScrollTop(newScrollTop)
             }
         }),
     )
@@ -1000,17 +1003,14 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         on([opLogSelectedIndex, opLogEntries], ([index, entries]) => {
             if (!opLogScrollRef || entries.length === 0) return
 
-            let lineOffset = 0
             const clampedIndex = Math.min(index, entries.length)
-            for (const entry of entries.slice(0, clampedIndex)) {
-                lineOffset += entry.lines.length
-            }
+            const lineOffset = opLogOffsets()[clampedIndex] ?? 0
             const selectedHeight = entries[clampedIndex]?.lines.length ?? 1
             const lineEnd = lineOffset + selectedHeight - 1
 
             const margin = 2
             const viewportHeight = opLogScrollRef.viewport?.height ?? 30
-            const currentScrollTop = opLogScrollTop()
+            const currentScrollTop = opLogViewport.top()
 
             const visibleStart = currentScrollTop
             const visibleEnd = currentScrollTop + viewportHeight - 1
@@ -1026,7 +1026,6 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
 
             if (newScrollTop !== currentScrollTop) {
                 opLogScrollRef.scrollTo(newScrollTop)
-                setOpLogScrollTop(newScrollTop)
             }
         }),
     )
@@ -1037,9 +1036,6 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             const currentScroll = scrollRef.scrollTop ?? 0
             const currentViewport = scrollRef.viewport?.height ?? 30
             const currentViewportWidth = scrollRef.viewport?.width ?? 80
-            if (currentScroll !== scrollTop()) {
-                setScrollTop(currentScroll)
-            }
             if (currentViewport !== logViewportHeight()) {
                 setLogViewportHeight(currentViewport)
             }
@@ -1075,36 +1071,6 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             clampScrollLeft(opLogScrollLeft(), opLogMaxLineLength(), opLogViewportWidth()),
         )
     })
-
-    let filesScrollRef: ScrollBoxRenderable | undefined
-    const [filesScrollTop, setFilesScrollTop] = createSignal(0)
-
-    createEffect(
-        on([selectedFileIndex, flatFiles], ([index, files]) => {
-            if (!filesScrollRef || files.length === 0) return
-
-            const margin = 2
-            const viewportHeight = filesScrollRef.viewport?.height ?? 30
-            const currentScrollTop = filesScrollTop()
-
-            const visibleStart = currentScrollTop
-            const visibleEnd = currentScrollTop + viewportHeight - 1
-            const safeStart = visibleStart + margin
-            const safeEnd = visibleEnd - margin
-
-            let newScrollTop = currentScrollTop
-            if (index < safeStart) {
-                newScrollTop = Math.max(0, index - margin)
-            } else if (index > safeEnd) {
-                newScrollTop = Math.max(0, index - viewportHeight + margin + 1)
-            }
-
-            if (newScrollTop !== currentScrollTop) {
-                filesScrollRef.scrollTo(newScrollTop)
-                setFilesScrollTop(newScrollTop)
-            }
-        }),
-    )
 
     const handleFileEnter = () => {
         const file = flatFiles()[selectedFileIndex()]
@@ -2336,7 +2302,8 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         selected: () => boolean
         onSelect: () => void
         onOpen: () => void
-        onNearEnd?: () => void
+        from?: () => number
+        to?: () => number
     }) => {
         const handleClick = createDoubleClickDetector(props.onOpen)
         const handleMouseDown = () => {
@@ -2356,8 +2323,9 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             return marked() ? markedBackground() : undefined
         }
         return (
-            <box onMouseDown={handleMouseDown}>
-                <For each={props.commit.displayLines}>
+            <box onMouseDown={handleMouseDown} flexShrink={0}>
+                <box height={props.from?.() ?? 0} flexShrink={0} />
+                <For each={props.commit.displayLines.slice(props.from?.() ?? 0, props.to?.())}>
                     {(line) => {
                         const gutterWidth = () => stripAnsi(line.gutter).length
                         const contentWidth = () => Math.max(1, logViewportWidth() - gutterWidth())
@@ -2400,9 +2368,54 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                         )
                     }}
                 </For>
+                <box
+                    height={
+                        props.commit.displayLines.length -
+                        (props.to?.() ?? props.commit.displayLines.length)
+                    }
+                    flexShrink={0}
+                />
             </box>
         )
     }
+
+    type FilterRow = {
+        key: string
+        group: Pick<FilterPreviewGroup, "revset">
+        commit?: Commit
+        spacer?: boolean
+    }
+    const filterRows = createMemo(() => {
+        const rows: FilterRow[] = []
+        const groups = activeFilterGroups()
+        groups.forEach((group, index) => {
+            // Avoid comparing the complete group once per row during refresh.
+            const target = { revset: group.revset }
+            if (!(groups.length === 1 && group.exact)) {
+                if (index > 0)
+                    rows.push({ key: `${group.revset}:space`, group: target, spacer: true })
+                rows.push({ key: `${group.revset}:heading`, group: target })
+            }
+            for (const commit of group.commits)
+                rows.push({ key: `${group.revset}:${commit.commitId}`, group: target, commit })
+        })
+        return rows
+    })
+    const filterOffsets = createMemo(() =>
+        buildRowOffsets(filterRows(), (row) => row.commit?.displayLines.length ?? 1),
+    )
+    createEffect(
+        on([selectedFilterCommitId, filterRows], ([selected, rows]) => {
+            if (!showFilterResults() || !scrollRef) return
+            const index = rows.findIndex((row) => row.commit?.changeId === selected)
+            if (index < 0) return
+            const offset = filterOffsets()[index]!
+            const top = logViewport.top()
+            if (offset < top || offset >= top + logViewport.height() - 2) {
+                scrollRef.scrollTo(Math.max(0, offset - 2))
+            }
+        }),
+    )
 
     const renderLogContent = () => (
         <box flexDirection="column" flexGrow={1}>
@@ -2414,7 +2427,10 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             </Show>
             <Show when={commits().length > 0 || revsetFilter() || filterMode()}>
                 <scrollbox
-                    ref={scrollRef}
+                    ref={(ref) => {
+                        scrollRef = ref
+                        logViewport.attach(ref)
+                    }}
                     flexGrow={1}
                     overflow="hidden"
                     onMouseScroll={createHorizontalScrollHandler(
@@ -2437,8 +2453,14 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                                     </box>
                                 }
                             >
-                                <For each={commits()}>
-                                    {(commit, index) =>
+                                <VirtualList
+                                    items={commits()}
+                                    offsets={logOffsets()}
+                                    scrollTop={logViewport.top()}
+                                    viewportHeight={logViewport.height()}
+                                    itemKey={(commit) => commit.commitId}
+                                >
+                                    {(commit, index, from, to) =>
                                         renderCommitEntry({
                                             commit,
                                             selected: () => index() === selectedIndex(),
@@ -2447,18 +2469,11 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                                                 setSelectedIndex(index())
                                                 enterFilesView()
                                             },
-                                            onNearEnd: () => {
-                                                if (
-                                                    !logLoadingMore() &&
-                                                    commits().length - index() <= 5 &&
-                                                    logHasMore()
-                                                ) {
-                                                    loadMoreLog()
-                                                }
-                                            },
+                                            from,
+                                            to,
                                         })
                                     }
-                                </For>
+                                </VirtualList>
                             </Show>
                         }
                     >
@@ -2474,44 +2489,37 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                                 </box>
                             }
                         >
-                            <For each={activeFilterGroups()}>
-                                {(group, groupIndex) => {
-                                    const showHeading = () =>
-                                        !(activeFilterGroups().length === 1 && group.exact)
-                                    return (
-                                        <box flexDirection="column">
-                                            <Show when={showHeading() && groupIndex() > 0}>
-                                                <box height={1} />
+                            <VirtualList
+                                items={filterRows()}
+                                offsets={filterOffsets()}
+                                scrollTop={logViewport.top()}
+                                viewportHeight={logViewport.height()}
+                                itemKey={(row) => row.key}
+                            >
+                                {(row, _index, from, to) =>
+                                    row.commit ? (
+                                        renderCommitEntry({
+                                            commit: row.commit,
+                                            selected: () =>
+                                                selectedFilterCommitId() === row.commit!.changeId,
+                                            onSelect: () =>
+                                                selectGroupedCommit(row.group, row.commit!),
+                                            onOpen: () =>
+                                                selectGroupedCommit(row.group, row.commit!, true),
+                                            from,
+                                            to,
+                                        })
+                                    ) : (
+                                        <box height={1} flexShrink={0} overflow="hidden">
+                                            <Show when={!row.spacer}>
+                                                <text fg={colors().textMuted} wrapMode="none">
+                                                    -r '{row.group.revset}'
+                                                </text>
                                             </Show>
-                                            <Show when={showHeading()}>
-                                                <box height={1} overflow="hidden">
-                                                    <text fg={colors().textMuted} wrapMode="none">
-                                                        -r '{group.revset}'
-                                                    </text>
-                                                </box>
-                                            </Show>
-                                            <For each={group.commits}>
-                                                {(commit) =>
-                                                    renderCommitEntry({
-                                                        commit,
-                                                        selected: () =>
-                                                            selectedFilterCommitId() ===
-                                                            commit.changeId,
-                                                        onSelect: () =>
-                                                            selectGroupedCommit(group, commit),
-                                                        onOpen: () =>
-                                                            selectGroupedCommit(
-                                                                group,
-                                                                commit,
-                                                                true,
-                                                            ),
-                                                    })
-                                                }
-                                            </For>
                                         </box>
                                     )
-                                }}
-                            </For>
+                                }
+                            </VirtualList>
                         </Show>
                     </Show>
                 </scrollbox>
@@ -2563,7 +2571,10 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     const renderOpLogContent = () => (
         <Show when={opLogEntries().length > 0}>
             <scrollbox
-                ref={opLogScrollRef}
+                ref={(ref) => {
+                    opLogScrollRef = ref
+                    opLogViewport.attach(ref)
+                }}
                 flexGrow={1}
                 overflow="hidden"
                 onMouseScroll={createHorizontalScrollHandler(
@@ -2575,8 +2586,14 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                 )}
                 scrollbarOptions={{ visible: false }}
             >
-                <For each={opLogEntries()}>
-                    {(entry, index) => {
+                <VirtualList
+                    items={opLogEntries()}
+                    offsets={opLogOffsets()}
+                    scrollTop={opLogViewport.top()}
+                    viewportHeight={opLogViewport.height()}
+                    itemKey={(entry) => entry.operationId}
+                >
+                    {(entry, index, from, to) => {
                         const isSelected = () => index() === opLogSelectedIndex()
                         const showSelection = () => isSelected()
                         const selectionBackground = () =>
@@ -2584,38 +2601,42 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                                 ? colors().selectionBackground
                                 : inactiveSelectionBackground()
                         return (
-                            <For each={entry.lines}>
-                                {(line) => (
-                                    <box
-                                        backgroundColor={
-                                            showSelection() ? selectionBackground() : undefined
-                                        }
-                                        overflow="hidden"
-                                    >
-                                        <AnsiText
-                                            content={line}
-                                            defaultFg={
-                                                showSelection() && isFocused()
-                                                    ? colors().selectionText
-                                                    : undefined
+                            <box flexShrink={0} onMouseDown={() => setOpLogSelectedIndex(index())}>
+                                <box height={from()} flexShrink={0} />
+                                <For each={entry.lines.slice(from(), to())}>
+                                    {(line) => (
+                                        <box
+                                            backgroundColor={
+                                                showSelection() ? selectionBackground() : undefined
                                             }
-                                            wrapMode="none"
-                                            onMouseScroll={createHorizontalScrollHandler(
-                                                opLogScrollLeft,
-                                                setOpLogScrollLeft,
-                                                opLogMaxLineLength,
-                                                opLogViewportWidth,
-                                                () => opLogScrollRef,
-                                            )}
-                                            cropStart={opLogScrollLeft()}
-                                            cropWidth={Math.max(1, opLogViewportWidth())}
-                                        />
-                                    </box>
-                                )}
-                            </For>
+                                            overflow="hidden"
+                                        >
+                                            <AnsiText
+                                                content={line}
+                                                defaultFg={
+                                                    showSelection() && isFocused()
+                                                        ? colors().selectionText
+                                                        : undefined
+                                                }
+                                                wrapMode="none"
+                                                onMouseScroll={createHorizontalScrollHandler(
+                                                    opLogScrollLeft,
+                                                    setOpLogScrollLeft,
+                                                    opLogMaxLineLength,
+                                                    opLogViewportWidth,
+                                                    () => opLogScrollRef,
+                                                )}
+                                                cropStart={opLogScrollLeft()}
+                                                cropWidth={Math.max(1, opLogViewportWidth())}
+                                            />
+                                        </box>
+                                    )}
+                                </For>
+                                <box height={entry.lines.length - to()} flexShrink={0} />
+                            </box>
                         )
                     }}
-                </For>
+                </VirtualList>
             </scrollbox>
         </Show>
     )
@@ -2647,9 +2668,6 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                         focusContext="log.files"
                         filterApiRef={(api) => {
                             filesFilterApi = api
-                        }}
-                        scrollRef={(r) => {
-                            filesScrollRef = r
                         }}
                     />
                 </Show>

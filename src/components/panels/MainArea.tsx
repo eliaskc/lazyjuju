@@ -133,11 +133,13 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
     const fileRows = createMemo(() => {
         const maxPathWidth = Math.max(1, Math.floor(props.maxWidth * 0.75))
         let maxLen = 1
-        const rows = s().files.map((file) => {
-            const pathText = truncatePathMiddle(file.path, maxPathWidth)
-            maxLen = Math.max(maxLen, pathText.length)
-            return { file, pathText }
-        })
+        const rows = s()
+            .files.slice(0, s().files.length > 20 ? 8 : 20)
+            .map((file) => {
+                const pathText = truncatePathMiddle(file.path, maxPathWidth)
+                maxLen = Math.max(maxLen, pathText.length)
+                return { file, pathText }
+            })
         const pathColumnWidth = Math.min(maxPathWidth, maxLen)
         const availableBarWidth = Math.max(
             1,
@@ -198,6 +200,11 @@ function FileStats(props: { stats: DiffStats; maxWidth: number }) {
                     )
                 }}
             </For>
+            <Show when={s().files.length > 20}>
+                <text fg={colors().textMuted} wrapMode="none">
+                    … {s().files.length - 8} more files; open file view to browse
+                </text>
+            </Show>
             <DiffStatsSummary stats={s()} />
             <text fg={colors().textMuted}>{"─".repeat(props.maxWidth + 2)}</text>
         </>
@@ -1686,6 +1693,8 @@ export function MainArea() {
                                     <AnsiText
                                         content={rawDiffOutput()}
                                         wrapMode="none"
+                                        scrollTop={adjustedScrollTop()}
+                                        viewportHeight={viewportHeight()}
                                         cropStart={scrollLeft()}
                                         cropWidth={Math.max(1, viewportWidth())}
                                     />

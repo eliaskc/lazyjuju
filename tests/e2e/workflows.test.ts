@@ -57,11 +57,15 @@ function createRepository(root: string) {
     return repository
 }
 
-async function withKajji(run: (session: Session, repository: string) => Promise<void>) {
+async function withKajji(
+    run: (session: Session, repository: string) => Promise<void>,
+    prepare?: (repository: string, home: string) => void,
+) {
     const root = mkdtempSync(join(tmpdir(), "kajji-e2e-"))
     const home = join(root, "home")
     mkdirSync(home)
     const repository = createRepository(root)
+    prepare?.(repository, home)
     const terminal = await TerminalControl.make()
 
     try {
@@ -113,6 +117,178 @@ async function withKajji(run: (session: Session, repository: string) => Promise<
         rmSync(root, { recursive: true, force: true })
     }
 }
+
+test("scrolls variable-height revision, filtered, and operation logs", async () => {
+    await withKajji(
+        async (session, repository) => {
+            await session.keyboard.write(Buffer.from("j".repeat(20)))
+            await session.screen.waitForText("virtual-history-050", { timeoutMs: 5_000 })
+            await session.keyboard.type("/")
+            await waitForInput(session)
+            await session.keyboard.type("all()")
+            await session.screen.waitForText("virtual-history-069", { timeoutMs: 10_000 })
+            await session.keyboard.press("Enter")
+            await session.screen.waitUntil(
+                (snapshot) =>
+                    snapshot.frame.cursor === null && snapshot.text.includes("ui detail marker 0"),
+                { timeoutMs: 10_000 },
+            )
+            await session.screen.waitForIdle({ quietForMs: 50, timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("j".repeat(20)))
+            await session.screen.waitForText("virtual-history-050", { timeoutMs: 5_000 })
+            const operations = runJj(
+                repository,
+                "op",
+                "log",
+                "--no-graph",
+                "-T",
+                'id.short(8) ++ "\\n"',
+            )
+                .trim()
+                .split("\n")
+            await session.keyboard.type("]")
+            await session.screen.waitForText(operations[0]!, { timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("j".repeat(20)))
+            await session.screen.waitForText(operations[20]!, { timeoutMs: 5_000 })
+            await session.resize({ cols: 100, rows: 24 })
+            await session.screen.waitForText(operations[20]!, { timeoutMs: 5_000 })
+        },
+        (repository) => {
+            for (let i = 0; i < 70; i++)
+                runJj(
+                    repository,
+                    "new",
+                    "--before",
+                    "@",
+                    "--no-edit",
+                    "-m",
+                    `virtual-history-${String(i).padStart(3, "0")}`,
+                )
+        },
+    )
+}, 60_000)
+
+test("scrolls jj-formatter output and resizes without blank rows", async () => {
+    await withKajji(
+        async (session) => {
+            await session.keyboard.type("3")
+            await session.keyboard.write(Buffer.from("j".repeat(25)))
+            await session.screen.waitUntil(
+                (snapshot) =>
+                    snapshot.text.includes("ui detail marker 25") &&
+                    !snapshot.text.includes("ui detail marker 0"),
+                { timeoutMs: 5_000 },
+            )
+            await session.resize({ cols: 80, rows: 24 })
+            await session.screen.waitForText("ui detail marker 25", { timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("k".repeat(25)))
+            await session.screen.waitForText("ui detail marker 0", { timeoutMs: 5_000 })
+        },
+        (_repository, home) => {
+            const configDir = join(home, ".config", "kajji")
+            mkdirSync(configDir, { recursive: true })
+            writeFileSync(
+                join(configDir, "config.json"),
+                JSON.stringify({ diff: { engine: "jj-formatter" } }),
+            )
+        },
+    )
+}, 45_000)
+
+test("browses virtual bookmarks and all files in a collapsed large summary", async () => {
+    await withKajji(
+        async (session) => {
+            await session.screen.waitForText("more files; open file view", { timeoutMs: 10_000 })
+            await session.keyboard.type("2")
+            await session.keyboard.write(Buffer.from("j".repeat(36)))
+            await session.screen.waitForText("virtual-036", { timeoutMs: 5_000 })
+            await session.resize({ cols: 100, rows: 24 })
+            await session.screen.waitForText("virtual-036", { timeoutMs: 5_000 })
+            await session.keyboard.type("R")
+            await session.screen.waitForText("Bookmarks (Remote)", { timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("j".repeat(36)))
+            await session.screen.waitForText("remote-036", { timeoutMs: 5_000 })
+            await session.keyboard.type("R")
+            await session.screen.waitUntil(
+                (snapshot) => !snapshot.text.includes("Bookmarks (Remote)"),
+                { timeoutMs: 5_000 },
+            )
+            await session.keyboard.type("/")
+            await waitForInput(session)
+            await session.keyboard.type("virtual-099")
+            await session.screen.waitForText("virtual-099", { timeoutMs: 5_000 })
+            await session.keyboard.press("Escape")
+            await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
+            await session.keyboard.type("1")
+            await session.keyboard.press("Control+X")
+            await session.screen.waitForText("1 Files (", { timeoutMs: 10_000 })
+            await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
+            await session.keyboard.type("1")
+            await session.keyboard.type("-")
+            await session.keyboard.write(Buffer.from("j".repeat(36)))
+            await session.screen.waitForText("row-034.txt", { timeoutMs: 5_000 })
+            await session.keyboard.type("-")
+            await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("k".repeat(150)))
+            await session.keyboard.press("Enter")
+            await session.screen.waitForText("▶", { timeoutMs: 5_000 })
+            await session.keyboard.press("Enter")
+            await session.screen.waitForText("▼", { timeoutMs: 5_000 })
+            await session.keyboard.type("/")
+            await waitForInput(session)
+            await session.keyboard.type("row-119")
+            await session.screen.waitForText("row-119.txt", { timeoutMs: 5_000 })
+            await session.keyboard.press("Escape")
+            await session.resize({ cols: 120, rows: 36 })
+            await session.screen.waitForText("row-119.txt", { timeoutMs: 5_000 })
+        },
+        (repository) => {
+            mkdirSync(join(repository, "z-many"))
+            for (let i = 0; i < 120; i++)
+                writeFileSync(
+                    join(repository, "z-many", `row-${String(i).padStart(3, "0")}.txt`),
+                    `file ${i}\n`,
+                )
+            runJj(
+                repository,
+                "bookmark",
+                "create",
+                ...Array.from({ length: 100 }, (_, i) => `virtual-${String(i).padStart(3, "0")}`),
+            )
+            runJj(
+                repository,
+                "git",
+                "remote",
+                "add",
+                "origin",
+                "file:///nonexistent-kajji-e2e-remote",
+            )
+            const commit = runJj(
+                repository,
+                "log",
+                "-r",
+                "@-",
+                "--no-graph",
+                "-T",
+                "commit_id",
+            ).trim()
+            const refs =
+                Array.from(
+                    { length: 100 },
+                    (_, i) =>
+                        `create refs/remotes/origin/remote-${String(i).padStart(3, "0")} ${commit}`,
+                ).join("\n") + "\n"
+            const result = Bun.spawnSync(["git", "update-ref", "--stdin"], {
+                cwd: repository,
+                stdin: Buffer.from(refs),
+                stdout: "pipe",
+                stderr: "pipe",
+            })
+            if (!result.success) throw new Error(result.stderr.toString())
+            runJj(repository, "git", "import")
+        },
+    )
+}, 60_000)
 
 async function waitForInput(session: Session) {
     await session.screen.waitUntil((snapshot) => snapshot.frame.cursor !== null, {

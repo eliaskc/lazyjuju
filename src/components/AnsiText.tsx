@@ -1,22 +1,9 @@
 import type { MouseEvent } from "@opentui/core"
-import type { TerminalLine } from "ghostty-opentui"
-import { ptyToJson } from "ghostty-opentui"
 import { For, Show, createEffect, createMemo } from "solid-js"
 import { useTheme } from "../context/theme"
 import { resolveAnsiForeground } from "../theme/ansi"
-import { profile } from "../utils/profiler"
-
-type AnsiSpan = {
-    text: string
-    fg?: string | null
-    bg?: string | null
-    flags?: number
-    width?: number
-}
-
-type AnsiLine = {
-    spans: AnsiSpan[]
-}
+import { parseAnsiLines, type AnsiLine, type AnsiSpan } from "../utils/ansi-lines"
+import { VirtualList } from "./VirtualList"
 
 interface AnsiTextProps {
     content: string
@@ -24,6 +11,8 @@ interface AnsiTextProps {
     bold?: boolean
     wrapMode?: "none" | "char" | "word"
     maxLines?: number
+    scrollTop?: number
+    viewportHeight?: number
     defaultFg?: string
     onTotalLines?: (total: number) => void
     onMouseScroll?: (event: MouseEvent) => void
@@ -43,16 +32,7 @@ export function AnsiText(props: AnsiTextProps) {
             defaultFg: props.defaultFg,
         })
 
-    const allLines = createMemo(() => {
-        if (!props.content) return [] as AnsiLine[]
-        const endParse = profile("ptyToJson parse")
-        const result = ptyToJson(props.content, {
-            cols: props.cols ?? 9999,
-            rows: 1,
-        })
-        endParse(`${result.lines.length} lines from ${props.content.length} chars`)
-        return result.lines
-    })
+    const allLines = createMemo(() => parseAnsiLines(props.content, props.cols))
 
     createEffect(() => {
         const total = allLines().length
@@ -116,15 +96,30 @@ export function AnsiText(props: AnsiTextProps) {
         )
     }
 
+    const renderLine = (line: AnsiLine) => (
+        <text
+            wrapMode={props.wrapMode ?? "word"}
+            flexShrink={0}
+            onMouseScroll={props.onMouseScroll}
+        >
+            <Show when={props.bold} fallback={renderSpans(line)}>
+                <b>{renderSpans(line)}</b>
+            </Show>
+        </text>
+    )
+
     return (
-        <For each={visibleLines()}>
-            {(line) => (
-                <text wrapMode={props.wrapMode ?? "word"} onMouseScroll={props.onMouseScroll}>
-                    <Show when={props.bold} fallback={renderSpans(line)}>
-                        <b>{renderSpans(line)}</b>
-                    </Show>
-                </text>
-            )}
-        </For>
+        <Show
+            when={props.viewportHeight !== undefined}
+            fallback={<For each={visibleLines()}>{renderLine}</For>}
+        >
+            <VirtualList
+                items={visibleLines()}
+                scrollTop={props.scrollTop ?? 0}
+                viewportHeight={props.viewportHeight ?? 30}
+            >
+                {renderLine}
+            </VirtualList>
+        </Show>
     )
 }

@@ -1,7 +1,7 @@
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import type { Bookmark } from "../../commander/bookmarks"
 import { getRevisionId } from "../../commander/types"
 import { useApplication } from "../../context/application"
@@ -15,6 +15,7 @@ import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { featureFlags } from "../../feature-flags"
 import { createHorizontalCropScroll } from "../../hooks/horizontal-crop-scroll"
+import { createScrollViewport } from "../../hooks/scroll-viewport"
 import type { OperationResult } from "../../process/operation-result"
 import { getRepoPath } from "../../repo"
 import { buildBookmarkStackModel } from "../../stack/discovery"
@@ -35,6 +36,7 @@ import { StackActionsModal } from "../modals/StackActionsModal"
 import { StackPlanModal } from "../modals/StackPlanModal"
 import { StackPreparingModal } from "../modals/StackPreparingModal"
 import { Panel } from "../Panel"
+import { VirtualList } from "../VirtualList"
 
 type BookmarkRow = BookmarkStackRow<Bookmark>
 
@@ -270,7 +272,7 @@ export function BookmarksPanel() {
         return displayBookmarkStackModel()?.rows ?? []
     })
 
-    const currentBookmarks = () => displayBookmarkRows().map((row) => row.bookmark)
+    const currentBookmarks = createMemo(() => displayBookmarkRows().map((row) => row.bookmark))
 
     const listTotalRows = createMemo(() => displayBookmarkRows().length)
     const canPageBookmarks = createMemo(
@@ -668,6 +670,7 @@ export function BookmarksPanel() {
     })
 
     let listScrollRef: ScrollBoxRenderable | undefined
+    const listViewport = createScrollViewport()
     onCleanup(
         registerBenchmarkState(() => ({
             bookmarkIndex: currentSelectedIndex(),
@@ -677,7 +680,6 @@ export function BookmarksPanel() {
     )
     let listScrollResizeCleanup: (() => void) | undefined
 
-    const [listScrollTop, setListScrollTop] = createSignal(0)
     const [listViewportHeight, setListViewportHeight] = createSignal(30)
     const [listViewportWidth, setListViewportWidth] = createSignal(40)
     const [listSelectionSource, setListSelectionSource] =
@@ -752,6 +754,7 @@ export function BookmarksPanel() {
     const setListScrollRef = (ref: ScrollBoxRenderable) => {
         listScrollResizeCleanup?.()
         listScrollRef = ref
+        listViewport.attach(ref)
         const resizeable = ref as ScrollBoxRenderable & {
             on?: (event: "resize", callback: () => void) => void
             off?: (event: "resize", callback: () => void) => void
@@ -770,9 +773,9 @@ export function BookmarksPanel() {
                 scrollIntoView({
                     ref: listScrollRef,
                     index,
-                    currentScrollTop: listScrollTop(),
+                    currentScrollTop: listViewport.top(),
                     listLength: currentBookmarks().length,
-                    setScrollTop: setListScrollTop,
+                    setScrollTop: listViewport.sync,
                     selectionSource: listSelectionSource(),
                 })
             },
@@ -780,7 +783,6 @@ export function BookmarksPanel() {
     )
 
     onCleanup(() => {
-        setListScrollTop(0)
         setListViewportHeight(30)
         listScrollResizeCleanup?.()
         listScrollResizeCleanup = undefined
@@ -790,9 +792,6 @@ export function BookmarksPanel() {
         const pollInterval = setInterval(() => {
             if (!listScrollRef) return
             const currentScroll = listScrollRef.scrollTop ?? 0
-            if (currentScroll !== listScrollTop()) {
-                setListScrollTop(currentScroll)
-            }
             syncListViewport()
 
             if (!bookmarksLoadingMore() && canPageBookmarks()) {
@@ -1232,7 +1231,14 @@ export function BookmarksPanel() {
                                 backgroundColor: colors().background,
                             }}
                         >
-                            <For each={displayBookmarkRows()}>
+                            <VirtualList
+                                items={displayBookmarkRows()}
+                                scrollTop={listViewport.top()}
+                                viewportHeight={listViewport.height()}
+                                itemKey={(row) =>
+                                    `${row.bookmark.name}\0${row.bookmark.remote ?? ""}`
+                                }
+                            >
                                 {(row, index) => {
                                     const bookmark = row.bookmark
                                     const isSelected = () => index() === currentSelectedIndex()
@@ -1307,7 +1313,7 @@ export function BookmarksPanel() {
                                         </>
                                     )
                                 }}
-                            </For>
+                            </VirtualList>
                         </scrollbox>
                     </Show>
 
