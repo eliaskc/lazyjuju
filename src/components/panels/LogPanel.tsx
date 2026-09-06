@@ -235,6 +235,8 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     )
     const [filterPreviewLoading, setFilterPreviewLoading] = createSignal(false)
     let filterPreviewToken = 0
+    let filterPreviewAbort: AbortController | null = null
+    let appliedFilterAbort: AbortController | null = null
     let filterPreviewTimer: ReturnType<typeof setTimeout> | null = null
     let filterInputRef: TextareaRenderable | undefined
 
@@ -254,11 +256,15 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
 
     onCleanup(() => {
         command.setInputMode(false)
+        filterPreviewToken++
+        filterPreviewAbort?.abort()
+        appliedFilterAbort?.abort()
         if (filterPreviewTimer) clearTimeout(filterPreviewTimer)
     })
 
     const loadFilterGroupsForCandidates = async (
         candidates: Array<{ revset: string; exact: boolean }>,
+        signal: AbortSignal,
     ) => {
         const results = await Promise.all(
             candidates.map(async (candidate) => {
@@ -267,7 +273,9 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                         cwd: getRepoPath(),
                         revset: candidate.revset,
                         limit: candidate.exact ? undefined : REVSET_PREVIEW_LIMIT,
+                        signal,
                     })
+                    if (signal.aborted) return null
                     return result.commits.length > 0
                         ? { ...candidate, commits: result.commits }
                         : null
@@ -291,10 +299,21 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             .filter((group) => group.commits.length > 0)
     }
 
-    const loadFilterPreviewGroups = (query: string) =>
-        loadFilterGroupsForCandidates(buildFilterPreviewRevsets(query))
+    const loadFilterPreviewGroups = (query: string) => {
+        filterPreviewAbort?.abort()
+        filterPreviewAbort = new AbortController()
+        return loadFilterGroupsForCandidates(
+            buildFilterPreviewRevsets(query),
+            filterPreviewAbort.signal,
+        )
+    }
+
+    createEffect(on(appliedFilterGroups, () => appliedFilterAbort?.abort()))
 
     const refreshAppliedFilterGroups = async () => {
+        appliedFilterAbort?.abort()
+        const controller = new AbortController()
+        appliedFilterAbort = controller
         const groups = appliedFilterGroups()
         if (groups.length === 0) return
         const previousEntries = groupedFilterCommits()
@@ -308,7 +327,9 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
                 revset: group.revset,
                 exact: group.exact,
             })),
+            controller.signal,
         )
+        if (controller.signal.aborted || appliedFilterGroups() !== groups) return
         setAppliedFilterGroups(nextGroups)
 
         const nextEntries = nextGroups.flatMap((group) =>
@@ -336,6 +357,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
 
     createEffect(
         on([filterMode, filterQuery], ([active, query]) => {
+            filterPreviewAbort?.abort()
             if (filterPreviewTimer) clearTimeout(filterPreviewTimer)
             const trimmed = query.trim()
             if (!active || !trimmed) {
@@ -400,10 +422,9 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             if (filterPreviewTimer) clearTimeout(filterPreviewTimer)
             const token = ++filterPreviewToken
             groups = await loadFilterPreviewGroups(query)
-            if (token === filterPreviewToken) {
-                setFilterPreviewGroups(groups)
-                setFilterPreviewLoading(false)
-            }
+            if (token !== filterPreviewToken) return
+            setFilterPreviewGroups(groups)
+            setFilterPreviewLoading(false)
         }
         const selectedRevset = groups[0]?.revset ?? null
         const activeBookmarkRevset = activeBookmarkFilter() ? `::${activeBookmarkFilter()}` : null

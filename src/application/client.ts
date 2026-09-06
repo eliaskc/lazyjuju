@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import type { Bookmark } from "../commander/bookmarks"
 import { GitLive } from "../commander/git"
 import type { GitHubPullRequestSummary } from "../commander/github"
@@ -74,6 +74,7 @@ import { Stack, StackLive, type StackService } from "../stack/executor"
 import type { StackPlan } from "../stack/model"
 import { type StackStore, StackStoreLive } from "../stack/store"
 import { diagnosticsLog } from "../utils/diagnostics"
+import { Details, DetailsLive, type DetailService } from "./detail-service"
 import { makeHistoricalFileStore } from "./historical-files"
 
 interface ApplicationOperationOptions extends Omit<JjOperationOptions, "sink"> {
@@ -314,6 +315,11 @@ export interface ApplicationClient {
         options: ApplicationReadOptions,
     ) => Promise<string[]>
     readonly jjDiff: (target: JjDiffTarget, options: ApplicationDiffOptions) => Promise<string>
+    readonly jjPreparedDiff: (
+        target: JjDiffTarget,
+        options: ApplicationDiffOptions,
+    ) => Promise<FlattenedFile[]>
+    readonly invalidateDetailReads: () => Promise<void>
     readonly structuralDiff: (
         request: StructuralDiffRequest,
         options: ApplicationReadOptions,
@@ -440,6 +446,7 @@ export function makeApplicationClient(
     const providedHooksLayer = hooksLayer.pipe(Layer.provide(appProcessLayer))
     const dependencies = Layer.merge(appProcessLayer, providedHooksLayer)
     const providedJjLayer = JjLayer.pipe(Layer.provide(dependencies))
+    const providedDetailsLayer = DetailsLive.pipe(Layer.provide(providedJjLayer))
     const providedGitLayer = GitLive.pipe(Layer.provide(appProcessLayer))
     const providedStructuralDiffLayer = StructuralDiffLive.pipe(Layer.provide(appProcessLayer))
     const gitHubDependencies = Layer.merge(appProcessLayer, providedGitLayer)
@@ -456,6 +463,7 @@ export function makeApplicationClient(
     const runtime = ManagedRuntime.make(
         Layer.mergeAll(
             providedJjLayer,
+            providedDetailsLayer,
             providedHooksLayer,
             providedGitHubLayer,
             providedRepositoryBootstrapLayer,
@@ -465,6 +473,9 @@ export function makeApplicationClient(
         ),
     )
     const historicalFiles = makeHistoricalFileStore()
+    const invalidateDetails = Details.use((details) => details.invalidate())
+    const withDetailInvalidation = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        invalidateDetails.pipe(Effect.andThen(effect), Effect.ensuring(invalidateDetails))
     let accepting = true
     let disposePromise: Promise<void> | undefined
 
@@ -474,6 +485,21 @@ export function makeApplicationClient(
     ): Promise<A> => {
         if (!accepting) return Promise.reject(new ApplicationClientClosedError())
         return runtime.runPromise(Jj.use(operation), { signal: options.signal })
+    }
+
+    const runDetail = <A, E>(
+        options: ApplicationReadOptions,
+        operation: (details: DetailService) => Effect.Effect<A, E>,
+    ): Promise<A> => {
+        if (!accepting) return Promise.reject(new ApplicationClientClosedError())
+        return runtime
+            .runPromiseExit(Details.use(operation), { signal: options.signal })
+            .then((exit) => {
+                if (Exit.isSuccess(exit)) return exit.value
+                if (Cause.hasInterrupts(exit.cause))
+                    throw new DOMException("Detail read cancelled", "AbortError")
+                throw Cause.squash(exit.cause)
+            })
     }
 
     const runStream = <A, R, E>(
@@ -527,9 +553,10 @@ export function makeApplicationClient(
         ) => Effect.Effect<InteractiveJjResult, InteractiveProcessSpawnError>,
     ): Promise<ApplicationInteractiveResult> => {
         if (!accepting) throw new ApplicationClientClosedError()
-        const result = await runtime.runPromise(InteractiveJj.use(operation), {
-            signal,
-        })
+        const result = await runtime.runPromise(
+            withDetailInvalidation(InteractiveJj.use(operation)),
+            { signal },
+        )
         return result.exitCode === 0
             ? { success: true }
             : {
@@ -561,16 +588,13 @@ export function makeApplicationClient(
     const runStack = <A, E>(
         options: ApplicationStackOptions,
         operation: (stack: StackService, sink: OperationSink) => Effect.Effect<A, E>,
+        invalidate = false,
     ): Promise<A> => {
         if (!accepting) return Promise.reject(new ApplicationClientClosedError())
         const { observer, signal } = options
         const { sink } = observerSink(observer)
-        return runtime.runPromise(
-            Stack.use((stack) => operation(stack, sink)),
-            {
-                signal,
-            },
-        )
+        const effect = Stack.use((stack) => operation(stack, sink))
+        return runtime.runPromise(invalidate ? withDetailInvalidation(effect) : effect, { signal })
     }
 
     const runGitHubRead = <A, E>(
@@ -637,7 +661,7 @@ export function makeApplicationClient(
                 ),
             ),
         )
-        const result = await runtime.runPromise(effect, { signal })
+        const result = await runtime.runPromise(withDetailInvalidation(effect), { signal })
         const success = result.exitCode === 0
         diagnosticsLog(success ? "info" : "error", "jj command finished", {
             command: result.command,
@@ -784,12 +808,7 @@ export function makeApplicationClient(
                 }),
             ),
         jjShowDescription: (revision, options) =>
-            runRead(options, (jj) =>
-                jj.showDescription(revision, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+            runDetail(options, (details) => details.showDescription(revision, options)),
         jjNearestAncestorBookmarkNames: (revision, options) =>
             runRead(options, (jj) =>
                 jj.nearestAncestorBookmarkNames(revision, {
@@ -805,19 +824,9 @@ export function makeApplicationClient(
                 }),
             ),
         jjFiles: (target, options) =>
-            runRead(options, (jj) =>
-                jj.files(target, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+            runDetail(options, (details) => details.files(target, options)),
         jjCommitDetails: (revision, options) =>
-            runRead(options, (jj) =>
-                jj.commitDetails(revision, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+            runDetail(options, (details) => details.commitDetails(revision, options)),
         jjOpLog: (limit, options) =>
             runRead(options, (jj) =>
                 jj.opLog(limit, {
@@ -825,7 +834,13 @@ export function makeApplicationClient(
                     timeoutMs: options.timeoutMs,
                 }),
             ),
-        jjDiff: (target, options) => runRead(options, (jj) => jj.diff(target, options)),
+        jjDiff: (target, options) => runDetail(options, (details) => details.diff(target, options)),
+        jjPreparedDiff: (target, options) =>
+            runDetail(options, (details) => details.preparedDiff(target, options)),
+        invalidateDetailReads: () =>
+            accepting
+                ? runtime.runPromise(invalidateDetails)
+                : Promise.reject(new ApplicationClientClosedError()),
         structuralDiff: (request, options) => {
             if (!accepting) return Promise.reject(new ApplicationClientClosedError())
             const effect = StructuralDiff.use((structural) => structural.diff(request)).pipe(
@@ -852,7 +867,7 @@ export function makeApplicationClient(
         jjBookmarks: (options) => runRead(options, (jj) => jj.bookmarks(options)),
         jjStreamBookmarks: (options, onBatch) =>
             runStream(options, (jj) => jj.streamBookmarks(options), onBatch),
-        jjLogPage: (options) => runRead(options, (jj) => jj.logPage(options)),
+        jjLogPage: (options) => runDetail(options, (details) => details.logPage(options)),
         jjStreamLogPage: (options, onBatch) =>
             runStream(options, (jj) => jj.streamLogPage(options), onBatch),
         stackParent: (bookmark, options) =>
@@ -866,8 +881,10 @@ export function makeApplicationClient(
                 }),
             ),
         applyStackPlan: (plan, options) =>
-            runStack(options, (stack, sink) =>
-                stack.applyStackPlan(plan, { cwd: options.cwd, sink }),
+            runStack(
+                options,
+                (stack, sink) => stack.applyStackPlan(plan, { cwd: options.cwd, sink }),
+                true,
             ),
         ghListPullRequestsByHead: (heads, options) =>
             runGitHubRead(options, (gitHub) => gitHub.listPullRequestsByHead(heads, options)),

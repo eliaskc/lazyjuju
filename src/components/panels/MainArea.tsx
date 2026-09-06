@@ -14,7 +14,7 @@ import {
 import { benchmarkRegion, registerBenchmarkState } from "../../utils/benchmark"
 
 import type { JjDiffTarget } from "../../commander/jj"
-import { type Commit, getRevisionId } from "../../commander/types"
+import type { Commit } from "../../commander/types"
 import { type AppConfig, onConfigChange, readConfig } from "../../config"
 import { useApplication } from "../../context/application"
 import { useCommand } from "../../context/command"
@@ -35,11 +35,9 @@ import {
     type FileId,
     type FlattenedFile,
     type HunkId,
-    flattenDiff,
     getAdjacentHunkFromRow,
     getLineNumWidth,
     getMaxLineNumber,
-    parseDiffString,
     shouldShowStickyFileHeader,
 } from "../../diff"
 import { structuralCandidate } from "../../diff/structural/flatten"
@@ -275,6 +273,7 @@ export function MainArea() {
         setFileLineStats,
         showTree,
         refresh,
+        refreshCounter,
         flatFiles,
         selectedFile,
         multiSelectedCommits,
@@ -690,6 +689,7 @@ export function MainArea() {
 
     // Track current fetch to prevent stale updates
     let currentFetchKey: string | null = null
+    let detailAbort: AbortController | null = null
     let benchmarkDiffReady = false
     onCleanup(
         registerBenchmarkState(() => ({
@@ -749,7 +749,7 @@ export function MainArea() {
         const startedAt = performance.now()
         app.structuralDiff({ target, cwd, files }, { cwd, signal: controller.signal })
             .then((outcome) => {
-                if (structuralAbort !== controller) return
+                if (controller.signal.aborted || structuralAbort !== controller) return
                 if (currentFetchKey !== fetchKey) return
                 if (outcome.kind === "difft-missing") {
                     if (!difftMissingNotified) {
@@ -792,7 +792,19 @@ export function MainArea() {
         viewMode()
         const showJjFormatter = useJjFormatter()
         const showStructural = structuralEnabled() && !showJjFormatter
-        if (!commit && !bookmarkDiff && !multi) return
+        const refreshVersion = refreshCounter()
+        const cwd = getRepoPath()
+        const columns = showJjFormatter ? Math.max(1, viewportWidth()) : undefined
+        if (!commit && !bookmarkDiff && !multi) {
+            detailAbort?.abort()
+            structuralAbort?.abort()
+            currentFetchKey = null
+            benchmarkDiffReady = false
+            setDiffLoading(false)
+            setParsedFiles([])
+            setRawDiffOutput("")
+            return
+        }
 
         const paths: string[] | undefined = undefined
 
@@ -808,8 +820,11 @@ export function MainArea() {
             : showStructural
               ? "structural"
               : "custom"
-        const fetchKey = `${sourceKey}:all:${mode}`
+        const fetchKey = JSON.stringify([cwd, sourceKey, mode, columns, refreshVersion])
         if (fetchKey === currentFetchKey) return
+        detailAbort?.abort()
+        const controller = new AbortController()
+        detailAbort = controller
         currentFetchKey = fetchKey
         benchmarkDiffReady = false
         structuralAbort?.abort()
@@ -835,32 +850,24 @@ export function MainArea() {
 
         const fetchStart = performance.now()
         const diffOptions = {
-            cwd: getRepoPath(),
+            cwd,
             paths,
             color: showJjFormatter,
-            columns: showJjFormatter ? Math.max(1, viewportWidth()) : undefined,
+            columns,
+            signal: controller.signal,
         }
-        const rawDiff = bookmarkDiff
-            ? app.jjDiff({ from: bookmarkDiff.from, to: bookmarkDiff.to }, diffOptions)
-            : multi
-              ? app.jjDiff({ revision: multi.revset }, diffOptions)
-              : commit
-                ? app.jjDiff({ revision: getRevisionId(commit) }, diffOptions)
-                : Promise.resolve("")
-        const structuralTarget: JjDiffTarget | null = bookmarkDiff
+        const structuralTarget: JjDiffTarget = bookmarkDiff
             ? { from: bookmarkDiff.from, to: bookmarkDiff.to }
             : multi
               ? { revision: multi.revset }
-              : commit
-                ? { revision: getRevisionId(commit) }
-                : null
-        const fetcher = rawDiff.then((result) =>
-            showJjFormatter ? result : parseDiffString(result),
-        )
+              : { revision: commit!.commitId }
+        const fetcher = showJjFormatter
+            ? app.jjDiff(structuralTarget, diffOptions)
+            : app.jjPreparedDiff(structuralTarget, diffOptions)
 
         fetcher
             .then((result) => {
-                if (currentFetchKey !== fetchKey) return
+                if (controller.signal.aborted || currentFetchKey !== fetchKey) return
 
                 const fetchMs = performance.now() - fetchStart
 
@@ -897,10 +904,8 @@ export function MainArea() {
                     return
                 }
 
-                const parsedDiff = result as Parameters<typeof flattenDiff>[0]
-                const flattenStart = performance.now()
-                const flattened = flattenDiff(parsedDiff)
-                const flattenMs = performance.now() - flattenStart
+                // Parsing and flattening are shared with completed detail reads.
+                const flattened = result as FlattenedFile[]
 
                 const lineCount = flattened.reduce(
                     (sum, f) => sum + f.hunks.reduce((s, h) => s + h.lines.length, 0),
@@ -909,7 +914,7 @@ export function MainArea() {
 
                 profileLog("diff-fetch-complete", {
                     fetchMs: Math.round(fetchMs),
-                    flattenMs: Math.round(flattenMs * 100) / 100,
+                    prepared: true,
                     files: flattened.length,
                     lines: lineCount,
                 })
@@ -969,7 +974,7 @@ export function MainArea() {
                 })
             })
             .catch((err) => {
-                if (currentFetchKey !== fetchKey) return
+                if (controller.signal.aborted || currentFetchKey !== fetchKey) return
                 setDiffLoading(false)
                 setParsedDiffError(err.message)
                 if (multi) {
@@ -1156,6 +1161,7 @@ export function MainArea() {
     }
 
     onCleanup(() => {
+        detailAbort?.abort()
         structuralAbort?.abort()
         clearTimeout(structuralAnchorTimer)
     })

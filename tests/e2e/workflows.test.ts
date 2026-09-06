@@ -187,6 +187,43 @@ test("browses revisions and keeps the detail panel in sync", async () => {
     })
 }, 45_000)
 
+test("keeps the latest detail after rapid revision changes and revisits", async () => {
+    await withKajji(async (session) => {
+        // No waits between selection inputs. Finish away from the initial detail.
+        await session.keyboard.write(Buffer.from("jkjj"))
+        await session.screen.waitUntil(
+            (snapshot) =>
+                snapshot.text.includes("base.txt") &&
+                !snapshot.text.includes("ui.txt") &&
+                !snapshot.text.includes("parser.txt"),
+            { timeoutMs: 10_000 },
+        )
+        await session.keyboard.write(Buffer.from("kkj"))
+        await session.screen.waitUntil(
+            (snapshot) => snapshot.text.includes("parser.txt") && !snapshot.text.includes("ui.txt"),
+            { timeoutMs: 10_000 },
+        )
+        await session.keyboard.write(Buffer.from("k"))
+        await session.screen.waitForText("ui detail marker", { timeoutMs: 10_000 })
+    })
+}, 45_000)
+
+test("refreshes cached working-copy details after external edits", async () => {
+    await withKajji(async (session, repository) => {
+        writeFileSync(join(repository, "ui.txt"), "external detail update\n")
+        runJj(repository, "describe", "-m", "external subject update")
+        await session.screen.waitUntil(
+            (snapshot) =>
+                snapshot.text.includes("external subject update") &&
+                snapshot.text.includes("external detail update") &&
+                !snapshot.text.includes("ui detail marker"),
+            { timeoutMs: 15_000 },
+        )
+        await session.keyboard.write(Buffer.from("jk"))
+        await session.screen.waitForText("external detail update", { timeoutMs: 10_000 })
+    })
+}, 45_000)
+
 test("enters diff mode for the selected revision and returns to normal mode", async () => {
     await withKajji(async (session) => {
         await session.keyboard.type("3")

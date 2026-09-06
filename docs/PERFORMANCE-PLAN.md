@@ -1,6 +1,6 @@
 # Performance improvement plan
 
-Status: initial investigation recorded; implementation not started.
+Status: P01 implemented and measured. P02–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
 See [BENCHMARKING.md](BENCHMARKING.md) for measurement rules and
@@ -31,7 +31,7 @@ Mark an item complete only after its acceptance checks pass. If a proposed
 change is rejected after measurement, record that decision instead of marking
 an optimization as delivered.
 
-- [ ] **P01 — Coordinated, cancellable, cached detail loading**
+- [x] **P01 — Coordinated, cancellable, cached detail loading**
 - [ ] **P02 — Virtualize log, bookmark, file, and summary lists**
 - [ ] **P03 — Remove full-diff work from scroll updates**
 - [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
@@ -138,14 +138,14 @@ obsolete work. There is no reusable completed-diff/description cache in these
 selection paths. The existing process service already supports interruption.
 
 **Change:**
-- [ ] Cancel obsolete diff and description requests on selection change and cleanup.
-- [ ] Check request identity before parsing or publishing results.
-- [ ] Keep selection immediate; coordinate and bound expensive detail requests.
-- [ ] Add size-bounded caches and share in-flight reads for repeated targets.
-- [ ] Use resolved full commit IDs and relevant options as cache keys. Do not use
+- [x] Cancel obsolete diff and description requests on selection change and cleanup.
+- [x] Check request identity before parsing or publishing results.
+- [x] Keep selection immediate; coordinate and bound expensive detail requests.
+- [x] Add size-bounded caches and share in-flight reads for repeated targets.
+- [x] Use resolved full commit IDs and relevant options as cache keys. Do not use
   change IDs or mutable bookmark names alone. Define refresh/repository-change
   invalidation for symbolic targets and multi-revision selections.
-- [ ] Apply cancellation to file, filter-preview, and visual-range reads where
+- [x] Apply cancellation to file, filter-preview, and visual-range reads where
   their results are no longer needed. Keep intentional range caching bounded.
 
 **Accept when:** rapid A → B → C navigation does not parse or publish obsolete
@@ -517,3 +517,166 @@ Use repeated A → B → A runs on the same prepared fixture for performance cla
 Keep private fixtures and reports local. Do not add source content from copied
 repositories to these documents. Run relevant unit/E2E checks and type/lint checks
 for code changes; do not run them concurrently with timed benchmarks.
+
+### P01 — Implemented, 2026-09-06
+
+**Decision:** retain the change. Detail recovery improves substantially during
+rapid revision navigation. Startup is slower in these runs; this is an explicit
+trade-off, not a startup improvement.
+
+**Changes:**
+- `ApplicationClient` shares in-flight detail reads. At most four reads run at
+  once, including process cleanup. At most 32 reads wait; newer queued reads
+  start first, and overflow cancels the oldest queued read.
+- A consumer can cancel without interrupting other consumers of the same read.
+  When the last consumer cancels, the process scope is interrupted. A cancelled
+  read cannot parse, publish, or populate the completed cache from a late result.
+- Prepared textual diffs and descriptions use a shared LRU cache limited to
+  32 MiB of estimated retained data and 128 entries. Oversized results are not
+  retained. Prepared diffs reuse parsed and flattened rows, not just command output.
+- Keys include repository path, full commit IDs, and read options. Visible
+  multi-selection members use full commit IDs. Mutable symbols, change IDs,
+  unresolved connectors, and range expressions have no completed-result cache;
+  they are read again. Refresh, configuration changes, and repository mutations
+  invalidate completed detail reads. Reads from an earlier cache generation
+  cannot populate the new cache.
+- File and filter reads share active requests but do not retain completed results.
+  Completed file-metadata reuse remains P12; binary detection can return degraded
+  metadata, which must not become a reusable cached result.
+- File, filter-preview, applied-filter, and visual-range requests cancel when
+  obsolete or on cleanup. Visual-range caching is limited to 32 entries and
+  256 KiB of estimated retained IDs and keys. Its keys include full endpoints,
+  loaded-list length, and refresh generation.
+- The detail panel refreshes symbolic targets on repository refresh and includes
+  formatter width in its request identity. Selection remains immediate.
+
+**Validation:** `bun test` (406 tests), `bun test:e2e` (16 tests), `bun check`,
+`bun bench:check`, and `bun lint`. New tests cover A → B → C and A → B → A,
+late-result preparation, shared-consumer cancellation, queue limits, cache
+size/count eviction, invalidation, mutable targets, read options, failures,
+cleanup, and termination/reaping of a real child. Live TUI tests cover rapid
+revision changes and external working-copy edits. Existing TUI tests cover
+file navigation, resize, description changes, undo, and multi-selection.
+
+**Measurement:** A1 → B1 → A2 → B2 on the same prepared `stress` fixture. A uses
+the application source from `4faaf28f`; candidate files were backed up and
+restored for A2. Bun 1.4.1, OpenTUI 0.5.10, and Terminal Control 1.2.1 were fixed.
+Each group used one excluded warmup and three measured processes. No tests ran
+concurrently with these measurements.
+
+```sh
+bun bench:tui --fixture .kajji-benchmarks/fixtures/stress \
+  --scenarios log --runs 3 --warmups 1 --passes 2 \
+  --steps 40 --interval-ms 16 --output /tmp/kajji-p01-GROUP.json
+```
+
+Defaults remained 120×36 cells, textual unified diff, wrapping, dark theme, and
+endpoint-only screen captures. These runs exclude pagination. Each burst applied
+all 40 requested positions, in both directions and both passes.
+
+Per-group medians across the three measured processes:
+
+| Metric | A1 | B1 | A2 | B2 |
+| --- | ---: | ---: | ---: | ---: |
+| Content ready, ms | 1,077 | 1,142 | 1,102 | 1,187 |
+| Highlighted ready, ms | 1,785 | 1,875 | 1,800 | 1,944 |
+| First-pass Down input-to-output p95, ms | 29.5 | 25.3 | 29.9 | 25.3 |
+| First-pass Down final recovery, ms | 1,840 | 117 | 1,764 | 150 |
+| First-pass Up final recovery, ms | 1,898 | 24 | 2,030 | 19 |
+| Second-pass Down final recovery, ms | 2,070 | 19 | 2,016 | 21 |
+| Second-pass Up final recovery, ms | 1,891 | 20 | 1,453 | 18 |
+| Kajji peak RSS, MiB | 731 | 558 | 563 | 526 |
+| Kajji plus descendants peak RSS, MiB | 1,782 | 594 | 1,639 | 578 |
+| Maximum sampled process count, including Kajji | 69 | 4 | 68 | 5 |
+
+Application-only RSS varied substantially. The repeat supports lower descendant
+memory and process accumulation, not a general reduction in Kajji's own memory.
+Process counts and RSS are sampled; short-lived children can be missed. Recovery
+includes final detail and highlighting completion. First and repeated visits are
+reported separately, and no failed or lower-work run is included.
+
+**Limits:** the cache size is an estimate, not a heap limit. Large single results
+and process output remain P11. Structural result caching and file-metadata reuse
+are not included. The timed workload uses textual source launch and linear
+history; it does not establish structural, compiled-startup, network, or
+pagination performance. P08's input-correctness prerequisite remains open.
+The final candidate also has a structural cleanup guard and no completed file
+cache; neither changes this log-only textual workload.
+
+**Local evidence:** `/tmp/kajji-p01-{a1,b1,a2,b2}.json`,
+`/tmp/kajji-p01-comparison-final.txt`, `/tmp/kajji-p01-unit.log`, and
+`/tmp/kajji-p01-e2e.log`. Reports and fixtures remain local.
+
+### P01 — Effect service refactor, 2026-09-06
+
+**Decision:** retain the Effect implementation. This changes ownership of
+concurrency and cancellation, not P01's cache or selection policies.
+
+- `src/application/detail-service.ts` defines the scoped `Details` service.
+  It calls `Jj` effects directly. `ApplicationClient` converts results to
+  Promises only at the UI boundary; it also maps interruption to `AbortError`.
+- `RcMap` shares active reads and tracks consumers through scopes. Closing the
+  last consumer scope interrupts the producer. Separate typed readers preserve
+  result and error types without casts or a custom in-flight map.
+- Four scoped workers consume a `TxPriorityQueue`. Deferred admission and
+  completion signals preserve newest-first ordering, the 32-entry queue limit,
+  and the requirement to finish child cleanup before reusing a worker slot.
+  There are no manual Promise resolvers, abort listeners, consumer counts, or
+  running-work counters in the coordinator.
+- The byte-weighted completed cache remains explicit application policy. All
+  typed readers share the same 32 MiB / 128-entry budget. Native `Cache` does
+  not provide byte capacity or the required last-consumer cancellation rule.
+  Pinned Effect source and current upstream source were inspected before choosing
+  `RcMap`.
+- Invalidation is an Effect. Mutation finalizers invalidate within the runtime;
+  UI refresh waits for invalidation before starting replacement reads. Closing
+  the application runtime closes the service and all its workers and lookups.
+
+**Validation:** `bun test` (408 tests), `bun test:e2e` (16 tests), `bun check`,
+`bun bench:check`, and `bun lint`. Coordination tests now use Effect fibers,
+scopes, and Deferred signals instead of Promise resolvers or timed waits. Tests
+include shared byte/count budgets, a shared worker pool across result types,
+typed failures, defects, interruption, queue overflow, late preparation, and
+shutdown. Real child termination and the existing TUI tests remain covered.
+A formatting-only correction to the existing `skills-lock.json` was needed for
+repository-wide lint.
+
+**Measurement:** Promise A1 → Effect B1 → Promise A2, using the P01 Promise
+source at `78d429e9` for both A groups. Same `stress` fixture and harness; one
+excluded warmup and three measured processes per group. The candidate source
+was backed up and restored for A2. Bun on PATH changed to 1.4.2 during the work,
+so subsequent comparisons explicitly pinned both controller and target to
+Bun 1.4.1. Effect remained 4.0.0-beta.98; OpenTUI and Terminal Control remained
+0.5.10 and 1.2.1. No tests ran concurrently with measured benchmarks.
+
+```sh
+/Users/elias/.local/share/mise/installs/bun/1.4.1/bin/bun scripts/benchmark.ts run \
+  --bun /Users/elias/.local/share/mise/installs/bun/1.4.1/bin/bun \
+  --fixture .kajji-benchmarks/fixtures/stress --scenarios log \
+  --runs 3 --warmups 1 --passes 2 --steps 40 --interval-ms 16 \
+  --output /tmp/kajji-p01-effect-GROUP.json
+```
+
+All other settings match the P01 comparison above. Per-group process medians:
+
+| Metric | Promise A1 | Effect B1 | Promise A2 |
+| --- | ---: | ---: | ---: |
+| Content ready, ms | 1,083 | 1,130 | 1,148 |
+| Highlighted ready, ms | 1,786 | 1,817 | 1,829 |
+| First-pass Down input-to-output p95, ms | 25.7 | 25.1 | 25.5 |
+| First-pass Down final recovery, ms | 125 | 117 | 111 |
+| First-pass Up final recovery, ms | 26 | 19 | 21 |
+| Second-pass Down final recovery, ms | 17 | 18 | 23 |
+| Second-pass Up final recovery, ms | 22 | 22 | 23 |
+| Kajji peak RSS, MiB | 594 | 580 | 581 |
+| Kajji plus descendants peak RSS, MiB | 656 | 643 | 617 |
+| Maximum sampled process count, including Kajji | 5 | 5 | 5 |
+
+Every burst applied all 40 requested positions. The results support preserving
+P01's responsiveness, not a separate speed or memory improvement from Effect.
+Startup ranges overlap; this comparison does not establish a new startup cost.
+The original P01 measurement limits still apply.
+
+**Local evidence:** `/tmp/kajji-p01-effect-{a1,b1,a2}.json`,
+`/tmp/kajji-p01-effect-comparison.txt`, `/tmp/kajji-p01-effect-unit.log`, and
+`/tmp/kajji-p01-effect-e2e.log`.

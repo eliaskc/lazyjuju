@@ -191,12 +191,32 @@ export function SyncProvider(props: { children: JSX.Element }) {
     const [filesLoading, setFilesLoading] = createSignal(false)
     const [filesError, setFilesError] = createSignal<string | null>(null)
     let filesRequestId = 0
+    let filesAbort: AbortController | null = null
+    const beginFilesRequest = () => {
+        filesAbort?.abort()
+        filesAbort = new AbortController()
+        return { request: ++filesRequestId, signal: filesAbort.signal }
+    }
+    let syncDisposed = false
+    onCleanup(() => {
+        syncDisposed = true
+        filesRequestId++
+        filesAbort?.abort()
+    })
     let filesRequestKind: "commit" | "bookmark" | null = null
     const [showTree, setShowTree] = createSignal(readConfig().ui.showFileTree)
     const [activeBookmarkDiff, setActiveBookmarkDiff] = createSignal<BookmarkDiffView | null>(null)
     onMount(() => {
-        const unsubscribeConfig = onConfigChange((config) => {
-            setShowTree(config.ui.showFileTree)
+        const unsubscribeConfig = onConfigChange(async (config) => {
+            try {
+                await app.invalidateDetailReads()
+                if (syncDisposed) return
+                setRefreshCounter((c) => c + 1)
+                setShowTree(config.ui.showFileTree)
+            } catch (error) {
+                if (!syncDisposed)
+                    setError(error instanceof Error ? error.message : "Refresh failed")
+            }
         })
         onCleanup(unsubscribeConfig)
     })
@@ -346,11 +366,18 @@ export function SyncProvider(props: { children: JSX.Element }) {
             refreshQueued = true
             return
         }
+        if (syncDisposed) return
         isRefreshing = true
-        setRefreshCounter((c) => c + 1)
-
+        filesAbort?.abort()
+        filesRequestId++
+        filesRequestKind = null
+        setFilesLoading(false)
         try {
+            await app.invalidateDetailReads()
+            if (syncDisposed) return
+            setRefreshCounter((c) => c + 1)
             await Promise.all([loadLog(options), loadBookmarks()])
+            if (syncDisposed) return
             const refreshState = await app.jjRefreshState({
                 cwd: getRepoPath(),
             })
@@ -361,23 +388,30 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 lastWorkingCopyCommitId = refreshState.workingCopyCommitId
             }
 
+            if (syncDisposed) return
             if (viewMode() === "files") {
                 const diff = activeBookmarkDiff()
                 const target = filesSourceTarget()
-                const request = ++filesRequestId
+                const { request, signal } = beginFilesRequest()
                 filesRequestKind = diff ? "bookmark" : "commit"
                 try {
                     const result = diff
                         ? await app.jjFiles(
                               { from: diff.from, to: diff.to },
-                              { cwd: getRepoPath() },
+                              { cwd: getRepoPath(), signal },
                           )
                         : target
-                          ? await app.jjFiles(target, { cwd: getRepoPath() })
+                          ? await app.jjFiles(target, { cwd: getRepoPath(), signal })
                           : null
                     if (result && request === filesRequestId) {
                         setFiles(result)
                         setFileTree(buildFileTree(result))
+                    }
+                } catch (error) {
+                    if (request === filesRequestId) {
+                        setFilesError(
+                            error instanceof Error ? error.message : "Failed to load files",
+                        )
                     }
                 } finally {
                     if (request === filesRequestId) {
@@ -388,7 +422,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
             }
         } finally {
             isRefreshing = false
-            if (refreshQueued) {
+            if (refreshQueued && !syncDisposed) {
                 refreshQueued = false
                 doFullRefresh()
             }
@@ -526,39 +560,53 @@ export function SyncProvider(props: { children: JSX.Element }) {
     const activeCommit = () => (multiSelectedCommits().length >= 2 ? undefined : selectedCommit())
 
     let currentDetailsCacheKey: string | null = null
+    let detailsAbort: AbortController | null = null
+    onCleanup(() => detailsAbort?.abort())
     createEffect(() => {
         const commit = activeCommit()
+        const version = refreshCounter()
 
         if (activeBookmarkDiff()) {
+            detailsAbort?.abort()
             setCommitDetails(null)
             currentDetailsCacheKey = null
             return
         }
 
         if (!commit) {
+            detailsAbort?.abort()
             setCommitDetails(null)
             currentDetailsCacheKey = null
             return
         }
 
-        const cacheKey = `${commit.changeId}:${commit.commitId}`
+        const cacheKey = JSON.stringify([getRepoPath(), commit.commitId, version])
         if (cacheKey === currentDetailsCacheKey) return
         currentDetailsCacheKey = cacheKey
-
-        const revId = getRevisionId(commit)
+        detailsAbort?.abort()
+        const controller = new AbortController()
+        detailsAbort = controller
 
         profileMsg(`--- select commit: ${commit.changeId.slice(0, 8)}`)
         const endDetails = profile(`commitDetails(${commit.changeId.slice(0, 8)})`)
-        app.jjCommitDetails(revId, { cwd: getRepoPath() }).then((details) => {
-            endDetails()
-            if (currentDetailsCacheKey === cacheKey) {
+        app.jjCommitDetails(commit.commitId, {
+            cwd: getRepoPath(),
+            signal: controller.signal,
+        })
+            .then((details) => {
+                if (controller.signal.aborted || currentDetailsCacheKey !== cacheKey) return
                 setCommitDetails({
                     changeId: commit.changeId,
                     subject: details.subject,
                     body: details.body,
                 })
-            }
-        })
+            })
+            .catch(() => {
+                if (!controller.signal.aborted && currentDetailsCacheKey === cacheKey) {
+                    setCommitDetails(null)
+                }
+            })
+            .finally(endDetails)
     })
 
     const selectPrev = () => {
@@ -622,8 +670,8 @@ export function SyncProvider(props: { children: JSX.Element }) {
         if (!top || !bottom) return null
         return {
             ...range,
-            key: `${bottom.changeId}::${top.changeId}`,
-            revset: `${getRevisionId(bottom)}::${getRevisionId(top)}`,
+            key: JSON.stringify([bottom.commitId, top.commitId, list.length, refreshCounter()]),
+            revset: `${bottom.commitId}::${top.commitId}`,
         }
     })
 
@@ -662,6 +710,8 @@ export function SyncProvider(props: { children: JSX.Element }) {
             return
         }
         const token = ++visualResolveToken
+        const controller = new AbortController()
+        onCleanup(() => controller.abort())
         const { key, revset } = info
         ;(async () => {
             try {
@@ -669,7 +719,9 @@ export function SyncProvider(props: { children: JSX.Element }) {
                     cwd: getRepoPath(),
                     revset,
                     limit: 1000,
+                    signal: controller.signal,
                 })
+                if (controller.signal.aborted || token !== visualResolveToken) return
                 const loaded = new Set(commits().map(getRevisionId))
                 const visibleIds: string[] = []
                 const hiddenIds: string[] = []
@@ -682,10 +734,23 @@ export function SyncProvider(props: { children: JSX.Element }) {
                     }
                 }
                 resolvedVisualRangeCache.set(key, { visibleIds, hiddenIds })
-                if (token !== visualResolveToken) return
+                // At most 32 ranges and 256 KiB of estimated retained IDs/keys.
+                let bytes = 0
+                for (const [cacheKey, range] of [...resolvedVisualRangeCache].reverse()) {
+                    bytes += cacheKey.length * 2 + 128
+                    for (const id of [...range.visibleIds, ...range.hiddenIds]) {
+                        bytes += id.length * 2 + 32
+                    }
+                    if (bytes > 256 * 1024) resolvedVisualRangeCache.delete(cacheKey)
+                }
+                while (resolvedVisualRangeCache.size > 32) {
+                    resolvedVisualRangeCache.delete(resolvedVisualRangeCache.keys().next().value!)
+                }
                 setResolvedVisualRange({ key, visibleIds, hiddenIds })
             } catch {
-                if (token === visualResolveToken) setResolvedVisualRange(null)
+                if (!controller.signal.aborted && token === visualResolveToken) {
+                    setResolvedVisualRange(null)
+                }
             }
         })()
     })
@@ -745,7 +810,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
     const multiSelectionRevsetIds = createMemo(() => {
         const ids = new Set<string>()
         for (const commit of multiSelectedCommits()) {
-            ids.add(getRevisionId(commit))
+            ids.add(commit.commitId)
         }
         const hidden = visualMode() ? visualHiddenIds() : connectorIds()
         for (const id of hidden) ids.add(id)
@@ -761,7 +826,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         const target = multiSelectionTarget()
         if (target) return target
         const commit = selectedCommit()
-        return commit ? { revision: getRevisionId(commit) } : null
+        return commit ? { revision: commit.commitId } : null
     }
 
     createEffect(
@@ -777,12 +842,13 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 if (viewMode() !== "files") {
                     if (filesRequestKind === "commit") {
                         filesRequestId++
+                        filesAbort?.abort()
                         filesRequestKind = null
                         setFilesLoading(false)
                     }
                     return
                 }
-                const request = ++filesRequestId
+                const { request, signal } = beginFilesRequest()
                 filesRequestKind = "commit"
                 const target = filesSourceTarget()
                 if (!target) {
@@ -794,6 +860,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 try {
                     const result = await app.jjFiles(target, {
                         cwd: getRepoPath(),
+                        signal,
                     })
                     if (request !== filesRequestId) return
                     showFiles(result)
@@ -834,6 +901,20 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
     const localBookmarks = () => bookmarks().filter((b) => b.isLocal)
     const selectedBookmark = () => localBookmarks()[selectedBookmarkIndex()]
+
+    createEffect(
+        on(
+            () => selectedBookmark()?.name,
+            () => {
+                if (filesRequestKind === "bookmark" && !activeBookmarkDiff()) {
+                    filesRequestId++
+                    filesAbort?.abort()
+                    filesRequestKind = null
+                    setFilesLoading(false)
+                }
+            },
+        ),
+    )
 
     createEffect(() => {
         prMetadataRefreshToken()
@@ -1139,13 +1220,13 @@ export function SyncProvider(props: { children: JSX.Element }) {
         if (!target) return
 
         setActiveBookmarkDiff(null)
-        const request = ++filesRequestId
+        const { request, signal } = beginFilesRequest()
         filesRequestKind = "commit"
         const sourceKey = JSON.stringify(target)
         setFilesLoading(true)
         setFilesError(null)
         try {
-            const result = await app.jjFiles(target, { cwd: getRepoPath() })
+            const result = await app.jjFiles(target, { cwd: getRepoPath(), signal })
             if (request !== filesRequestId) return
             if (JSON.stringify(filesSourceTarget()) !== sourceKey) return
             showFiles(result)
@@ -1163,14 +1244,14 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
     const enterBookmarkDiffView = async (bookmark: string) => {
         const diff = { bookmark, from: `${bookmark}@origin`, to: bookmark }
-        const request = ++filesRequestId
+        const { request, signal } = beginFilesRequest()
         filesRequestKind = "bookmark"
         setFilesLoading(true)
         setFilesError(null)
         try {
             const result = await app.jjFiles(
                 { from: diff.from, to: diff.to },
-                { cwd: getRepoPath() },
+                { cwd: getRepoPath(), signal },
             )
             if (request !== filesRequestId) return
             showFiles(result)
@@ -1190,6 +1271,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
     }
 
     const exitFilesView = () => {
+        filesAbort?.abort()
         filesRequestId++
         filesRequestKind = null
         setFilesLoading(false)
