@@ -7,13 +7,11 @@ import type {
     FileId,
     FlattenedFile,
     HunkId,
-    SyntaxToken,
     WordDiffSegment,
 } from "../../diff"
 import {
     BINARY_PREVIEW_HEIGHT,
     buildDiffLayoutIndex,
-    computeWordDiff,
     findDiffScrollAnchorRowIndex,
     getCurrentDiffPosition,
     getCurrentDiffScrollAnchor,
@@ -27,6 +25,9 @@ import {
     tokenVersion,
     tokenizeLineSync,
 } from "../../diff"
+import { prepareLineTokens, sliceTokens } from "../../diff/line-tokens"
+import { buildRowWindow, lineContentLength } from "../../diff/row-window"
+import { createWordDiffCache } from "../../diff/word-diff"
 import { splitDisplayPath, truncatePathMiddle } from "../../utils/path-truncate"
 import { type DiffFileStatus, getDiffStatusKey, getStatusColor } from "../../utils/status-colors"
 import { BinaryPreview } from "../BinaryPreview"
@@ -63,12 +64,13 @@ interface SplitRow {
     right: DiffLine | null
     leftWordDiff?: WordDiffSegment[]
     rightWordDiff?: WordDiffSegment[]
+    textualPair?: boolean
     fullWidth?: boolean
     gapLines?: number
     rowIndex: number
 }
 
-function flattenToSplitRows(files: FlattenedFile[]): SplitRow[] {
+export function flattenToSplitRows(files: FlattenedFile[]): SplitRow[] {
     const rows: SplitRow[] = []
     let rowIndex = 0
 
@@ -177,8 +179,8 @@ function flattenToSplitRows(files: FlattenedFile[]): SplitRow[] {
                         fileName: file.name,
                         left: aligned.left,
                         right: aligned.right,
-                        leftWordDiff: aligned.leftWordDiff,
-                        rightWordDiff: aligned.rightWordDiff,
+                        textualPair:
+                            aligned.left?.type === "deletion" && aligned.right?.type === "addition",
                         rowIndex: rowIndex++,
                     })
                 }
@@ -261,12 +263,6 @@ function buildAlignedRows(lines: DiffLine[]): AlignedRow[] {
                 const row: AlignedRow = {
                     left: del ?? null,
                     right: add ?? null,
-                }
-
-                if (del && add) {
-                    const { old: oldSegs, new: newSegs } = computeWordDiff(del.content, add.content)
-                    row.leftWordDiff = oldSegs
-                    row.rightWordDiff = newSegs
                 }
 
                 rows.push(row)
@@ -370,15 +366,17 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
 
     // Keep horizontal offset out of the full row layout. Only the visible rows
     // need to be cropped again when scrolling sideways.
+    const wordDiff = createWordDiffCache()
     const wrappedRows = createMemo(() =>
-        buildWrappedSplitRows(rows(), wrapWidth(), unifiedWrapWidth(), props.wrapEnabled),
+        buildWrappedSplitRows(rows(), wrapWidth(), unifiedWrapWidth(), props.wrapEnabled, wordDiff),
     )
 
     const layoutIndex = createMemo(() =>
         buildDiffLayoutIndex(
-            wrappedRows(),
+            wrappedRows().spans,
             (wrapped) => wrapped.row.right?.newLineNumber ?? wrapped.row.left?.newLineNumber,
             (wrapped) => wrapped.row.left?.oldLineNumber ?? wrapped.row.right?.oldLineNumber,
+            (span) => span.height,
         ),
     )
 
@@ -656,10 +654,6 @@ interface SplitContentRowProps {
     columnWidth: number
 }
 
-interface TokenWithEmphasis extends SyntaxToken {
-    emphasis?: boolean
-}
-
 function SplitContentRow(props: SplitContentRowProps) {
     const { colors, mode, syntaxTheme } = useTheme()
 
@@ -685,70 +679,21 @@ function SplitContentRow(props: SplitContentRowProps) {
             : undefined
     })
 
-    const defaultColor = colors().text
-
-    // Tokenize with word diff emphasis
-    const tokenizeWithWordDiff = (
-        content: string,
-        wordDiff: WordDiffSegment[] | undefined,
-        emphasisType: "removed" | "added",
-    ): TokenWithEmphasis[] => {
-        const lang = language()
-
-        if (!props.highlighterReady()) {
-            if (wordDiff) {
-                return wordDiff.map((seg) => ({
-                    content: seg.text,
-                    color: defaultColor,
-                    emphasis: seg.type === emphasisType,
-                }))
-            }
-            return [{ content, color: defaultColor }]
-        }
-
-        if (!wordDiff) {
-            const tokens = tokenizeLineSync(content, lang, syntaxTheme())
-            return tokens.map((t) => ({
-                content: t.content,
-                color: t.color ?? defaultColor,
-            }))
-        }
-
-        // Tokenize each word diff segment
-        const result: TokenWithEmphasis[] = []
-        for (const segment of wordDiff) {
-            const segmentTokens = tokenizeLineSync(segment.text, lang, syntaxTheme())
-            const isEmphasis = segment.type === emphasisType
-            for (const token of segmentTokens) {
-                result.push({
-                    content: token.content,
-                    color: token.color ?? defaultColor,
-                    emphasis: isEmphasis,
-                })
-            }
-        }
-        return result
+    const tokensForSide = (side: "left" | "right") => {
+        tokenVersion()
+        if (side === "left" ? !hasLeftLine() : !hasRightLine()) return []
+        return prepareLineTokens(
+            props.row.row[side]?.content ?? "",
+            side === "left" ? props.row.row.leftWordDiff : props.row.row.rightWordDiff,
+            side === "left" ? "removed" : "added",
+            colors().text,
+            props.highlighterReady()
+                ? (content) => tokenizeLineSync(content, language(), syntaxTheme())
+                : undefined,
+        )
     }
-
-    const leftTokens = createMemo((): TokenWithEmphasis[] => {
-        // Track tokenVersion to re-render when worker sends new tokens
-        tokenVersion()
-
-        // Strip trailing newline - shiki does this internally, but plain text fallback doesn't
-        const leftContent = (props.row.row.left?.content ?? "").replace(/\n$/, "")
-        if (!leftContent) return []
-        return tokenizeWithWordDiff(leftContent, props.row.row.leftWordDiff, "removed")
-    })
-
-    const rightTokens = createMemo((): TokenWithEmphasis[] => {
-        // Track tokenVersion to re-render when worker sends new tokens
-        tokenVersion()
-
-        // Strip trailing newline - shiki does this internally, but plain text fallback doesn't
-        const rightContent = (props.row.row.right?.content ?? "").replace(/\n$/, "")
-        if (!rightContent) return []
-        return tokenizeWithWordDiff(rightContent, props.row.row.rightWordDiff, "added")
-    })
+    const leftTokens = createMemo(() => tokensForSide("left"))
+    const rightTokens = createMemo(() => tokensForSide("right"))
 
     const leftLineNumColor = createMemo(() => {
         if (!hasLeftLine()) return colors().diff.lineNumber
@@ -903,21 +848,17 @@ function UnifiedContentRow(props: UnifiedContentRowProps) {
         }
     })
 
-    const tokens = createMemo((): SyntaxToken[] => {
+    const tokens = createMemo(() => {
         tokenVersion()
-
-        const content = props.row.line.content.replace(/\n$/, "")
-        const defaultColor = colors().text
-
-        if (!props.highlighterReady()) {
-            return [{ content, color: defaultColor }]
-        }
-
-        const result = tokenizeLineSync(content, language(), syntaxTheme())
-        return result.map((token) => ({
-            content: token.content,
-            color: token.color ?? defaultColor,
-        }))
+        return prepareLineTokens(
+            props.row.line.content,
+            props.row.line.wordDiff,
+            props.row.line.type === "deletion" ? "removed" : "added",
+            colors().text,
+            props.highlighterReady()
+                ? (content) => tokenizeLineSync(content, language(), syntaxTheme())
+                : undefined,
+        )
     })
 
     const lineNum = createMemo(() => {
@@ -965,155 +906,91 @@ function UnifiedContentRow(props: UnifiedContentRowProps) {
                         props.row.lineLength,
                     )}
                 >
-                    {(token) => <span style={{ fg: token.color }}>{token.content}</span>}
+                    {(token) => (
+                        <span
+                            style={{
+                                fg: token.color,
+                                bg: token.emphasis
+                                    ? props.row.line.type === "deletion"
+                                        ? colors().diff.deletionEmphasisBackground
+                                        : colors().diff.additionEmphasisBackground
+                                    : undefined,
+                            }}
+                        >
+                            {token.content}
+                        </span>
+                    )}
                 </For>
             </text>
         </box>
     )
 }
 
-function buildWrappedSplitRows(
+export function buildWrappedSplitRows(
     rows: SplitRow[],
     wrapWidth: number,
     unifiedWrapWidth: number,
     wrapEnabled: boolean,
-): WrappedSplitRow[] {
-    const result: WrappedSplitRow[] = []
+    wordDiff = createWordDiffCache(),
+) {
     const width = Math.max(1, wrapWidth)
     const fullWidth = Math.max(1, unifiedWrapWidth)
+    const count = (line: DiffLine | null, width: number) =>
+        Math.max(1, Math.ceil(lineContentLength(line?.content ?? "") / width))
 
-    for (const row of rows) {
-        if (
-            row.type === "file-header" ||
-            row.type === "binary-preview" ||
-            row.type === "binary-preview-reserved-row" ||
-            row.type === "gap" ||
-            row.type === "file-gap"
-        ) {
-            result.push({ type: row.type, row })
-            continue
-        }
-
-        if (row.fullWidth) {
-            const line = row.left ?? row.right
-            if (!line) continue
-
-            const content = line.content.replace(/\n$/, "")
-            const contentLength = content.length
-
-            if (!wrapEnabled) {
-                result.push({
-                    type: "content",
-                    layout: "unified",
-                    row,
-                    line,
-                    lineStart: 0,
-                    lineLength: Math.min(fullWidth - 1, contentLength),
-                    isWrapped: false,
-                })
-                continue
+    return buildRowWindow(
+        rows,
+        (row) => {
+            if (!wrapEnabled || row.type !== "content") return 1
+            if (row.fullWidth) return count(row.left ?? row.right, fullWidth)
+            return Math.max(count(row.left, width), count(row.right, width))
+        },
+        (source, wrapIndex): WrappedSplitRow => {
+            if (source.type !== "content") return { type: source.type, row: source }
+            let row = source
+            // Structural alignment/emphasis takes precedence over textual pairing.
+            if (row.textualPair && row.left && row.right) {
+                const emphasis = wordDiff.get(row.left.content, row.right.content)
+                row = { ...row, leftWordDiff: emphasis.old, rightWordDiff: emphasis.new }
             }
-
-            const totalLines = Math.max(1, Math.ceil(contentLength / fullWidth))
-            for (let i = 0; i < totalLines; i += 1) {
-                const start = i * fullWidth
-                result.push({
+            if (row.fullWidth) {
+                const line = (row.left ?? row.right)!
+                const start = wrapIndex * fullWidth
+                return {
                     type: "content",
                     layout: "unified",
                     row,
                     line,
                     lineStart: start,
-                    lineLength: Math.min(fullWidth, Math.max(0, contentLength - start)),
-                    isWrapped: i > 0,
-                })
+                    lineLength: Math.min(
+                        wrapEnabled ? fullWidth : fullWidth - 1,
+                        Math.max(0, lineContentLength(line.content) - start),
+                    ),
+                    isWrapped: wrapIndex > 0,
+                }
             }
-            continue
-        }
-
-        const leftContent = (row.left?.content ?? "").replace(/\n$/, "")
-        const rightContent = (row.right?.content ?? "").replace(/\n$/, "")
-        const leftLength = leftContent.length
-        const rightLength = rightContent.length
-
-        if (!wrapEnabled) {
-            const leftStart = row.left ? 0 : null
-            const rightStart = row.right ? 0 : null
-            result.push({
+            const leftStart =
+                row.left && wrapIndex < count(row.left, width) ? wrapIndex * width : null
+            const rightStart =
+                row.right && wrapIndex < count(row.right, width) ? wrapIndex * width : null
+            const segmentLength = (line: DiffLine | null, start: number | null) =>
+                start === null
+                    ? 0
+                    : Math.min(
+                          wrapEnabled ? width : width - 1,
+                          Math.max(0, lineContentLength(line?.content ?? "") - start),
+                      )
+            return {
                 type: "content",
                 layout: "split",
                 row,
                 leftStart,
-                leftLength:
-                    leftStart === null
-                        ? 0
-                        : Math.min(width - 1, Math.max(0, leftLength - leftStart)),
+                leftLength: segmentLength(row.left, leftStart),
                 rightStart,
-                rightLength:
-                    rightStart === null
-                        ? 0
-                        : Math.min(width - 1, Math.max(0, rightLength - rightStart)),
-                leftWrapped: false,
-                rightWrapped: false,
-            })
-            continue
-        }
-        const leftLines = row.left ? Math.max(1, Math.ceil(leftLength / width)) : 1
-        const rightLines = row.right ? Math.max(1, Math.ceil(rightLength / width)) : 1
-        const totalLines = Math.max(leftLines, rightLines)
-
-        for (let i = 0; i < totalLines; i += 1) {
-            const leftStart = row.left && i < leftLines ? i * width : null
-            const leftSegmentLength =
-                leftStart === null ? 0 : Math.min(width, Math.max(0, leftLength - leftStart))
-            const rightStart = row.right && i < rightLines ? i * width : null
-            const rightSegmentLength =
-                rightStart === null ? 0 : Math.min(width, Math.max(0, rightLength - rightStart))
-
-            result.push({
-                type: "content",
-                layout: "split",
-                row,
-                leftStart,
-                leftLength: leftSegmentLength,
-                rightStart,
-                rightLength: rightSegmentLength,
-                leftWrapped: leftStart !== null && i > 0,
-                rightWrapped: rightStart !== null && i > 0,
-            })
-        }
-    }
-
-    return result
-}
-
-function sliceTokens<T extends { content: string }>(
-    tokens: T[],
-    start: number,
-    length: number,
-): T[] {
-    if (length <= 0) return []
-    const end = start + length
-    let offset = 0
-    const result: T[] = []
-
-    for (const token of tokens) {
-        const tokenLength = token.content.length
-        const tokenStart = offset
-        const tokenEnd = offset + tokenLength
-        offset = tokenEnd
-
-        if (tokenEnd <= start) continue
-        if (tokenStart >= end) break
-
-        const sliceStart = Math.max(0, start - tokenStart)
-        const sliceEnd = Math.min(tokenLength, end - tokenStart)
-        if (sliceEnd > sliceStart) {
-            result.push({
-                ...token,
-                content: token.content.slice(sliceStart, sliceEnd),
-            })
-        }
-    }
-
-    return result
+                rightLength: segmentLength(row.right, rightStart),
+                leftWrapped: leftStart !== null && wrapIndex > 0,
+                rightWrapped: rightStart !== null && wrapIndex > 0,
+            }
+        },
+    )
 }

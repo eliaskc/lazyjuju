@@ -16,6 +16,15 @@ test("syntax worker highlights code with both bundled themes", async () => {
 
     try {
         expect((await request({ type: "init" })).type).toBe("ready")
+        const longLine = "const long = " + "x".repeat(100_000)
+        const fallback = await request({
+            type: "tokenize",
+            id: 2,
+            content: longLine,
+            language: "typescript",
+            theme: "ayu-dark",
+        })
+        expect(fallback.tokens).toEqual([{ content: longLine }])
         for (const theme of ["ayu-dark", "github-light"]) {
             const result = await request({
                 type: "tokenize",

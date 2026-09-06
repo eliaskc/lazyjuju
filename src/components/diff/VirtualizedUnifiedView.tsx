@@ -9,7 +9,6 @@ import {
     type FileId,
     type FlattenedFile,
     type HunkId,
-    type SyntaxToken,
     findDiffScrollAnchorRowIndex,
     flattenToRows,
     getCurrentDiffPosition,
@@ -24,6 +23,8 @@ import {
     tokenVersion,
     tokenizeLineSync,
 } from "../../diff"
+import { prepareLineTokens, sliceTokens } from "../../diff/line-tokens"
+import { buildRowWindow, lineContentLength } from "../../diff/row-window"
 import { splitDisplayPath, truncatePathMiddle } from "../../utils/path-truncate"
 import { type DiffFileStatus, getDiffStatusKey, getStatusColor } from "../../utils/status-colors"
 import { BinaryPreview } from "../BinaryPreview"
@@ -107,9 +108,10 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
 
     const layoutIndex = createMemo(() =>
         buildDiffLayoutIndex(
-            wrappedRows(),
+            wrappedRows().spans,
             (wrapped) => wrapped.row.newLineNumber,
             (wrapped) => wrapped.row.oldLineNumber,
+            (span) => span.height,
         ),
     )
 
@@ -359,10 +361,6 @@ interface DiffLineRowProps {
     highlighterReady: () => boolean
 }
 
-interface TokenWithEmphasis extends SyntaxToken {
-    emphasis?: boolean
-}
-
 function DiffLineRow(props: DiffLineRowProps) {
     const { colors, syntaxTheme } = useTheme()
 
@@ -379,47 +377,17 @@ function DiffLineRow(props: DiffLineRowProps) {
         }
     })
 
-    // Worker-based tokenization - returns immediately, re-renders when tokens arrive
-    const tokens = createMemo((): TokenWithEmphasis[] => {
-        // Track tokenVersion to re-render when worker sends new tokens
+    const tokens = createMemo(() => {
         tokenVersion()
-
-        // Strip trailing newline - shiki does this internally, but plain text fallback doesn't
-        const content = props.row.content.replace(/\n$/, "")
-        const defaultColor = colors().text
-        const wordDiff = props.row.wordDiff
-        const emphasisType = props.row.type === "deletion" ? "removed" : "added"
-
-        if (!wordDiff) {
-            // If highlighter not ready, return plain text
-            if (!props.highlighterReady()) {
-                return [{ content, color: defaultColor }]
-            }
-
-            // Request tokenization from worker (returns cached or queues request)
-            const result = tokenizeLineSync(content, language(), syntaxTheme())
-            return result.map((t) => ({
-                content: t.content,
-                color: t.color ?? defaultColor,
-            }))
-        }
-
-        // Tokenize each emphasis segment separately so syntax colors and
-        // structural emphasis backgrounds compose.
-        const result: TokenWithEmphasis[] = []
-        for (const segment of wordDiff) {
-            const segmentTokens = props.highlighterReady()
-                ? tokenizeLineSync(segment.text, language(), syntaxTheme())
-                : [{ content: segment.text, color: defaultColor }]
-            for (const token of segmentTokens) {
-                result.push({
-                    content: token.content,
-                    color: token.color ?? defaultColor,
-                    emphasis: segment.type === emphasisType,
-                })
-            }
-        }
-        return result
+        return prepareLineTokens(
+            props.row.content,
+            props.row.wordDiff,
+            props.row.type === "deletion" ? "removed" : "added",
+            colors().text,
+            props.highlighterReady()
+                ? (content) => tokenizeLineSync(content, language(), syntaxTheme())
+                : undefined,
+        )
     })
 
     const lineNum = createMemo(() => {
@@ -479,81 +447,28 @@ function DiffLineRow(props: DiffLineRowProps) {
     )
 }
 
-function buildWrappedRows(rows: DiffRow[], wrapWidth: number, wrapEnabled: boolean): WrappedRow[] {
-    const result: WrappedRow[] = []
+export function buildWrappedRows(rows: DiffRow[], wrapWidth: number, wrapEnabled: boolean) {
     const width = Math.max(1, wrapWidth)
-
-    for (const row of rows) {
-        if (
-            row.type === "file-header" ||
-            row.type === "binary-preview" ||
-            row.type === "binary-preview-reserved-row" ||
-            row.type === "gap" ||
-            row.type === "file-gap"
-        ) {
-            result.push({ type: row.type, row })
-            continue
-        }
-
-        const content = row.content.replace(/\n$/, "")
-        const contentLength = content.length
-        if (!wrapEnabled) {
-            result.push({
-                type: "content",
-                row,
-                lineStart: 0,
-                lineLength: Math.min(width - 1, contentLength),
-                isWrapped: false,
-            })
-            continue
-        }
-
-        const totalLines = Math.max(1, Math.ceil(contentLength / width))
-
-        for (let i = 0; i < totalLines; i += 1) {
-            const start = i * width
-            const lineLength = Math.min(width, Math.max(0, contentLength - start))
-            result.push({
+    const isContent = (row: DiffRow) =>
+        row.type === "context" || row.type === "addition" || row.type === "deletion"
+    return buildRowWindow(
+        rows,
+        (row) =>
+            wrapEnabled && isContent(row) ? Math.ceil(lineContentLength(row.content) / width) : 1,
+        (row, wrapIndex): WrappedRow => {
+            if (!isContent(row))
+                return { type: row.type as Exclude<WrappedRow["type"], "content">, row }
+            const start = wrapIndex * width
+            return {
                 type: "content",
                 row,
                 lineStart: start,
-                lineLength,
-                isWrapped: i > 0,
-            })
-        }
-    }
-
-    return result
-}
-
-function sliceTokens<T extends { content: string }>(
-    tokens: T[],
-    start: number,
-    length: number,
-): T[] {
-    if (length <= 0) return []
-    const end = start + length
-    let offset = 0
-    const result: T[] = []
-
-    for (const token of tokens) {
-        const tokenLength = token.content.length
-        const tokenStart = offset
-        const tokenEnd = offset + tokenLength
-        offset = tokenEnd
-
-        if (tokenEnd <= start) continue
-        if (tokenStart >= end) break
-
-        const sliceStart = Math.max(0, start - tokenStart)
-        const sliceEnd = Math.min(tokenLength, end - tokenStart)
-        if (sliceEnd > sliceStart) {
-            result.push({
-                ...token,
-                content: token.content.slice(sliceStart, sliceEnd),
-            })
-        }
-    }
-
-    return result
+                lineLength: Math.min(
+                    wrapEnabled ? width : width - 1,
+                    Math.max(0, lineContentLength(row.content) - start),
+                ),
+                isWrapped: wrapIndex > 0,
+            }
+        },
+    )
 }

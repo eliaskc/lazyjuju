@@ -36,6 +36,7 @@ import githubLight from "@shikijs/themes/github-light"
 import type { BundledLanguage } from "shiki"
 import { type Highlighter, createHighlighter, createJavaScriptRegexEngine } from "shiki"
 import type { SyntaxThemeName } from "../theme/syntax"
+import { MAX_HIGHLIGHT_LINE_LENGTH } from "./preparation-limits"
 
 // Message types
 export type WorkerRequest =
@@ -120,6 +121,10 @@ function tokenize(
     language: SupportedLanguages,
     theme: SyntaxThemeName,
 ) {
+    if (content.length > MAX_HIGHLIGHT_LINE_LENGTH) {
+        self.postMessage({ type: "tokens", id, tokens: [{ content }] } satisfies WorkerResponse)
+        return
+    }
     if (!highlighter) {
         self.postMessage({
             type: "error",

@@ -1,4 +1,10 @@
 import { diffWordsWithSpace } from "diff"
+import {
+    MAX_HIGHLIGHT_LINE_LENGTH,
+    MAX_WORD_DIFF_EDIT_LENGTH,
+    MAX_WORD_DIFF_CACHE_ENTRIES,
+    MAX_WORD_DIFF_CACHE_BYTES,
+} from "./preparation-limits"
 
 /**
  * A segment of text with change information.
@@ -61,7 +67,14 @@ export function computeWordDiff(
     oldLine: string,
     newLine: string,
 ): { old: WordDiffSegment[]; new: WordDiffSegment[] } {
-    const changes = diffWordsWithSpace(oldLine, newLine)
+    if (oldLine.length > MAX_HIGHLIGHT_LINE_LENGTH || newLine.length > MAX_HIGHLIGHT_LINE_LENGTH) {
+        return wholeLineDiff(oldLine, newLine)
+    }
+    // jsdiff stops its edit search at this deterministic work bound.
+    const changes = diffWordsWithSpace(oldLine, newLine, {
+        maxEditLength: MAX_WORD_DIFF_EDIT_LENGTH,
+    })
+    if (!changes) return wholeLineDiff(oldLine, newLine)
 
     const oldSegments: WordDiffSegment[] = []
     const newSegments: WordDiffSegment[] = []
@@ -80,6 +93,50 @@ export function computeWordDiff(
     }
 
     return { old: oldSegments, new: newSegments }
+}
+
+function wholeLineDiff(oldLine: string, newLine: string) {
+    return {
+        old: [{ text: oldLine, type: "removed" as const }],
+        new: [{ text: newLine, type: "added" as const }],
+    }
+}
+
+/** View-owned LRU. Reflow and revisits reuse emphasis; old selections cannot grow it. */
+export function createWordDiffCache() {
+    const cache = new Map<string, { value: ReturnType<typeof computeWordDiff>; bytes: number }>()
+    let bytes = 0
+    return {
+        get(oldLine: string, newLine: string) {
+            if (
+                oldLine.length > MAX_HIGHLIGHT_LINE_LENGTH ||
+                newLine.length > MAX_HIGHLIGHT_LINE_LENGTH
+            ) {
+                return wholeLineDiff(oldLine, newLine)
+            }
+            const key = `${oldLine.length}:${oldLine}${newLine}`
+            const previous = cache.get(key)
+            if (previous) {
+                cache.delete(key)
+                cache.set(key, previous)
+                return previous.value
+            }
+            const value = computeWordDiff(oldLine, newLine)
+            const size =
+                2 * (key.length + oldLine.length + newLine.length) +
+                64 * (value.old.length + value.new.length) +
+                128
+            cache.set(key, { value, bytes: size })
+            bytes += size
+            while (cache.size > MAX_WORD_DIFF_CACHE_ENTRIES || bytes > MAX_WORD_DIFF_CACHE_BYTES) {
+                const oldest = cache.keys().next().value!
+                bytes -= cache.get(oldest)!.bytes
+                cache.delete(oldest)
+            }
+            return value
+        },
+        stats: () => ({ entries: cache.size, bytes }),
+    }
 }
 
 /**

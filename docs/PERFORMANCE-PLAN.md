@@ -1,7 +1,8 @@
 # Performance improvement plan
 
 Status: P01–P03 implemented and measured. P03 page-scroll timing remains
-inconclusive. P04–P16 remain open.
+inconclusive. P04 is implemented and functionally checked, but final performance
+acceptance remains open. P05–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
 See [BENCHMARKING.md](BENCHMARKING.md) for measurement rules and
@@ -208,17 +209,20 @@ and anchor restoration. Measure per-update work as total row count increases.
 
 ## P04 — Limit word-diff and wrapped-row preparation to needed content
 
+**Status:** implementation and functional checks complete. Repeat performance
+comparisons on a quiet machine before final acceptance; see the completion record.
+
 **Finding:** split view computes word differences for every positional
 addition/deletion pair before selecting visible rows. Both views allocate an
 object for every wrapped display row. Very long lines can make a small number
 of source lines produce a large layout and expensive token work.
 
 **Change:**
-- [ ] Compute and cache word emphasis near the viewport, not for the whole diff.
-- [ ] Add an explicit work/length limit and whole-line fallback for difficult pairs.
-- [ ] Store compact wrap counts/prefix sums; construct visible wrapped rows on demand.
-- [ ] Define long-line limits for tokenization and token slicing as well as word diff.
-- [ ] Measure fixed overscan of 50 rows on each side before changing it. Keep
+- [x] Compute and cache word emphasis near the viewport, not for the whole diff.
+- [x] Add an explicit work/length limit and whole-line fallback for difficult pairs.
+- [x] Store compact wrap counts/prefix sums; construct visible wrapped rows on demand.
+- [x] Define long-line limits for tokenization and token slicing as well as word diff.
+- [x] Measure fixed overscan of 50 rows on each side before changing it. Keep
   enough overscan for fast wheel/page movement without processing unnecessary content.
 
 **Accept when:** unrelated long lines do not block input; width changes do not
@@ -943,3 +947,143 @@ beside the page outputs. Microbenchmark evidence is
 `/tmp/kajji-p03-micro-{a1,b1,a2}.jsonl`, `/tmp/kajji-p03-micro-compare.mjs`, and
 `/tmp/kajji-p03-micro.log`. Validation logs are `/tmp/kajji-p03-{unit,e2e,lint}.log`;
 final changes are in `/tmp/kajji-p03-final.diff`. Fixtures and reports remain local.
+
+### P04 — Implementation retained; final performance acceptance open
+
+**Decision:** retain the working implementation for review, but leave P04 unchecked.
+Tests confirm compact allocation, bounded word/token preparation, and navigation
+correctness. Difficult-pair startup improved substantially in repeated runs.
+Other timings varied, and valid page-scroll reports had longer worst-case gaps.
+A quiet-machine comparison must establish whether a regression remains.
+
+**Changes:**
+- `row-window.ts` stores one height per source row and a numeric prefix-sum array.
+  Both diff views create wrapped-row objects only for the viewport and overscan.
+  The current slice retains overlapping object identity and releases past slices.
+  Width changes do not allocate one object per wrapped display row.
+- P03's `DiffLayoutIndex` now accepts source-span heights. Its file/hunk offsets,
+  source-line locations, anchors, and scroll-tail calculations retain display-row
+  coordinates without iterating over every wrapped row. Metadata-only current-file
+  lookup does not prepare word emphasis.
+- Textual split alignment records pairs without computing emphasis. Visible pairs
+  use a view-owned LRU, limited to 256 entries and 2 MiB of estimated keys, text,
+  and segment data. Reflow and revisits can reuse results. Structural alignment
+  and supplied emphasis remain separate from textual pairing.
+- Word comparison accepts at most 4,096 UTF-16 code units per side and uses
+  jsdiff's deterministic `maxEditLength: 128` search bound. Larger or more
+  difficult pairs receive whole-line emphasis, with no text removed.
+- Syntax entry points and the worker reject highlighting work above 4,096 code
+  units, returning plain text instead. Shared token preparation also limits
+  structural emphasis to 256 segments and 4,096 total segment code units.
+  Excessive input becomes one plain token, with whole-line emphasis when supplied.
+  Token slicing therefore scans a bounded short line or slices one long token.
+- Overscan remains 50 rows per side. B1 used a map to retain visible-row identity;
+  B2 replaces it with an indexed previous-slice array to avoid per-scroll map
+  allocation. This allocation change is not separately claimed as a timing gain.
+- No process coordination changed; these are synchronous data calculations.
+  No new Promise scheduler or Effect service was needed.
+
+**Validation:** `bun test` (437 tests), `bun test:e2e` (19 tests), `bun check`,
+`bun bench:check`, and `bun lint` pass. Five cases in
+`bun test ./tests/bench/row-preparation.bench.ts` pass. Tests cover deferred word
+preparation, cache reuse and limits, long-line fallback, structural emphasis,
+empty and one-sided rows, split alignment, tab expansion, Unicode text retention,
+newlines, wrapping/no-wrap, resize, file transitions, and P03 index reuse.
+
+A deterministic two-million-display-row test creates three source spans and only
+130 requested row objects. Native-renderer tests scroll long changed lines in
+both views, cross into the next file, resize, and disable wrapping. Syntax-worker
+tests check long-line fallback followed by normal highlighting in both themes.
+A separate no-wrap split TUI run and unified wheel run pass as functional checks;
+these single runs are not performance baselines.
+
+**Microbenchmarks:** diagnostic medians on Bun 1.4.2 were 0.56 ms for 500 unrelated
+words, below 0.01 ms for the over-length 1,000-word fallback, and about 0.02–0.03 ms
+for compact reflow plus 130 visible rows at 100,000 and 2,000,000 display rows.
+These are candidate-only function measurements, not a new before/after baseline
+or terminal latency claim. Operation-count checks provide the deterministic gate.
+
+**TUI configuration:** baseline source `e04b1d13`. Controller and target Bun are
+both pinned to 1.4.1, independently of shell Bun 1.4.2. OpenTUI 0.5.10,
+Effect 4.0.0-rc.112, jsdiff 8.0.2, and Terminal Control 1.2.1 remain fixed.
+This is a new baseline, not a comparison with the older P03 reports.
+
+```sh
+/Users/elias/.local/share/mise/installs/bun/1.4.1/bin/bun scripts/benchmark.ts run \
+  --bun /Users/elias/.local/share/mise/installs/bun/1.4.1/bin/bun \
+  --fixture .kajji-benchmarks/fixtures/stress --scenarios diff \
+  --runs 3 --warmups 1 --passes 2 --steps 40 --interval-ms 16 \
+  --output /tmp/kajji-p04-MODE-GROUP.json
+```
+
+- `unified`: defaults, 120×36 cells, wrapping, line input.
+- `split`: add `--layout split --cols 200`; wrapping and line input.
+- `pairs`: use split settings and `.kajji-benchmarks/fixtures/p04-pairs`. This local
+  generated fixture has two changed TypeScript files, each with 40 changed-line
+  pairs and 500 unrelated words per side. Preparation is outside timed runs.
+- `pages`: use split settings, `--diff-input page`, and `--steps 300`. Each burst
+  moves 3,300 rows and crosses a file boundary.
+
+All use textual diffs, dark theme, endpoint-only capture, the same prepared
+fixture per comparison, and warm filesystem caches. Groups follow A1 → B1 → A2
+→ B2. A2 page timing failed; a later A3 baseline and B3 final-candidate page group
+completed. Completed comparisons pass harness compatibility checks. Every valid
+line-input group applies all 480 requested positions. Each valid page group
+sends 3,600 inputs and moves 3,300 rows per burst in the requested direction.
+Page inputs do not have exact per-key position attribution. Pagination is excluded.
+
+Selected per-group process medians:
+
+| Metric | A1 | B1 | A2 | B2, final code |
+| --- | ---: | ---: | ---: | ---: |
+| Difficult pairs: content ready, ms | 4,478 | 813 | 4,260 | 1,194 |
+| Difficult pairs: highlighted ready, ms | 5,438 | 1,486 | 5,167 | 2,044 |
+| Difficult pairs: peak Kajji RSS, MiB | 419 | 359 | 415 | 337 |
+| Difficult pairs: first Down p95, ms | 17.7 | 15.9 | 17.3 | 16.2 |
+| Difficult pairs: first Down recovery, ms | 4.4 | 6.0 | 5.8 | 12.8 |
+| Difficult pairs: second Down recovery, ms | 4.9 | 7.2 | 13.1 | 2.4 |
+
+The final difficult-pair content result is 72–73% lower than both baseline
+medians; peak RSS is 19–20% lower. This is a deliberately difficult workload,
+not a general startup improvement. First Down recovery increased; its ranges
+overlap the baseline ranges. Do not pool first and repeated visits.
+
+For the ordinary stress fixture, final B2 unified startup was 1,288 ms versus
+1,034 ms in A2; split startup was 1,537 versus 1,049 ms. First Down p95 was
+17.6 versus 18.1 ms in unified mode, and 21.6 versus 19.7 ms in split mode.
+Split first Down recovery increased from 12.7 to 31.9 ms. These valid slower
+results are retained. They do not establish either a general improvement or
+absence of a regression.
+
+**Page-scroll limits:** A1 → B1 first Down maximum-gap medians were 244 → 351 ms.
+The final-code A3 → B3 comparison was 431 → 1,032 ms, with B3 process maxima
+between 601 and 1,256 ms. Both completed the same movement. Peak Kajji RSS was
+598 → 600 MiB; Kajji CPU was 14,748 → 15,860 ms. A3/B3 startup medians were
+1,758 → 2,072 ms. These are slow valid reports, not failed runs to discard.
+
+A2 pages failed for 23.6 ms sender lateness; B2 pages failed for 47.9 ms lateness.
+The input rate was not reduced. At the end, process inspection found active
+Vitest workers and substantial browser/window-server CPU use. This session ran
+no tests or builds concurrently with its measured benchmarks, but other work
+was active on the machine. That observation does not prove the cause of the
+long gaps. Timed runs stopped; quiet-machine confirmation of ordinary startup,
+split recovery, and page-scroll tails remains required before P04 acceptance.
+
+**Remaining scope limits:** source-row arrays, height/index preparation, and full
+diff parsing still scale with loaded content; P11 remains open. The global syntax
+notification and request queue remain P09 work. Normal short emphasis segments
+still get separate syntax requests. Wrapping and slicing retain the existing
+UTF-16 offset convention; these tests do not establish terminal-cell-correct
+clipping for every wide glyph, surrogate pair, or combining sequence. No new
+Unicode width policy is introduced. Structural emphasis has unit/native coverage,
+but there is no structural-engine or compiled-binary performance claim.
+
+**Local evidence:** `/tmp/kajji-p04-{unified,split,pairs}-{a1,b1,a2,b2}.json`,
+`/tmp/kajji-p04-pages-{a1,b1,a3,b3}.json`, comparison files
+`/tmp/kajji-p04-MODE-A-B.txt`, and the rejected reports beside page outputs.
+Functional reports are `/tmp/kajji-p04-{nowrap,wheel}-smoke.json`.
+Validation logs are `/tmp/kajji-p04-{unit,e2e,check,bench-check,lint,micro,native}.log`;
+reviewed changes are in `/tmp/kajji-p04-final.diff`. The prepared `p04-pairs`
+fixture and its temporary generator `/tmp/kajji-p04-prepare-pairs.ts` remain local.
+The baseline workspace `/tmp/kajji-p04-baseline` is retained for the pending
+quiet-machine comparison.

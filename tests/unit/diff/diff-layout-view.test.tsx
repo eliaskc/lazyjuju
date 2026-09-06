@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { VirtualizedSplitView } from "../../../src/components/diff/VirtualizedSplitView"
@@ -30,6 +31,105 @@ function fixture(): FlattenedFile[] {
 }
 
 for (const View of [VirtualizedUnifiedView, VirtualizedSplitView]) {
+    test(`${View.name} scrolls very long changed lines and restores the next file after reflow`, async () => {
+        const hunkId = "long-hunk"
+        const content = "éλ-LONG-TEXT ".repeat(100_000)
+        const files: FlattenedFile[] = [
+            {
+                fileId: "long" as FileId,
+                name: "long.ts",
+                type: "change",
+                additions: 1,
+                deletions: 1,
+                hunks: [
+                    {
+                        hunkId,
+                        oldStart: 1,
+                        newStart: 1,
+                        oldLines: 1,
+                        newLines: 1,
+                        lines: [
+                            {
+                                type: "deletion",
+                                content: content + "OLD-END\n",
+                                oldLineNumber: 1,
+                                hunkId,
+                            },
+                            {
+                                type: "addition",
+                                content: content + "NEW-END\n",
+                                newLineNumber: 1,
+                                hunkId,
+                            },
+                        ],
+                    },
+                ],
+            },
+            ...fixture(),
+        ]
+        const [top, setTop] = createSignal(0)
+        const [width, setWidth] = createSignal(80)
+        const [wrap, setWrap] = createSignal(true)
+        let scroll: ScrollBoxRenderable | undefined
+        let offsets = new Map<FileId, number>()
+        const setup = await testRender(
+            () => (
+                <ThemeProvider>
+                    <scrollbox
+                        ref={(value) => {
+                            scroll = value
+                        }}
+                        height={12}
+                    >
+                        <VirtualLongView />
+                    </scrollbox>
+                </ThemeProvider>
+            ),
+            { width: 80, height: 12 },
+        )
+        function VirtualLongView() {
+            return (
+                <View
+                    files={files}
+                    scrollTop={top()}
+                    scrollLeft={0}
+                    viewportHeight={12}
+                    leadingContentHeight={0}
+                    viewportWidth={width()}
+                    wrapEnabled={wrap()}
+                    onFileRowOffsets={(value) => {
+                        offsets = value
+                    }}
+                />
+            )
+        }
+        const move = async (row: number) => {
+            setTop(row)
+            await setup.renderOnce()
+            scroll!.scrollTo(row)
+            await setup.renderOnce()
+        }
+        try {
+            await setup.renderOnce()
+            expect(setup.captureCharFrame()).toContain("éλ-LONG-TEXT")
+            await move(10_000)
+            expect(setup.captureCharFrame()).toContain("LONG-TEXT")
+            await move(offsets.get("file-0" as FileId)!)
+            expect(setup.captureCharFrame()).toContain("marker-0-0")
+            setWidth(50)
+            setup.resize(50, 12)
+            await setup.renderOnce()
+            await move(offsets.get("file-0" as FileId)!)
+            expect(setup.captureCharFrame()).toContain("marker-0-0")
+            setWrap(false)
+            await setup.renderOnce()
+            await move(0)
+            expect(setup.captureCharFrame()).toContain("éλ-LONG-TEXT")
+        } finally {
+            setup.renderer.destroy()
+        }
+    }, 15_000)
+
     test(`${View.name} keeps layout callbacks independent of scrolling and restores anchors after reflow`, async () => {
         const [files, setFiles] = createSignal(fixture())
         const [top, setTop] = createSignal(0)

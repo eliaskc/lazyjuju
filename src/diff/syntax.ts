@@ -2,6 +2,7 @@ import { type SupportedLanguages, getFiletypeFromFileName } from "@pierre/diffs"
 import { createSignal } from "solid-js"
 import type { SyntaxThemeName } from "../theme/syntax"
 import { registerBenchmarkState } from "../utils/benchmark"
+import { MAX_HIGHLIGHT_LINE_LENGTH } from "./preparation-limits"
 import type { WorkerRequest, WorkerResponse } from "./syntax-worker"
 
 export interface SyntaxToken {
@@ -201,6 +202,7 @@ export function tokenizeLineSync(
     language: SupportedLanguages,
     theme: SyntaxThemeName,
 ): SyntaxToken[] {
+    if (content.length > MAX_HIGHLIGHT_LINE_LENGTH) return [{ content }]
     const cacheKey = getCacheKey(content, language, theme)
 
     // Check cache first
@@ -227,6 +229,7 @@ export async function tokenizeLine(
     language: SupportedLanguages,
     theme: SyntaxThemeName,
 ): Promise<SyntaxToken[]> {
+    if (content.length > MAX_HIGHLIGHT_LINE_LENGTH) return [{ content }]
     const cacheKey = getCacheKey(content, language, theme)
 
     // Check cache first

@@ -200,9 +200,10 @@ export function buildDiffLayoutIndex<
     rows: readonly Row[],
     getNewLineNumber: (row: Row) => number | undefined,
     getOldLineNumber: (row: Row) => number | undefined,
+    getRowHeight: (row: Row) => number = () => 1,
 ): DiffLayoutIndex {
     const layout: DiffLayoutIndex = {
-        totalRows: rows.length,
+        totalRows: 0,
         hunkOffsets: new Map(),
         fileOffsets: new Map(),
         files: [],
@@ -210,7 +211,10 @@ export function buildDiffLayoutIndex<
         lastFileOffset: undefined,
     }
     let file: FileLayout | undefined
-    for (const [index, wrapped] of rows.entries()) {
+    for (const wrapped of rows) {
+        const index = layout.totalRows
+        const end = index + getRowHeight(wrapped)
+        layout.totalRows = end
         const { row } = wrapped
         if (!file || file.fileId !== row.fileId) {
             file = {
@@ -242,10 +246,10 @@ export function buildDiffLayoutIndex<
             previous.newLineNumber === newLineNumber &&
             previous.oldLineNumber === oldLineNumber
         ) {
-            previous.end = index + 1
+            previous.end = end
             continue
         }
-        const location = { start: index, end: index + 1, newLineNumber, oldLineNumber }
+        const location = { start: index, end, newLineNumber, oldLineNumber }
         file.lines.push(location)
         if (newLineNumber !== undefined) {
             file.newLines.push(location)
@@ -340,15 +344,15 @@ export function getCurrentDiffPosition(
 }
 
 export function getCurrentFileId<Row extends { row: { fileId: FileId; type?: string } }>(
-    rows: readonly Row[],
+    rows: { length: number; at: (index: number) => Row | undefined },
     scrollTop: number,
 ): FileId | null {
     if (rows.length === 0) return null
     const index = Math.min(rows.length - 1, Math.max(0, Math.floor(scrollTop)))
-    const current = rows[index]?.row
+    const current = rows.at(index)?.row
     if (!current) return null
     if (current.type === "file-gap") {
-        return rows[index + 1]?.row.fileId ?? current.fileId
+        return rows.at(index + 1)?.row.fileId ?? current.fileId
     }
     return current.fileId
 }
