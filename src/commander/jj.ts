@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Data, Effect, Layer, RcMap, Schema, Stream } from "effect"
 import { Hooks, HooksLive } from "../hooks/runner"
 import { HookOperation } from "../hooks/types"
 import {
@@ -39,6 +39,12 @@ export interface JjOperationOptions {
     readonly cwd: string
     readonly timeoutMs?: number
     readonly sink?: OperationSink
+    /** Read a fixed repository view without snapshotting. Never pass to mutations. */
+    readonly atOperation?: string
+}
+
+export interface JjRefreshOptions extends JjOperationOptions {
+    readonly previousState?: JjRefreshState
 }
 
 export interface JjGitFetchOptions extends JjOperationOptions {
@@ -328,8 +334,8 @@ export interface JjService {
         options: JjOperationOptions,
     ) => Effect.Effect<boolean, ProcessError>
     readonly refreshState: (
-        options: JjOperationOptions,
-    ) => Effect.Effect<JjRefreshState, JjStaleWorkingCopyError | ProcessError>
+        options: JjRefreshOptions,
+    ) => Effect.Effect<JjRefreshState, JjCommandError | JjStaleWorkingCopyError | ProcessError>
     readonly files: (
         target: JjDiffTarget,
         options: JjOperationOptions,
@@ -420,6 +426,33 @@ export function makeGitPushArgs(
     return args
 }
 
+class RefreshKey extends Data.Class<{
+    readonly cwd: string
+    readonly timeoutMs: number | undefined
+    readonly previousOperationId: string | undefined
+    readonly previousCommitId: string | undefined
+}> {}
+
+function readOperationArgs(
+    args: readonly string[],
+    options: JjOperationOptions,
+): readonly string[] {
+    if (!options.atOperation) return args
+    // A read option must never turn a mutation into a historical operation.
+    const commandIndex = args[0] === "--color" ? 2 : 0
+    const command = args[commandIndex]
+    const subcommand = args[commandIndex + 1]
+    const read =
+        ["log", "diff", "root"].includes(command ?? "") ||
+        (command === "bookmark" && subcommand === "list") ||
+        (command === "op" && subcommand === "log") ||
+        (command === "file" && ["show", "list"].includes(subcommand ?? ""))
+    if (!read) return args
+    const separator = args.indexOf("--")
+    const index = separator < 0 ? args.length : separator
+    return [...args.slice(0, index), "--at-operation", options.atOperation, ...args.slice(index)]
+}
+
 export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
     Jj,
     Effect.gen(function* () {
@@ -435,6 +468,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 stdoutFile?: string
             } = {},
         ) {
+            args = readOperationArgs(args, options)
             const command = runOptions.displayCommand ?? `jj ${args.join(" ")}`
             notify(() => options.sink?.start(command, "jj"))
 
@@ -471,6 +505,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
         })
 
         const streamRaw = (args: readonly string[], options: JjOperationOptions) => {
+            args = readOperationArgs(args, options)
             const command = `jj ${args.join(" ")}`
             let settled = false
             const processCommand = {
@@ -576,15 +611,16 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 options,
             )
             yield* throwIfStale(result)
-            return result.exitCode === 0
-                ? result.stdout
-                      .replace(
-                          // oxlint-disable-next-line no-control-regex -- ANSI escape sequence
-                          /\x1b\[[0-9;]*m/g,
-                          "",
-                      )
-                      .trim()
-                : ""
+            if (result.exitCode !== 0 || !result.stdout.trim()) {
+                return yield* new JjCommandError({ command: result.command, result })
+            }
+            return result.stdout
+                .replace(
+                    // oxlint-disable-next-line no-control-regex -- ANSI escape sequence
+                    /\x1b\[[0-9;]*m/g,
+                    "",
+                )
+                .trim()
         })
 
         const readDiff = Effect.fn("Jj.diff")(function* (args: string[], options: JjDiffOptions) {
@@ -631,6 +667,41 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 ...file,
                 isBinary: binaryFiles.has(file.path),
             }))
+        })
+
+        // Only concurrent inspections share a result. Idle entries are released immediately;
+        // the last consumer's interruption also stops the snapshot subprocess.
+        const refreshes = yield* RcMap.make({
+            idleTimeToLive: 0,
+            lookup: Effect.fn("Jj.snapshotState")(function* (key: RefreshKey) {
+                const options = { cwd: key.cwd, timeoutMs: key.timeoutMs }
+                // Unlike --ignore-working-copy op log, this snapshots, imports Git changes,
+                // checks stale workspaces, and reconciles concurrent operation heads.
+                const result = yield* runRaw(
+                    [
+                        "op",
+                        "log",
+                        "--limit",
+                        "1",
+                        "--no-graph",
+                        "--color",
+                        "never",
+                        "-T",
+                        "self.id()",
+                    ],
+                    options,
+                )
+                yield* throwIfStale(result)
+                if (result.exitCode !== 0 || !result.stdout.trim()) {
+                    return yield* new JjCommandError({ command: result.command, result })
+                }
+                const operationId = result.stdout.trim()
+                const workingCopyCommitId =
+                    operationId === key.previousOperationId && key.previousCommitId
+                        ? key.previousCommitId
+                        : yield* readWorkingCopyCommitId({ ...options, atOperation: operationId })
+                return { operationId, workingCopyCommitId }
+            }),
         })
 
         return Jj.of({
@@ -918,14 +989,19 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                     .map((line) => line.trim())
                     .filter((line) => line.length > 0)
             }),
-            refreshState: Effect.fn("Jj.refreshState")(function* (options: JjOperationOptions) {
-                yield* checkWorkingCopy(options)
-                const [operationId, workingCopyCommitId] = yield* Effect.all(
-                    [readOpLogId(options), readWorkingCopyCommitId(options)],
-                    { concurrency: "unbounded" },
-                )
-                return { operationId, workingCopyCommitId }
-            }),
+            refreshState: Effect.fn("Jj.refreshState")((options: JjRefreshOptions) =>
+                Effect.scoped(
+                    RcMap.get(
+                        refreshes,
+                        new RefreshKey({
+                            cwd: options.cwd,
+                            timeoutMs: options.timeoutMs,
+                            previousOperationId: options.previousState?.operationId,
+                            previousCommitId: options.previousState?.workingCopyCommitId,
+                        }),
+                    ),
+                ),
+            ),
             files: Effect.fn("Jj.files")((target: JjDiffTarget, options: JjOperationOptions) => {
                 const targetArgs = makeDiffTargetArgs(target)
                 return readFiles(

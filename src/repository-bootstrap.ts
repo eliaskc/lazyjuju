@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { Git } from "./commander/git"
-import { Jj, type JjCommandError } from "./commander/jj"
+import { Jj, type JjCommandError, type JjRefreshState } from "./commander/jj"
 import type { ProcessError } from "./process/app-process"
 
 export interface RepositoryStatus {
@@ -8,6 +8,7 @@ export interface RepositoryStatus {
     readonly hasGitRepo: boolean
     readonly startupError: string | null
     readonly repoPath: string
+    readonly refreshState?: JjRefreshState
 }
 
 export interface RepositoryInitResult {
@@ -62,19 +63,22 @@ export const RepositoryBootstrapLive: Layer.Layer<RepositoryBootstrap, never, Jj
                                 onSuccess: (isRepository) => isRepository,
                             }),
                         )
-                    const staleError = jjRoot
+                    const inspection = jjRoot
                         ? yield* jj
-                              .checkWorkingCopy({
+                              .refreshState({
                                   cwd: repoPath,
                                   timeoutMs: 5000,
                               })
                               .pipe(
                                   Effect.match({
-                                      onFailure: (error) =>
-                                          error._tag === "JjStaleWorkingCopyError"
-                                              ? error.output
-                                              : undefined,
-                                      onSuccess: () => undefined,
+                                      onFailure: (error) => ({
+                                          error:
+                                              error._tag === "JjStaleWorkingCopyError"
+                                                  ? error.output
+                                                  : error.message,
+                                          state: undefined,
+                                      }),
+                                      onSuccess: (state) => ({ error: undefined, state }),
                                   }),
                               )
                         : undefined
@@ -82,8 +86,9 @@ export const RepositoryBootstrapLive: Layer.Layer<RepositoryBootstrap, never, Jj
                     return {
                         isJjRepo: jjRoot !== undefined,
                         hasGitRepo,
-                        startupError: staleError ?? null,
+                        startupError: inspection?.error ?? null,
                         repoPath,
+                        refreshState: inspection?.state,
                     }
                 }),
                 initialize: Effect.fn("RepositoryBootstrap.initialize")(

@@ -847,7 +847,7 @@ describe("Jj", () => {
         const commands: ProcessCommand[] = []
         const processLayer = makeAppProcessFake((command) => {
             commands.push(command)
-            if (command.args[0] === "status") {
+            if (command.args[0] === "op") {
                 return Effect.succeed({
                     ...success,
                     exitCode: 1,
@@ -862,7 +862,9 @@ describe("Jj", () => {
         )
 
         await expect(Effect.runPromise(effect)).rejects.toBeInstanceOf(JjStaleWorkingCopyError)
-        expect(commands.map((command) => command.args)).toEqual([["status"]])
+        expect(commands.map((command) => command.args)).toEqual([
+            ["op", "log", "--limit", "1", "--no-graph", "--color", "never", "-T", "self.id()"],
+        ])
     })
 
     test("reports output and exactly one completion to the sink", async () => {

@@ -78,7 +78,7 @@ describe("ApplicationClient", () => {
                     stderr: "",
                 })
             }
-            return Effect.succeed({ ...success, stdout: "", stderr: "" })
+            return Effect.succeed({ ...success, stdout: "snapshot-id", stderr: "" })
         })
         const client = makeApplicationClient(layer)
 
@@ -87,6 +87,7 @@ describe("ApplicationClient", () => {
             hasGitRepo: true,
             startupError: null,
             repoPath: "/tmp/repository",
+            refreshState: { operationId: "snapshot-id", workingCopyCommitId: "snapshot-id" },
         })
         await expect(
             client.initializeRepository("/tmp/new-repository", {
@@ -98,7 +99,8 @@ describe("ApplicationClient", () => {
         expect(commands).toEqual([
             "jj root",
             "git rev-parse --is-inside-work-tree",
-            "jj status",
+            "jj op log --limit 1 --no-graph --color never -T self.id()",
+            "jj log --limit 1 --no-graph -r @ -T commit_id --at-operation snapshot-id",
             "jj git init --colocate",
         ])
     })
@@ -112,7 +114,7 @@ describe("ApplicationClient", () => {
                     stderr: "",
                 })
             }
-            if (command.executable === "jj" && command.args[0] === "status") {
+            if (command.executable === "jj" && command.args[0] === "op") {
                 return Effect.succeed({
                     ...success,
                     stdout: "",

@@ -16,7 +16,7 @@ export interface DetailService extends Pick<
 
 export class Details extends Context.Service<Details, DetailService>()("kajji/Details") {}
 
-const detailKey = (kind: string, target: unknown, options: JjDiffOptions) =>
+const detailKey = (kind: string, target: string | JjDiffTarget, options: JjDiffOptions) =>
     JSON.stringify([
         kind,
         options.cwd,
@@ -25,6 +25,10 @@ const detailKey = (kind: string, target: unknown, options: JjDiffOptions) =>
         options.color ?? false,
         options.columns,
         options.timeoutMs,
+        // Immutable content is reusable across operations; symbolic requests are not.
+        isResolvedDetailTarget(typeof target === "string" ? { revision: target } : target)
+            ? undefined
+            : options.atOperation,
     ])
 
 export const DetailsLive = Layer.effect(
@@ -134,6 +138,7 @@ export const DetailsLive = Layer.effect(
                         options.revset,
                         options.limit,
                         options.timeoutMs,
+                        options.atOperation,
                     ]),
                     jj.logPage(options),
                     () => 0,

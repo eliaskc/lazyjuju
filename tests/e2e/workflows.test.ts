@@ -443,6 +443,22 @@ test("refreshes cached working-copy details after external edits", async () => {
     })
 }, 45_000)
 
+test("snapshots external file edits on poll and on terminal focus", async () => {
+    await withKajji(async (session, repository) => {
+        // No jj command snapshots this edit on behalf of the application.
+        writeFileSync(join(repository, "ui.txt"), "poll snapshot marker\n")
+        await session.screen.waitForText("poll snapshot marker", { timeoutMs: 10_000 })
+        await session.keyboard.write(Buffer.from("\u001b[O"))
+        writeFileSync(join(repository, "ui.txt"), "focus snapshot marker\n")
+        await session.keyboard.write(Buffer.from("\u001b[I"))
+        await session.screen.waitForText("focus snapshot marker", { timeoutMs: 5_000 })
+        runJj(repository, "bookmark", "create", "external-refresh-bookmark", "-r", "@")
+        await session.screen.waitForText("external-refresh-bookmark", { timeoutMs: 10_000 })
+        await session.keyboard.write(Buffer.from("jk"))
+        await session.screen.waitForText("focus snapshot marker", { timeoutMs: 5_000 })
+    })
+}, 45_000)
+
 test("enters diff mode for the selected revision and returns to normal mode", async () => {
     await withKajji(async (session) => {
         await session.keyboard.type("3")

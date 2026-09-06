@@ -37,6 +37,7 @@ import {
     type JjOperationResult,
     type JjRebaseOptions,
     type JjRefreshState,
+    type JjRefreshOptions,
     type JjRestoreOptions,
     type JjRevisionSummary,
     type JjService,
@@ -301,7 +302,9 @@ export interface ApplicationClient {
         revision: string,
         options: ApplicationReadOptions,
     ) => Promise<string[]>
-    readonly jjRefreshState: (options: ApplicationReadOptions) => Promise<JjRefreshState>
+    readonly jjRefreshState: (
+        options: ApplicationReadOptions & Pick<JjRefreshOptions, "previousState">,
+    ) => Promise<JjRefreshState>
     readonly jjFiles: (
         target: JjDiffTarget,
         options: ApplicationReadOptions,
@@ -784,14 +787,11 @@ export function makeApplicationClient(
                 return Promise.reject(new ApplicationClientClosedError())
             }
             return historicalFiles.materialize(
-                revision,
+                JSON.stringify([options.cwd, options.atOperation, revision]),
                 paths,
-                (selectedRevision, path, outputPath) =>
+                (_key, path, outputPath) =>
                     runRead(options, (jj) =>
-                        jj.materializeFile(selectedRevision, path, outputPath, {
-                            cwd: options.cwd,
-                            timeoutMs: options.timeoutMs,
-                        }),
+                        jj.materializeFile(revision, path, outputPath, options),
                     ),
             )
         },
@@ -801,39 +801,17 @@ export function makeApplicationClient(
         jjFileContent: (revision, path, options) =>
             runRead(options, (jj) => jj.fileContent(revision, path, options)),
         jjIsInTrunk: (revision, options) =>
-            runRead(options, (jj) =>
-                jj.isInTrunk(revision, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+            runRead(options, (jj) => jj.isInTrunk(revision, options)),
         jjShowDescription: (revision, options) =>
             runDetail(options, (details) => details.showDescription(revision, options)),
         jjNearestAncestorBookmarkNames: (revision, options) =>
-            runRead(options, (jj) =>
-                jj.nearestAncestorBookmarkNames(revision, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
-        jjRefreshState: (options) =>
-            runRead(options, (jj) =>
-                jj.refreshState({
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+            runRead(options, (jj) => jj.nearestAncestorBookmarkNames(revision, options)),
+        jjRefreshState: (options) => runRead(options, (jj) => jj.refreshState(options)),
         jjFiles: (target, options) =>
             runDetail(options, (details) => details.files(target, options)),
         jjCommitDetails: (revision, options) =>
             runDetail(options, (details) => details.commitDetails(revision, options)),
-        jjOpLog: (limit, options) =>
-            runRead(options, (jj) =>
-                jj.opLog(limit, {
-                    cwd: options.cwd,
-                    timeoutMs: options.timeoutMs,
-                }),
-            ),
+        jjOpLog: (limit, options) => runRead(options, (jj) => jj.opLog(limit, options)),
         jjDiff: (target, options) => runDetail(options, (details) => details.diff(target, options)),
         jjPreparedDiff: (target, options) =>
             runDetail(options, (details) => details.preparedDiff(target, options)),

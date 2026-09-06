@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import type { Bookmark } from "../commander/bookmarks"
 import type { GitHubPullRequestSummary } from "../commander/github"
-import type { JjDiffTarget } from "../commander/jj"
+import type { JjDiffTarget, JjOperationOptions, JjRefreshState } from "../commander/jj"
 import { getRepoPath } from "../repo"
 import { connectedRevisionRange } from "../utils/revision-range"
 import { addRecentRepo } from "../utils/state"
@@ -61,6 +61,7 @@ export interface LogSelection {
 }
 
 interface SyncContextValue {
+    readOptions: () => JjOperationOptions
     commits: () => Commit[]
     selectedIndex: () => number
     setSelectedIndex: (index: number) => void
@@ -155,7 +156,10 @@ interface SyncContextValue {
 
 const SyncContext = createContext<SyncContextValue>()
 
-export function SyncProvider(props: { children: JSX.Element }) {
+export function SyncProvider(props: {
+    children: JSX.Element
+    initialRefreshState?: JjRefreshState
+}) {
     const app = useApplication()
     const renderer = useRenderer()
     const focus = useFocus()
@@ -349,8 +353,20 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
     let lastOpLogId: string | null = null
     let lastWorkingCopyCommitId: string | null = null
+    const readOptions = (): JjOperationOptions => ({
+        cwd: getRepoPath(),
+        atOperation: lastOpLogId || undefined,
+    })
+    const previousState = (): JjRefreshState | undefined =>
+        lastOpLogId && lastWorkingCopyCommitId
+            ? { operationId: lastOpLogId, workingCopyCommitId: lastWorkingCopyCommitId }
+            : undefined
+    const refreshAbort = new AbortController()
+    onCleanup(() => refreshAbort.abort())
     let isRefreshing = false
+    let refreshGeneration = 0
     let refreshQueued = false
+    let queuedRefreshOptions: RefreshOptions | undefined
     let bookmarksStreamHandle: { cancel: () => void } | null = null
     let bookmarksStreamToken = 0
     let logStreamHandle: { cancel: () => void } | null = null
@@ -361,26 +377,30 @@ export function SyncProvider(props: { children: JSX.Element }) {
         logStreamHandle = null
     }
 
-    const doFullRefresh = async (options?: RefreshOptions) => {
+    const doFullRefresh = async (options?: RefreshOptions, snapshot?: JjRefreshState) => {
         if (isRefreshing) {
             refreshQueued = true
+            if (options) queuedRefreshOptions = options
             return
         }
         if (syncDisposed) return
         isRefreshing = true
+        refreshGeneration++
         filesAbort?.abort()
         filesRequestId++
         filesRequestKind = null
         setFilesLoading(false)
         try {
-            await app.invalidateDetailReads()
+            // Snapshot first, then give all reads the same immutable operation view.
+            // Do not inspect after loading: that could acknowledge a change not yet shown.
+            const refreshState =
+                snapshot ??
+                (await app.jjRefreshState({
+                    cwd: getRepoPath(),
+                    previousState: previousState(),
+                    signal: refreshAbort.signal,
+                }))
             if (syncDisposed) return
-            setRefreshCounter((c) => c + 1)
-            await Promise.all([loadLog(options), loadBookmarks()])
-            if (syncDisposed) return
-            const refreshState = await app.jjRefreshState({
-                cwd: getRepoPath(),
-            })
             if (refreshState.operationId) {
                 lastOpLogId = refreshState.operationId
             }
@@ -388,6 +408,10 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 lastWorkingCopyCommitId = refreshState.workingCopyCommitId
             }
 
+            await app.invalidateDetailReads()
+            if (syncDisposed) return
+            setRefreshCounter((c) => c + 1)
+            await Promise.all([loadLog(options), loadBookmarks()])
             if (syncDisposed) return
             if (viewMode() === "files") {
                 const diff = activeBookmarkDiff()
@@ -398,10 +422,10 @@ export function SyncProvider(props: { children: JSX.Element }) {
                     const result = diff
                         ? await app.jjFiles(
                               { from: diff.from, to: diff.to },
-                              { cwd: getRepoPath(), signal },
+                              { ...readOptions(), signal },
                           )
                         : target
-                          ? await app.jjFiles(target, { cwd: getRepoPath(), signal })
+                          ? await app.jjFiles(target, { ...readOptions(), signal })
                           : null
                     if (result && request === filesRequestId) {
                         setFiles(result)
@@ -424,9 +448,15 @@ export function SyncProvider(props: { children: JSX.Element }) {
             isRefreshing = false
             if (refreshQueued && !syncDisposed) {
                 refreshQueued = false
-                doFullRefresh()
+                const nextOptions = queuedRefreshOptions
+                queuedRefreshOptions = undefined
+                void doFullRefresh(nextOptions).catch(reportRefreshError)
             }
         }
+    }
+
+    const reportRefreshError = (error: unknown) => {
+        if (!syncDisposed) setError(error instanceof Error ? error.message : "Refresh failed")
     }
 
     onMount(() => {
@@ -441,13 +471,17 @@ export function SyncProvider(props: { children: JSX.Element }) {
         const FOCUS_DEBOUNCE = 100
 
         const checkAndRefresh = async () => {
-            if (isChecking) return
+            if (isChecking || isRefreshing || disposed) return
             isChecking = true
+            const generation = refreshGeneration
 
             try {
                 const refreshState = await app.jjRefreshState({
                     cwd: getRepoPath(),
+                    previousState: previousState(),
+                    signal: refreshAbort.signal,
                 })
+                if (disposed || generation !== refreshGeneration) return
                 if (!refreshState.operationId && !refreshState.workingCopyCommitId) {
                     return
                 }
@@ -458,19 +492,14 @@ export function SyncProvider(props: { children: JSX.Element }) {
                     refreshState.workingCopyCommitId !== lastWorkingCopyCommitId
 
                 if (opChanged || workingCopyChanged) {
-                    lastOpLogId = refreshState.operationId || lastOpLogId
-                    lastWorkingCopyCommitId =
-                        refreshState.workingCopyCommitId || lastWorkingCopyCommitId
-                    await doFullRefresh()
+                    await doFullRefresh(undefined, refreshState)
                 } else {
                     lastOpLogId = refreshState.operationId
                     lastWorkingCopyCommitId = refreshState.workingCopyCommitId
                 }
             } catch (e) {
                 // Propagate critical errors (like stale working copy)
-                if (e instanceof Error) {
-                    setError(e.message)
-                }
+                if (generation === refreshGeneration) reportRefreshError(e)
             } finally {
                 isChecking = false
             }
@@ -509,12 +538,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
         void (async () => {
             try {
-                const state = await app.jjRefreshState({
-                    cwd: getRepoPath(),
-                })
-                if (disposed) return
-                lastOpLogId = state.operationId
-                lastWorkingCopyCommitId = state.workingCopyCommitId
+                await doFullRefresh(undefined, props.initialRefreshState)
             } catch (e) {
                 if (disposed) return
                 // Propagate critical errors (like stale working copy)
@@ -590,7 +614,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         profileMsg(`--- select commit: ${commit.changeId.slice(0, 8)}`)
         const endDetails = profile(`commitDetails(${commit.changeId.slice(0, 8)})`)
         app.jjCommitDetails(commit.commitId, {
-            cwd: getRepoPath(),
+            ...readOptions(),
             signal: controller.signal,
         })
             .then((details) => {
@@ -716,7 +740,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         ;(async () => {
             try {
                 const result = await app.jjLogPage({
-                    cwd: getRepoPath(),
+                    ...readOptions(),
                     revset,
                     limit: 1000,
                     signal: controller.signal,
@@ -859,7 +883,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
                 setFilesError(null)
                 try {
                     const result = await app.jjFiles(target, {
-                        cwd: getRepoPath(),
+                        ...readOptions(),
                         signal,
                     })
                     if (request !== filesRequestId) return
@@ -985,7 +1009,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
 
         // Local and remote bookmarks come from one process so the two views can
         // never disagree mid-refresh (which showed a transient "*" after fetch).
-        const stream = app.jjStreamBookmarks({ cwd: getRepoPath(), allRemotes: true }, (batch) => {
+        const stream = app.jjStreamBookmarks({ ...readOptions(), allRemotes: true }, (batch) => {
             if (token !== bookmarksStreamToken || batch.length === 0) return
             if (previousBookmarks.length === 0 || batch.length >= previousBookmarks.length) {
                 updateBookmarkState(batch)
@@ -1087,8 +1111,8 @@ export function SyncProvider(props: { children: JSX.Element }) {
         const minLength = commits().length
         const stream = app.jjStreamLogPage(
             filter
-                ? { cwd: getRepoPath(), revset: filter, limit: newLimit }
-                : { cwd: getRepoPath(), limit: newLimit },
+                ? { ...readOptions(), revset: filter, limit: newLimit }
+                : { ...readOptions(), limit: newLimit },
             (batch) => {
                 if (token !== logStreamToken) return
                 if (batch.length >= minLength) setCommits(batch.slice())
@@ -1132,7 +1156,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         cancelLogStream()
 
         const stream = app.jjStreamLogPage(
-            filter ? { cwd: getRepoPath(), revset: filter, limit } : { cwd: getRepoPath(), limit },
+            filter ? { ...readOptions(), revset: filter, limit } : { ...readOptions(), limit },
             (batch) => {
                 if (token !== logStreamToken || batch.length === 0) return
                 const baseCommits = commits()
@@ -1226,7 +1250,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         setFilesLoading(true)
         setFilesError(null)
         try {
-            const result = await app.jjFiles(target, { cwd: getRepoPath(), signal })
+            const result = await app.jjFiles(target, { ...readOptions(), signal })
             if (request !== filesRequestId) return
             if (JSON.stringify(filesSourceTarget()) !== sourceKey) return
             showFiles(result)
@@ -1251,7 +1275,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         try {
             const result = await app.jjFiles(
                 { from: diff.from, to: diff.to },
-                { cwd: getRepoPath(), signal },
+                { ...readOptions(), signal },
             )
             if (request !== filesRequestId) return
             showFiles(result)
@@ -1386,6 +1410,7 @@ export function SyncProvider(props: { children: JSX.Element }) {
         bookmarkPrNumbers,
         refreshPullRequestMetadata: refreshPullRequestMetadataSoon,
 
+        readOptions,
         refresh: doFullRefresh,
         refreshCounter,
     }

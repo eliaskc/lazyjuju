@@ -286,6 +286,7 @@ export function MainArea() {
         selectedFile,
         multiSelectedCommits,
         multiSelectionRevsetIds,
+        readOptions,
     } = useSync()
 
     // Takes over the detail panel while two or more revisions are marked.
@@ -749,6 +750,7 @@ export function MainArea() {
         fetchKey: string,
         target: JjDiffTarget,
         files: FlattenedFile[],
+        atOperation: string | undefined,
         onStructural: (files: FlattenedFile[]) => void,
         onFallback: () => void,
     ) => {
@@ -757,7 +759,7 @@ export function MainArea() {
         structuralAbort = controller
         const cwd = getRepoPath()
         const startedAt = performance.now()
-        app.structuralDiff({ target, cwd, files }, { cwd, signal: controller.signal })
+        app.structuralDiff({ target, cwd, files, atOperation }, { cwd, signal: controller.signal })
             .then((outcome) => {
                 if (controller.signal.aborted || structuralAbort !== controller) return
                 if (currentFetchKey !== fetchKey) return
@@ -860,7 +862,7 @@ export function MainArea() {
 
         const fetchStart = performance.now()
         const diffOptions = {
-            cwd,
+            ...readOptions(),
             paths,
             color: showJjFormatter,
             columns,
@@ -954,6 +956,7 @@ export function MainArea() {
                         fetchKey,
                         structuralTarget,
                         flattened,
+                        diffOptions.atOperation,
                         (structuralFiles) => {
                             if (!modeSwitched) captureScrollAnchor()
                             batch(() => {

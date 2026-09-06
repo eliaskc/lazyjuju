@@ -37,7 +37,7 @@ an optimization as delivered.
 - [x] **P02 — Virtualize log, bookmark, file, and summary lists**
 - [x] **P03 — Remove full-diff work from scroll updates**
 - [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
-- [ ] **P05 — Coordinate working-copy snapshots and repository reads**
+- [x] **P05 — Coordinate working-copy snapshots and repository reads**
 - [ ] **P06 — Reduce first-use syntax cost; compare regex engines**
 - [ ] **P07 — Parse and publish bookmark streams incrementally**
 - [ ] **P08 — Preserve log movement and improve pagination**
@@ -241,12 +241,13 @@ jj commands, including `status`, every two seconds. Many read commands do not
 use `--ignore-working-copy`. Actual repeated scan cost remains unmeasured.
 
 **Change:**
-- [ ] Measure command/snapshot time in a large working tree, both unchanged and
-  after external edits, with and without the user's filesystem monitor setup.
-- [ ] Share bootstrap results with initial synchronization.
-- [ ] Snapshot when needed, then coordinate consistent snapshot-free reads where safe.
-- [ ] Combine refresh requests; investigate event-driven checks with polling as fallback.
-- [ ] Preserve stale-workspace detection, Git synchronization, focus refresh, and
+- [x] Measure command/snapshot time in a large working tree, both unchanged and
+  after external edits. The user's filesystem monitor setting is `none`, which
+  matches the test setting; an enabled Watchman comparison was not available.
+- [x] Share bootstrap results with initial synchronization.
+- [x] Snapshot when needed, then coordinate consistent snapshot-free reads where safe.
+- [x] Combine refresh requests; investigate event-driven checks with polling as fallback.
+- [x] Preserve stale-workspace detection, Git synchronization, focus refresh, and
   external-change detection. Do not disable snapshots globally.
 
 **Accept when:** startup and idle command/scan counts fall, changes still appear
@@ -1087,3 +1088,116 @@ reviewed changes are in `/tmp/kajji-p04-final.diff`. The prepared `p04-pairs`
 fixture and its temporary generator `/tmp/kajji-p04-prepare-pairs.ts` remain local.
 The baseline workspace `/tmp/kajji-p04-baseline` is retained for the pending
 quiet-machine comparison.
+
+### P05 — Retained: coordinated snapshots and fixed-operation reads
+
+**Decision:** implemented and accepted. Unchanged polls use one jj command instead
+of three. Changed polls use two instead of three. Bootstrap supplies the initial
+snapshot to synchronization. Snapshotting remains enabled for inspections and
+mutations. P04's separate acceptance work is not changed by this decision.
+
+**Implementation:**
+
+- `Jj.refreshState` runs snapshot-enabled `jj op log --limit 1 --no-graph --color
+  never -T 'self.id()'`. It reads the working-copy commit at that exact operation
+  only when the operation differs from the supplied previous state. The old
+  `status` plus two independently timed identity reads are removed from this path.
+- Effect `RcMap` shares concurrent identical inspections. Zero idle retention
+  prevents reuse on later polls; interruption of the final consumer stops the
+  producer. Repository, timeout, and previous identity are part of the key.
+- Bootstrap passes its state through the root app to `SyncProvider`. Without a
+  bootstrap result, synchronization obtains one before starting content reads.
+- Refresh snapshots before loading, not afterward. Log, bookmarks, files,
+  descriptions, filter/visual-range previews, and textual/jj-formatted details use
+  `--at-operation` to read that view without further snapshots. Structural
+  upgrades receive the same operation as their textual result. Mutations do not
+  inherit this option. Uncoordinated callers retain normal snapshot behavior.
+- Poll/focus checks skip active refreshes and reject results from an older refresh
+  generation. A detected change supplies its snapshot directly to refresh.
+  Repeated full-refresh requests retain one follow-up and the latest supplied
+  selection options. Cleanup interrupts outstanding inspections.
+- Symbolic detail-sharing keys include the operation; immutable completed content
+  remains reusable across operations. Materialized-file keys include repository
+  and operation identity. Existing bounded detail caches are retained.
+
+**Event-driven checks:** retained focus events and the existing two-second focused,
+30-second unfocused polling fallback. Inspected jj source at the installed
+`7c41cdeb16b6b321c64e789a966b6adf723816a5` revision. Snapshot-enabled operation log
+performs Git import, stale-workspace checks, and operation-head reconciliation.
+An operation-directory watcher alone cannot detect unsnapshotted file edits.
+A new recursive working-tree watcher would duplicate jj's filesystem-monitor
+work and require linked-workspace, ignored-file, overflow, and platform coverage.
+No watcher was added. Both the current repository and the user's large repository
+report `fsmonitor.backend = "none"`; Watchman is not installed. No monitor-enabled
+speed claim is made.
+
+**Validation:** 446 unit tests, 21 E2E tests, `bun check`, `bun bench:check`, and
+`bun lint` passed. Tests cover bootstrap reuse and ordering, pinned captured and
+streamed reads, mutation isolation, shared-consumer cancellation, failed-read
+retry, real unsnapshotted edits, old-view stability, colocated Git ref import,
+divergent-operation reconciliation, stale-workspace detection and repair, and
+live poll/focus updates. An earlier full E2E run failed file navigation; that
+case passed in isolation and in the final full run. Both logs are retained.
+
+**Command-level A1 → B1 → A2 diagnostics:** independent copies of the prepared
+10,000-file stress fixture, pinned Bun 1.4.1, `fsmonitor.backend = "none"`, eight
+unchanged inspections and eight inspections after editing `history.ts` per group.
+Preparation and copying are outside the interval. All edits were detected;
+unchanged passes reported no change. These are service measurements, not TUI
+startup or cold-disk measurements. Subprocess sums are command wall times, not
+summed CPU; baseline commands can run concurrently.
+
+| Median, ms unless specified | A1 | B1 | A2 |
+| --- | ---: | ---: | ---: |
+| Bootstrap plus initial inspection, command count | 6 | 4 | 6 |
+| Bootstrap plus initial inspection, wall time | 229 | 99 | 185 |
+| Unchanged inspection, command count | 3 | 1 | 3 |
+| Unchanged inspection, application wall time | 106 | 50 | 100 |
+| Unchanged inspection, sum of subprocess wall times | 123 | 49 | 115 |
+| Edited inspection, command count | 3 | 2 | 3 |
+| Edited inspection, application wall time | 170 | 106 | 138 |
+| Edited inspection, sum of subprocess wall times | 189 | 105 | 153 |
+
+**Real-TUI comparison:** final aligned A1 → B1 → A2 against `25d05c1c`, which
+includes the separate layout-anchor fix added during this work. Same prepared
+stress fixture; controller and target Bun 1.4.1; OpenTUI 0.5.10; Terminal Control
+1.2.1; log scenario; three measured processes and one excluded warmup per group;
+two down/up passes, 40 steps per direction at 16 ms; 120×36, textual unified,
+wrapping enabled, endpoint captures. Pagination is excluded. All 480 requested
+positions applied in each group. Comparison compatibility checks passed.
+
+| Per-group process median | A1 | B1 | A2 |
+| --- | ---: | ---: | ---: |
+| Content ready, ms | 1,162 | 1,030 | 1,119 |
+| Highlighted ready, ms | 1,936 | 1,756 | 1,858 |
+| First Down p95, ms | 17.6 | 17.7 | 17.4 |
+| First Down final recovery, ms | 142 | 78 | 124 |
+| Repeat Down final recovery, ms | 13.5 | 13.4 | 12.4 |
+| Peak Kajji RSS, MiB | 436 | 434 | 438 |
+| Peak process-tree RSS, MiB | 517 | 471 | 491 |
+| Kajji CPU, ms | 4,944 | 4,567 | 4,639 |
+
+First-visit final recovery was 38–45% lower than both baseline medians, without
+range overlap. Startup medians were lower, but ranges overlap: do not claim a
+universal startup reduction. First Down p95 was approximately unchanged. Revisit
+recovery, memory, and CPU include overlapping ranges. This supports retaining the
+coordination change, not a general scrolling improvement.
+
+**Limits and excluded evidence:** other applications and an external build were
+active during parts of this session; this session ran no tests/builds concurrently
+with measurements. Early whole-TUI groups used `17288906` as baseline, while the
+candidate acquired the separate layout fix. Those groups are not P05-only
+comparisons. Two early repeat-baseline attempts failed sender lateness at 24.2
+and 29.3 ms and were not scored. The input rate was not reduced. Aligned groups
+above were run afterward and completed. Progressive stream publication remains;
+this change gives reads one repository operation, not an atomic multi-panel paint.
+Action-specific reads outside these display paths still use normal jj semantics.
+No enabled-Watchman, network, structural timing, or compiled-startup claim is made.
+
+**Local evidence:** `/tmp/kajji-p05-aligned-{a1,b1,a2}.json`,
+`/tmp/kajji-p05-aligned-compare-{a1,a2}-b1.txt`,
+`/tmp/kajji-p05-scan-{a1,b1,a2}.json`, and the service measurement script
+`/tmp/kajji-p05-scan.mjs`. Early reports and rejected attempts remain under
+`/tmp/kajji-p05-{a1,b1,a2,a3}*`. Validation logs are
+`/tmp/kajji-p05-{unit,e2e,e2e-final,check,bench-check,lint}.log`;
+reviewed changes are in `/tmp/kajji-p05-final.diff`.

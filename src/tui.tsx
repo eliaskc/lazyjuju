@@ -117,6 +117,7 @@ export async function runTui(args: string[]): Promise<void> {
               hasGitRepo: mockMode === "startup-git",
               startupError: null,
               repoPath: getRepoPath(),
+              refreshState: undefined,
           }
         : await application.repositoryStatus(getRepoPath())
     _trace("after repositoryStatus()")
@@ -131,6 +132,9 @@ export async function runTui(args: string[]): Promise<void> {
         destroyRenderer = () => renderer.destroy()
         const [isJjRepo, setIsJjRepo] = createSignal(initialStatus.isJjRepo)
         const [hasGitRepo, setHasGitRepo] = createSignal(initialStatus.hasGitRepo)
+        const [initialRefreshState, setInitialRefreshState] = createSignal(
+            initialStatus.refreshState,
+        )
         const [startupError, setStartupError] = createSignal<string | null>(
             initialStatus.startupError,
         )
@@ -141,6 +145,7 @@ export async function runTui(args: string[]): Promise<void> {
             if (status.repoPath !== path) {
                 setRepoPath(status.repoPath)
             }
+            setInitialRefreshState(status.refreshState)
             setIsJjRepo(status.isJjRepo)
             setHasGitRepo(status.hasGitRepo)
             setStartupError(status.startupError)
@@ -207,6 +212,7 @@ export async function runTui(args: string[]): Promise<void> {
             if (status.repoPath !== getRepoPath()) {
                 setRepoPath(status.repoPath)
             }
+            setInitialRefreshState(status.refreshState)
             setStartupError(status.startupError)
             setHasGitRepo(status.hasGitRepo)
             if (!status.startupError) setIsJjRepo(status.isJjRepo)
@@ -247,7 +253,11 @@ export async function runTui(args: string[]): Promise<void> {
                             </ThemeProvider>
                         }
                     >
-                        <App app={application} onQuit={shutdown} />
+                        <App
+                            app={application}
+                            onQuit={shutdown}
+                            initialRefreshState={initialRefreshState()}
+                        />
                     </Show>
                 }
             >

@@ -201,6 +201,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         enterBookmarkDiffView,
         bookmarkPrNumbers,
         refreshPullRequestMetadata,
+        readOptions,
     } = useSync()
     const focus = useFocus()
     const command = useCommand()
@@ -273,7 +274,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
             candidates.map(async (candidate) => {
                 try {
                     const result = await app.jjLogPage({
-                        cwd: getRepoPath(),
+                        ...readOptions(),
                         revset: candidate.revset,
                         limit: candidate.exact ? undefined : REVSET_PREVIEW_LIMIT,
                         signal,
@@ -554,9 +555,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         const isInitialLoad = opLogEntries().length === 0
         if (isInitialLoad) setOpLogLoading(true)
         try {
-            const lines = await app.jjOpLog(effectiveLimit, {
-                cwd: getRepoPath(),
-            })
+            const lines = await app.jjOpLog(effectiveLimit, readOptions())
             const entries = parseOpLog(lines)
             setOpLogEntries(entries)
             setOpLogHasMore(entries.length >= effectiveLimit)

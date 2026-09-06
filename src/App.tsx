@@ -39,6 +39,7 @@ import { readState, writeState } from "./utils/state"
 import { checkForUpdates, getCurrentVersion } from "./utils/update"
 
 import changelogContent from "../CHANGELOG.md" with { type: "text" }
+import type { JjRefreshState } from "./commander/jj"
 
 const GIT_ACTION_MENU_DIALOG = {
     width: "90%" as const,
@@ -47,6 +48,7 @@ const GIT_ACTION_MENU_DIALOG = {
 
 interface AppProps {
     app: ApplicationClient
+    initialRefreshState?: JjRefreshState
     onQuit: () => void | Promise<void>
 }
 
@@ -54,8 +56,6 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
     const app = useApplication()
     const renderer = useRenderer()
     const {
-        loadLog,
-        loadBookmarks,
         refresh,
         error,
         loading,
@@ -119,7 +119,7 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
         !loading() && shouldShowCriticalError(error(), commits().length > 0)
 
     const handleRetry = async () => {
-        await Promise.all([loadLog(), loadBookmarks()])
+        await refresh()
     }
 
     const handleFix = async () => {
@@ -147,8 +147,6 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
         })
         onCleanup(unsubscribeConfig)
 
-        loadLog()
-        loadBookmarks()
         let updateLogId: string | null = null
         checkForUpdates({
             onChecking: () => update.setChecking(),
@@ -773,13 +771,13 @@ function AppContent({ onQuit }: Pick<AppProps, "onQuit">) {
     )
 }
 
-export function App({ app, onQuit }: AppProps) {
+export function App({ app, onQuit, initialRefreshState }: AppProps) {
     return (
         <ApplicationProvider app={app}>
             <ThemeProvider>
                 <FocusProvider>
                     <LayoutProvider>
-                        <SyncProvider>
+                        <SyncProvider initialRefreshState={initialRefreshState}>
                             <KeybindProvider>
                                 <CommandLogProvider>
                                     <StatusProvider>

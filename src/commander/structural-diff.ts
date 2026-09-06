@@ -19,6 +19,7 @@ export class StructuralDiffError extends Schema.TaggedError<StructuralDiffError>
 export interface StructuralDiffRequest {
     readonly target: JjDiffTarget
     readonly cwd: string
+    readonly atOperation?: string
     /** Textual (flattened) files of the same revision; also the per-file
      * fallback when a file cannot be represented structurally. */
     readonly files: readonly FlattenedFile[]
@@ -152,6 +153,7 @@ export const StructuralDiffLive: Layer.Layer<StructuralDiff, never, AppProcess> 
                         args: [
                             "diff",
                             ...makeDiffTargetArgs(request.target),
+                            ...(request.atOperation ? ["--at-operation", request.atOperation] : []),
                             "--ignore-working-copy",
                             "--config",
                             `merge-tools.${TOOL_NAME}.program=${JSON.stringify(script)}`,
