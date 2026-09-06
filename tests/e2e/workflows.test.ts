@@ -60,6 +60,7 @@ function createRepository(root: string) {
 async function withKajji(
     run: (session: Session, repository: string) => Promise<void>,
     prepare?: (repository: string, home: string) => void,
+    readyText = "ui detail marker",
 ) {
     const root = mkdtempSync(join(tmpdir(), "kajji-e2e-"))
     const home = join(root, "home")
@@ -93,7 +94,7 @@ async function withKajji(
             await session.screen.waitForText("fixture: UI change", {
                 timeoutMs: 30_000,
             })
-            await session.screen.waitForText("ui detail marker", {
+            await session.screen.waitForText(readyText, {
                 timeoutMs: 30_000,
             })
             await session.screen.waitForIdle({
@@ -238,10 +239,13 @@ test("scrolls jj-formatter output and resizes without blank rows", async () => {
     )
 }, 45_000)
 
-test("browses virtual bookmarks and all files in a collapsed large summary", async () => {
+test("browses virtual bookmarks and all files in a large summary", async () => {
     await withKajji(
         async (session) => {
-            await session.screen.waitForText("more files; open file view", { timeoutMs: 10_000 })
+            await session.screen.waitForText("row-000.txt", { timeoutMs: 10_000 })
+            await session.keyboard.type("3")
+            await session.keyboard.write(Buffer.from("j".repeat(110)))
+            await session.screen.waitForText("row-119.txt", { timeoutMs: 5_000 })
             await session.keyboard.type("2")
             await session.keyboard.write(Buffer.from("j".repeat(36)))
             await session.screen.waitForText("virtual-036", { timeoutMs: 5_000 })
@@ -330,6 +334,7 @@ test("browses virtual bookmarks and all files in a collapsed large summary", asy
             if (!result.success) throw new Error(result.stderr.toString())
             runJj(repository, "git", "import")
         },
+        "row-000.txt",
     )
 }, 60_000)
 

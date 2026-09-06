@@ -1,7 +1,8 @@
 # Performance improvement plan
 
-Status: P01–P03 implemented and measured. P03 page-scroll timing remains
-inconclusive. P04 is implemented and functionally checked, but final performance
+Status: P01 and P03 implemented and measured. P02 list virtualization is retained,
+but summary virtualization remains open after rejection of the file-count limit.
+P03 page-scroll timing remains inconclusive. P04 is implemented and functionally checked, but final performance
 acceptance remains open. P05–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
@@ -34,7 +35,7 @@ change is rejected after measurement, record that decision instead of marking
 an optimization as delivered.
 
 - [x] **P01 — Coordinated, cancellable, cached detail loading**
-- [x] **P02 — Virtualize log, bookmark, file, and summary lists**
+- [ ] **P02 — Virtualize log, bookmark, file, and summary lists** (summary work remains open)
 - [x] **P03 — Remove full-diff work from scroll updates**
 - [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
 - [x] **P05 — Coordinate working-copy snapshots and repository reads**
@@ -172,7 +173,8 @@ parses its complete input before any `maxLines` limit and can mount all lines.
 - [x] Render visible slices with spacers and bounded overscan.
 - [x] Use row-height prefix sums for variable-height log/operation-log entries.
   Replace per-selection summation of preceding entry heights.
-- [x] Virtualize or collapse large file-stat summaries without hiding access to files.
+- [ ] Virtualize large file-stat summaries while keeping every file accessible by
+  scrolling in Detail. Do not truncate the list or require a switch to file view.
 - [x] Cover the jj-formatter path, not only the custom diff views.
 - [x] Preserve unchanged row identity across stream batches and refreshes.
 - [x] Cache stable display widths/ANSI parsing where useful. Do not parse or
@@ -709,9 +711,10 @@ and bookmark navigation. They do not establish a general diff-scroll improvement
   ANSI data has a shared LRU cache, limited to 512 entries and an estimated
   2 MiB. Oversized results are not cached. Theme foreground resolution remains
   separate from parsing. Horizontal cropping only affects mounted lines.
-- File summaries with more than 20 files show the first eight plus an omitted
-  count and a file-view instruction. All files remain available in file view.
-  Summaries of 20 files or fewer are unchanged, including the stress fixture.
+- The initial implementation limited summaries with more than 20 files to the
+  first eight plus an omitted count and a file-view instruction. This limit was
+  rejected and removed on 2026-09-07; see the correction below. The measured
+  stress fixture had 20 files or fewer, so the limit did not affect those runs.
 - Removed the duplicate parent file-selection scroll effect; the filterable
   file list owns scrolling in both filtered and unfiltered modes.
 
@@ -803,6 +806,23 @@ correctness requirement remains open.
 `/tmp/kajji-p02-compare-{a1,a2}-{b1,b2}.txt`, `/tmp/kajji-p02-unit.log`,
 `/tmp/kajji-p02-e2e.log`, and `/tmp/kajji-p02-final.diff`. Fixtures and reports
 remain local.
+
+### P02 — Reject the Detail file-count limit, 2026-09-07
+
+**Decision:** remove the summary limit introduced in `42cb3be0`. Access through
+file view is not a substitute for the complete file list in Detail. Performance
+changes must preserve scrolling through all summary files in the same panel.
+The other P02 changes remain in place.
+
+**Changes:** `FileStats` renders every file again. Removed the omitted-file message.
+Summary virtualization remains open: mounted summary rows currently grow with
+file count. Any future implementation must preserve the full scroll range.
+
+**Validation:** the updated large-summary E2E test scrolls Detail to
+`row-119.txt` in a 122-file change, then checks bookmark and file-tree navigation.
+That focused test, all 446 unit tests, `bun check`, and `bun lint` pass.
+No new performance measurements were made; no speed or memory claim is made
+for this correction.
 
 ### P03 — Indexed diff scroll updates, 2026-09-06
 
