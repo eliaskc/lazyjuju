@@ -1123,7 +1123,8 @@ export function MainArea() {
         }
     }
 
-    const handleScrollAnchorRowChange = (rowIndex: number | null) => {
+    const handleScrollAnchorRowChange = (rowIndex: number | null, style: DiffViewStyle) => {
+        if (style !== viewStyle()) return
         const anchor = modeScrollAnchor()
         if (!anchor || rowIndex === null) return
         const targetScrollTop =
@@ -1158,6 +1159,24 @@ export function MainArea() {
             setModeScrollAnchor(null)
         }, 1)
     })
+
+    const toggleDiffStyle = () => {
+        // Capture from the old layout before the style signal replaces its rows.
+        syncScrollMetrics()
+        modeSemanticScrollTop = null
+        batch(() => {
+            captureScrollAnchor()
+            setViewStyleOverride(viewStyle() === "unified" ? "split" : "unified")
+        })
+        clearTimeout(structuralAnchorTimer)
+        structuralAnchorTimer = setTimeout(() => {
+            // The first restore can be clamped against the old content height.
+            // Apply it again after the new layout has reached the scrollbox.
+            if (modeSemanticScrollTop !== null) scrollRef?.scrollTo(modeSemanticScrollTop)
+            syncScrollMetrics()
+            setModeScrollAnchor(null)
+        }, 50)
+    }
 
     const handleScroll = (event: MouseEvent) => {
         hunkNavigationTarget = null
@@ -1428,12 +1447,7 @@ export function MainArea() {
             context: "detail.diff_custom",
 
             visibleIn: ["palette", "statusBar"] as const,
-            execute: () => {
-                setViewStyleOverride((s) => {
-                    const current = s ?? viewStyle()
-                    return current === "unified" ? "split" : "unified"
-                })
-            },
+            execute: toggleDiffStyle,
         },
         {
             id: "detail.toggle_diff_wrap",
@@ -1457,12 +1471,7 @@ export function MainArea() {
 
             panel: "log",
             visibleIn: ["statusBar"] as const,
-            execute: () => {
-                setViewStyleOverride((s) => {
-                    const current = s ?? viewStyle()
-                    return current === "unified" ? "split" : "unified"
-                })
-            },
+            execute: toggleDiffStyle,
         },
         {
             id: "log.files.toggle_diff_wrap",
@@ -1719,8 +1728,8 @@ export function MainArea() {
                                                 onCurrentPositionChange={setCurrentDiffPosition}
                                                 onCurrentScrollAnchorChange={setCurrentScrollAnchor}
                                                 scrollAnchor={modeScrollAnchor()}
-                                                onScrollAnchorRowChange={
-                                                    handleScrollAnchorRowChange
+                                                onScrollAnchorRowChange={(row) =>
+                                                    handleScrollAnchorRowChange(row, "unified")
                                                 }
                                                 onScrollTailHeight={setScrollTailHeight}
                                                 scrollTop={adjustedScrollTop()}
@@ -1745,8 +1754,8 @@ export function MainArea() {
                                                 onCurrentPositionChange={setCurrentDiffPosition}
                                                 onCurrentScrollAnchorChange={setCurrentScrollAnchor}
                                                 scrollAnchor={modeScrollAnchor()}
-                                                onScrollAnchorRowChange={
-                                                    handleScrollAnchorRowChange
+                                                onScrollAnchorRowChange={(row) =>
+                                                    handleScrollAnchorRowChange(row, "split")
                                                 }
                                                 onScrollTailHeight={setScrollTailHeight}
                                                 scrollTop={adjustedScrollTop()}

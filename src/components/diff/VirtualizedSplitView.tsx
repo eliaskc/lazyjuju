@@ -402,7 +402,7 @@ export function VirtualizedSplitView(props: VirtualizedSplitViewProps) {
             getCurrentDiffPosition(layoutIndex(), props.scrollTop, focusRow),
         )
         props.onCurrentScrollAnchorChange?.(
-            getCurrentDiffScrollAnchor(layoutIndex(), props.scrollTop, focusRow),
+            getCurrentDiffScrollAnchor(layoutIndex(), props.scrollTop),
         )
     })
 

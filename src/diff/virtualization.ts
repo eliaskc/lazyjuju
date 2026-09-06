@@ -303,7 +303,13 @@ export function findDiffScrollAnchorRowIndex(
     if (!file) return null
     const { newLineNumber, oldLineNumber } = anchor
     if (newLineNumber !== undefined && oldLineNumber !== undefined) {
-        return file.firstPair.get(pairKey(newLineNumber, oldLineNumber)) ?? null
+        // Split replacements pair lines that are separate rows in unified mode.
+        return (
+            file.firstPair.get(pairKey(newLineNumber, oldLineNumber)) ??
+            file.firstNewLine.get(newLineNumber) ??
+            file.firstOldLine.get(oldLineNumber) ??
+            null
+        )
     }
     if (newLineNumber !== undefined) return file.firstNewLine.get(newLineNumber) ?? null
     if (oldLineNumber !== undefined) return file.firstOldLine.get(oldLineNumber) ?? null

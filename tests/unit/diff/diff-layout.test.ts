@@ -171,6 +171,17 @@ describe("diff layout index", () => {
         ).toBe(1)
     })
 
+    test("restores split replacement anchors in unified rows", () => {
+        const fileId = "replacement" as FileId
+        const rows: Row[] = [
+            { row: { fileId, type: "content", hunkId: "replacement" }, oldLine: 1 },
+            { row: { fileId, type: "content", hunkId: "replacement" }, newLine: 2 },
+        ]
+        const anchor = { fileId, oldLineNumber: 1, newLineNumber: 2, viewportOffset: 0 }
+        expect(findDiffScrollAnchorRowIndex(indexRows(rows), anchor)).toBe(1)
+        expect(findDiffScrollAnchorRowIndex(indexRows(rows.slice(0, 1)), anchor)).toBe(0)
+    })
+
     test("empty layouts have no position, anchor, or tail", () => {
         const layout = indexRows([])
         expect(getCurrentDiffPosition(layout, 0)).toBeNull()

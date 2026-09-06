@@ -217,6 +217,7 @@ for (const View of [VirtualizedUnifiedView, VirtualizedSplitView]) {
             expect(anchor!.newLineNumber).toBeUndefined()
 
             const saved = anchor!
+            expect(saved.viewportOffset).toBe(0)
             setRestore(saved)
             await setup.renderOnce()
             const wideRow = restoredRow!

@@ -137,7 +137,7 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
             getCurrentDiffPosition(layoutIndex(), props.scrollTop, focusRow),
         )
         props.onCurrentScrollAnchorChange?.(
-            getCurrentDiffScrollAnchor(layoutIndex(), props.scrollTop, focusRow),
+            getCurrentDiffScrollAnchor(layoutIndex(), props.scrollTop),
         )
     })
 

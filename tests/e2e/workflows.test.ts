@@ -168,6 +168,49 @@ test("scrolls variable-height revision, filtered, and operation logs", async () 
     )
 }, 60_000)
 
+test("keeps the top source line when toggling diff style", async () => {
+    await withKajji(
+        async (session) => {
+            await session.resize({ cols: 200, rows: 36 })
+            await session.keyboard.type("3")
+            await session.screen.waitForIdle({ quietForMs: 250, timeoutMs: 5_000 })
+            await session.keyboard.write(Buffer.from("j".repeat(145)))
+            await session.screen.waitUntil(
+                (snapshot) => !snapshot.text.includes("ui detail marker 0"),
+                { timeoutMs: 5_000 },
+            )
+            await session.screen.waitForIdle({ quietForMs: 250, timeoutMs: 5_000 })
+            const before = await session.screen.capture()
+            const topMarker = before.text.match(/ui detail marker \d+/)?.[0]
+            expect(topMarker).toBeDefined()
+            for (let i = 0; i < 4; i++) {
+                await session.keyboard.type("v")
+                await session.screen.waitForIdle({ quietForMs: 250, timeoutMs: 5_000 })
+                const after = await session.screen.capture()
+                expect(after.text.match(/ui detail marker \d+/)?.[0]).toBe(topMarker)
+            }
+        },
+        (repository, home) => {
+            const configDir = join(home, ".config", "kajji")
+            mkdirSync(configDir, { recursive: true })
+            writeFileSync(
+                join(configDir, "config.json"),
+                JSON.stringify({ diff: { layout: "unified" } }),
+            )
+            writeFileSync(
+                join(repository, "ui.txt"),
+                Array.from({ length: 100 }, (_, i) => `ui detail marker ${i} old\n`).join(""),
+            )
+            runJj(repository, "commit", "-m", "fixture: old lines")
+            writeFileSync(
+                join(repository, "ui.txt"),
+                Array.from({ length: 100 }, (_, i) => `ui detail marker ${i} new\n`).join(""),
+            )
+            runJj(repository, "describe", "-m", "fixture: UI change")
+        },
+    )
+}, 45_000)
+
 test("scrolls jj-formatter output and resizes without blank rows", async () => {
     await withKajji(
         async (session) => {
