@@ -637,6 +637,27 @@ test("navigates between files in diff mode", async () => {
             "navigating to the previous file",
             (text) => !text.includes("Commands") && text.includes("ui detail marker"),
         )
+
+        // First hunk is in ui.txt; the next crosses into view.txt. Reuse the
+        // navigation index after file movement and after row layout changes.
+        for (const cols of [200, 100]) {
+            await session.resize({ cols, rows: 36 })
+            await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
+            await session.keyboard.type("]")
+            await session.screen.waitForIdle({ quietForMs: 100, timeoutMs: 5_000 })
+            await session.keyboard.type("]")
+            await waitForNavigation(
+                "next hunk across a file boundary",
+                (text) => text.includes("view detail marker") && !text.includes("ui detail marker"),
+            )
+            await session.keyboard.type("[")
+            await waitForNavigation("previous hunk", (text) => text.includes("ui detail marker"))
+            await executePaletteCommand("previous file", "Previous file")
+            await waitForNavigation(
+                "reset file position",
+                (text) => !text.includes("Commands") && text.includes("ui detail marker"),
+            )
+        }
     })
 }, 45_000)
 

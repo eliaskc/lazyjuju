@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo } from "solid-js"
 import { useTheme } from "../../context/theme"
 import {
     BINARY_PREVIEW_HEIGHT,
+    buildDiffLayoutIndex,
     type DiffPosition,
     type DiffRow,
     type DiffScrollAnchor,
@@ -14,9 +15,7 @@ import {
     getCurrentDiffPosition,
     getCurrentDiffScrollAnchor,
     getCurrentFileId,
-    getFileRowOffsets,
     getFileScrollTailHeight,
-    getHunkRowOffsets,
     getLanguage,
     getLineNumWidth,
     getMaxLineNumber,
@@ -106,46 +105,44 @@ export function VirtualizedUnifiedView(props: VirtualizedUnifiedViewProps) {
     // need to be cropped again when scrolling sideways.
     const wrappedRows = createMemo(() => buildWrappedRows(rows(), wrapWidth(), props.wrapEnabled))
 
+    const layoutIndex = createMemo(() =>
+        buildDiffLayoutIndex(
+            wrappedRows(),
+            (wrapped) => wrapped.row.newLineNumber,
+            (wrapped) => wrapped.row.oldLineNumber,
+        ),
+    )
+
     createEffect(() => {
-        props.onHunkRowOffsets?.(getHunkRowOffsets(wrappedRows()))
-        props.onFileRowOffsets?.(getFileRowOffsets(wrappedRows()))
+        props.onHunkRowOffsets?.(layoutIndex().hunkOffsets)
+        props.onFileRowOffsets?.(layoutIndex().fileOffsets)
+    })
+
+    createEffect(() => {
         props.onScrollTailHeight?.(
             getFileScrollTailHeight(
-                wrappedRows(),
+                layoutIndex(),
                 props.viewportHeight,
                 props.leadingContentHeight,
             ),
         )
-        const currentRows = wrappedRows()
-        const getNewLineNumber = (wrapped: WrappedRow) => wrapped.row.newLineNumber
-        const getOldLineNumber = (wrapped: WrappedRow) => wrapped.row.oldLineNumber
+    })
+
+    createEffect(() => {
         const focusRow = props.scrollTop + props.viewportHeight / 2
-        const position = getCurrentDiffPosition(
-            currentRows,
-            props.scrollTop,
-            getNewLineNumber,
-            getOldLineNumber,
-            focusRow,
+        props.onCurrentFileChange?.(getCurrentFileId(wrappedRows(), props.scrollTop))
+        props.onCurrentPositionChange?.(
+            getCurrentDiffPosition(layoutIndex(), props.scrollTop, focusRow),
         )
-        props.onCurrentFileChange?.(getCurrentFileId(currentRows, props.scrollTop))
-        props.onCurrentPositionChange?.(position)
         props.onCurrentScrollAnchorChange?.(
-            getCurrentDiffScrollAnchor(
-                currentRows,
-                props.scrollTop,
-                getNewLineNumber,
-                getOldLineNumber,
-                focusRow,
-            ),
+            getCurrentDiffScrollAnchor(layoutIndex(), props.scrollTop, focusRow),
         )
+    })
+
+    createEffect(() => {
         props.onScrollAnchorRowChange?.(
             props.scrollAnchor
-                ? findDiffScrollAnchorRowIndex(
-                      currentRows,
-                      props.scrollAnchor,
-                      getNewLineNumber,
-                      getOldLineNumber,
-                  )
+                ? findDiffScrollAnchorRowIndex(layoutIndex(), props.scrollAnchor)
                 : null,
         )
     })

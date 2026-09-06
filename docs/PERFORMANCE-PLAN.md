@@ -1,6 +1,7 @@
 # Performance improvement plan
 
-Status: P01 and P02 implemented and measured. P03–P16 remain open.
+Status: P01–P03 implemented and measured. P03 page-scroll timing remains
+inconclusive. P04–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
 See [BENCHMARKING.md](BENCHMARKING.md) for measurement rules and
@@ -33,7 +34,7 @@ an optimization as delivered.
 
 - [x] **P01 — Coordinated, cancellable, cached detail loading**
 - [x] **P02 — Virtualize log, bookmark, file, and summary lists**
-- [ ] **P03 — Remove full-diff work from scroll updates**
+- [x] **P03 — Remove full-diff work from scroll updates**
 - [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
 - [ ] **P05 — Coordinate working-copy snapshots and repository reads**
 - [ ] **P06 — Reduce first-use syntax cost; compare regex engines**
@@ -192,11 +193,11 @@ file offsets, and file offsets again for trailing space. Deletion-only position
 lookup can search all rows for a new-side number before trying the old side.
 
 **Change:**
-- [ ] Memoize layout indexes independently of scroll position.
-- [ ] Share file offsets with trailing-space calculation.
-- [ ] Bound position/anchor lookup to the current file; index line locations and
+- [x] Memoize layout indexes independently of scroll position.
+- [x] Share file offsets with trailing-space calculation.
+- [x] Bound position/anchor lookup to the current file; index line locations and
   record whether each side exists.
-- [ ] Reuse hunk navigation indexes instead of rebuilding flattened hunk lists.
+- [x] Reuse hunk navigation indexes instead of rebuilding flattened hunk lists.
 
 **Accept when:** scroll-only updates do not rebuild layout indexes. Test deleted,
 added, binary, empty, and multi-file diffs, split/unified modes, sticky headers,
@@ -797,3 +798,148 @@ correctness requirement remains open.
 `/tmp/kajji-p02-compare-{a1,a2}-{b1,b2}.txt`, `/tmp/kajji-p02-unit.log`,
 `/tmp/kajji-p02-e2e.log`, and `/tmp/kajji-p02-final.diff`. Fixtures and reports
 remain local.
+
+### P03 — Indexed diff scroll updates, 2026-09-06
+
+**Decision:** retain the implementation. Native component tests confirm that
+scroll-only updates do not rebuild or publish layout indexes. Function tests and
+microbenchmarks confirm bounded position queries. Repeated short unified TUI
+runs show a small latency reduction. Long page-scroll timing is inconclusive;
+this is not a general diff-scroll, startup, or memory improvement claim.
+
+**Changes:**
+- Both views memoize a shared `DiffLayoutIndex` from wrapped rows. File/hunk
+  offsets, scroll-tail height, current position, and anchor restoration have
+  separate effects. Scroll position and viewport height do not invalidate indexes.
+- One layout pass builds file/hunk offsets and per-file line locations. Consecutive
+  wrapped rows with the same source-line pair share a location span. New-side and
+  old-side indexes record whether each side exists. Deletion-only and binary
+  files no longer search the full diff for an absent new-side line.
+- Position and anchor capture use binary search within the top row's file.
+  Anchor restoration uses indexed source-line keys and preserves both line
+  numbers when provided. It retains the first wrapped row, the later-row tie
+  preference, and the existing file-gap/sticky-header rules.
+- Scroll-tail calculation reuses file count and the last header offset from the
+  same index. It does not scan rows or copy offset-map values on resize.
+- `MainArea` memoizes hunk navigation positions. Each navigation command uses
+  binary search rather than rebuilding the flattened hunk list. Missing hunks,
+  file boundaries, and clamped-scroll navigation targets remain supported.
+- No process coordination changed. These are synchronous layout calculations;
+  they do not need new Effect services or concurrency infrastructure.
+
+**Validation:** `bun test` (425 tests), `bun test:e2e` (19 tests), `bun check`,
+`bun bench:check`, `bun lint`, and
+`bun test ./tests/bench/diff-layout.bench.ts` (four cases) pass.
+
+Native-renderer tests check both views, offset-map identity and callback counts
+across 30 scroll updates, horizontal movement, height/width changes, wrapping,
+active-file changes, content replacement, and anchor restoration after reflow.
+They cover deleted, added, two-sided, binary, and empty files. Independent linear
+reference tests check positions and anchors across gaps, file boundaries,
+wrapped rows, fractional offsets, and missing sides. A 100,000-line operation-count
+check bounds indexed queries, and 100,000 wrapped rows for one source line use
+one location span. Live TUI file navigation now also checks next/previous hunk
+movement across files at 200 and 100 columns. Existing mode-transition, resize,
+and multi-selection tests remain in place.
+
+**Microbenchmarks:** the permanent test separates index preparation from scroll
+queries at 100,000 and 500,000 rows, with deletion-only and two-sided input. All
+four median query batches average less than 0.01 ms per update. These are batched
+function measurements, not sub-millisecond terminal latency measurements.
+
+A separate baseline A1 → candidate B1 → baseline A2 diagnostic uses deletion-only
+files with 1,000 display rows per file. The old sequence rebuilds hunk offsets,
+file offsets, and tail offsets, then captures position/anchor and restores an
+anchor. The candidate reuses its prepared index. Both use the same repeating
+200-position sequence. After warmup, 20 batches average 10 baseline updates or
+1,000 candidate updates to reduce timer overhead.
+
+| Rows | Baseline A1, ms/update | Indexed B1, ms/update | Baseline A2, ms/update |
+| --- | ---: | ---: | ---: |
+| 100,000 | 5.35 | <0.01 | 5.43 |
+| 500,000 | 35.30 | <0.01 | 37.46 |
+
+Candidate index preparation took 14 and 42 ms in that diagnostic, excluding row
+creation. Preparation and retained index data still scale with content. The
+index is owned by the current view/layout, not a cache of previous layouts.
+P04's full wrapped-row allocation and P11's large-input preparation remain open.
+
+**TUI measurement:** A1 → B1 → A2 → B2 using source `42cb3be0` for the A groups.
+A2 used a temporary jj workspace with the same dependencies. All completed
+comparisons passed harness compatibility checks. Controller/target Bun 1.4.2,
+OpenTUI 0.5.10, Effect 4.0.0-rc.112, and Terminal Control 1.2.1 were fixed.
+No tests or builds ran concurrently with measured benchmarks.
+
+Common command:
+
+```sh
+/Users/elias/.local/share/mise/installs/bun/1.4.2/bin/bun scripts/benchmark.ts run \
+  --bun /Users/elias/.local/share/mise/installs/bun/1.4.2/bin/bun \
+  --fixture .kajji-benchmarks/fixtures/stress --scenarios diff \
+  --runs 3 --warmups 1 --passes 2 --steps 40 --interval-ms 16 \
+  --output /tmp/kajji-p03-MODE-GROUP.json
+```
+
+Configurations:
+- `unified`: defaults, 120×36 cells, wrapping, line input.
+- `split`: add `--layout split --cols 200 --no-wrap`; line input.
+- `pages`: replace the step count with `--steps 300`, add `--diff-input page`;
+  120×36 cells, unified, wrapping. This crosses file boundaries.
+
+All use the textual engine, dark theme, endpoint-only capture, and the same
+prepared fixture with warm filesystem caches. Each group has one excluded warmup
+and three measured processes per configuration. Each line-input report applied
+all 480 requested positions. Each page report sent 3,600 inputs and moved 3,300
+rows per burst in the correct direction. Page input does not have exact per-key
+position attribution. These runs do not involve log pagination.
+
+Per-group process medians:
+
+| Metric | A1 | B1 | A2 | B2 |
+| --- | ---: | ---: | ---: | ---: |
+| Unified content ready, ms | 1,057 | 1,135 | 1,258 | 1,106 |
+| Unified highlighted ready, ms | 1,773 | 1,874 | 1,995 | 1,839 |
+| Unified first Down input-to-output p95, ms | 19.1 | 16.6 | 18.4 | 16.1 |
+| Unified first Down recovery, ms | 8.5 | 5.5 | 6.6 | 6.3 |
+| Unified first Up recovery, ms | 4.3 | 3.9 | 2.3 | 4.2 |
+| Unified second Down recovery, ms | 9.2 | 13.0 | 14.1 | 10.9 |
+| Unified second Up recovery, ms | 7.3 | 2.3 | 6.2 | 3.1 |
+| Unified peak Kajji RSS, MiB | 413 | 406 | 411 | 413 |
+| Unified Kajji CPU, ms | 3,892 | 3,524 | 3,961 | 3,527 |
+| Split content ready, ms | 1,247 | 1,205 | 1,117 | 1,238 |
+| Split highlighted ready, ms | 2,252 | 2,110 | 2,038 | 2,429 |
+| Split first Down input-to-output p95, ms | 20.7 | 20.0 | 20.6 | 20.3 |
+| Split first Down recovery, ms | 27.2 | 20.0 | 14.9 | 15.0 |
+| Split second Up recovery, ms | 3.3 | 10.9 | 16.6 | 17.2 |
+| Split peak Kajji RSS, MiB | 463 | 457 | 462 | 457 |
+| Page content ready, ms | 1,146 | 1,245 | 1,211 | 1,733 |
+| Page highlighted ready, ms | 1,832 | 1,991 | 1,922 | 2,716 |
+| Page first Down update-gap p95, ms | 26.2 | 27.2 | 28.6 | 106.5 |
+| Page first Down maximum update gap, ms | 45.9 | 50.9 | 41.7 | 162.2 |
+| Page first Down recovery, ms | 15.8 | 17.6 | 13.9 | 54.4 |
+| Page second Up recovery, ms | 4.7 | 7.7 | 9.9 | 14.1 |
+| Page peak Kajji RSS, MiB | 619 | 543 | 563 | 539 |
+
+**Timing limits and failed attempts:** B2 page scrolling is materially slower;
+that valid report is retained, not discarded. An immediate extra baseline group,
+A3, also slowed: first Down update-gap p95 was 129.9 ms and maximum gap was
+224.5 ms. A3 contained 33 gaps over 100 ms, compared with 19 in B2, one in A2,
+and none in A1/B1. A process check found active browser and window-server CPU
+work. This is evidence of an uncontrolled timing environment, not proof of the
+cause of every delay or proof that no page-scroll regression exists.
+
+The first B1 page attempt failed for 29.6 ms sender lateness; its unchanged repeat
+passed. Two attempts at a further B3 group failed for 24.5 and 38.7 ms lateness.
+Timing stopped after these failures. The rate was not reduced, failed reports
+were not scored, and other processes were not stopped. A3 has no completed B3/A4
+comparison. A quiet-machine page comparison remains follow-up measurement work.
+Short unified/split runs had no gaps over 100 ms, but their small viewport region
+does not establish long-scroll performance. There is no compiled, network, or
+structural-engine timing claim.
+
+**Local evidence:** `/tmp/kajji-p03-{unified,split,pages}-{a1,b1,a2,b2}.json`,
+`/tmp/kajji-p03-MODE-A-B.txt`, `/tmp/kajji-p03-pages-a3.json`, and failed reports
+beside the page outputs. Microbenchmark evidence is
+`/tmp/kajji-p03-micro-{a1,b1,a2}.jsonl`, `/tmp/kajji-p03-micro-compare.mjs`, and
+`/tmp/kajji-p03-micro.log`. Validation logs are `/tmp/kajji-p03-{unit,e2e,lint}.log`;
+final changes are in `/tmp/kajji-p03-final.diff`. Fixtures and reports remain local.

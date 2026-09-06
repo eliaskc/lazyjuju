@@ -162,97 +162,181 @@ export interface DiffScrollAnchor {
     viewportOffset: number
 }
 
-export function findDiffScrollAnchorRowIndex<Row extends { row: { fileId: FileId } }>(
-    rows: readonly Row[],
-    anchor: DiffScrollAnchor,
-    getNewLineNumber: (row: Row) => number | undefined,
-    getOldLineNumber: (row: Row) => number | undefined,
-): number | null {
-    const index = rows.findIndex((row) => {
-        if (row.row.fileId !== anchor.fileId) return false
-        const newLineNumber = getNewLineNumber(row)
-        const oldLineNumber = getOldLineNumber(row)
-        return (
-            (anchor.newLineNumber === undefined || newLineNumber === anchor.newLineNumber) &&
-            (anchor.oldLineNumber === undefined || oldLineNumber === anchor.oldLineNumber)
-        )
-    })
-    return index >= 0 ? index : null
+/** A source-line pair can occupy several consecutive wrapped display rows. */
+interface LineLocation {
+    start: number
+    end: number
+    newLineNumber?: number
+    oldLineNumber?: number
 }
 
-export function getCurrentDiffScrollAnchor<Row extends { row: { fileId: FileId } }>(
+interface FileLayout {
+    fileId: FileId
+    start: number
+    lines: LineLocation[]
+    newLines: LineLocation[]
+    oldLines: LineLocation[]
+    firstNewLine: Map<number, number>
+    firstOldLine: Map<number, number>
+    firstPair: Map<string, number>
+}
+
+export interface DiffLayoutIndex {
+    totalRows: number
+    hunkOffsets: Map<HunkId, number>
+    fileOffsets: Map<FileId, number>
+    files: FileLayout[]
+    filesById: Map<FileId, FileLayout>
+    lastFileOffset: number | undefined
+}
+
+const pairKey = (newLine: number | undefined, oldLine: number | undefined) =>
+    `${newLine ?? ""}:${oldLine ?? ""}`
+
+/** Build once per row layout, never per scroll update. Files must be contiguous. */
+export function buildDiffLayoutIndex<
+    Row extends { row: { fileId: FileId; type?: string; hunkId?: HunkId | null } },
+>(
     rows: readonly Row[],
-    scrollTop: number,
     getNewLineNumber: (row: Row) => number | undefined,
     getOldLineNumber: (row: Row) => number | undefined,
+): DiffLayoutIndex {
+    const layout: DiffLayoutIndex = {
+        totalRows: rows.length,
+        hunkOffsets: new Map(),
+        fileOffsets: new Map(),
+        files: [],
+        filesById: new Map(),
+        lastFileOffset: undefined,
+    }
+    let file: FileLayout | undefined
+    for (const [index, wrapped] of rows.entries()) {
+        const { row } = wrapped
+        if (!file || file.fileId !== row.fileId) {
+            file = {
+                fileId: row.fileId,
+                start: index,
+                lines: [],
+                newLines: [],
+                oldLines: [],
+                firstNewLine: new Map(),
+                firstOldLine: new Map(),
+                firstPair: new Map(),
+            }
+            layout.files.push(file)
+            layout.filesById.set(row.fileId, file)
+        }
+        if (row.type === "file-header" && !layout.fileOffsets.has(row.fileId)) {
+            layout.fileOffsets.set(row.fileId, index)
+            layout.lastFileOffset = index
+        }
+        if (row.hunkId && !layout.hunkOffsets.has(row.hunkId)) {
+            layout.hunkOffsets.set(row.hunkId, index)
+        }
+        const newLineNumber = getNewLineNumber(wrapped)
+        const oldLineNumber = getOldLineNumber(wrapped)
+        if (newLineNumber === undefined && oldLineNumber === undefined) continue
+        const previous = file.lines.at(-1)
+        if (
+            previous?.end === index &&
+            previous.newLineNumber === newLineNumber &&
+            previous.oldLineNumber === oldLineNumber
+        ) {
+            previous.end = index + 1
+            continue
+        }
+        const location = { start: index, end: index + 1, newLineNumber, oldLineNumber }
+        file.lines.push(location)
+        if (newLineNumber !== undefined) {
+            file.newLines.push(location)
+            if (!file.firstNewLine.has(newLineNumber)) file.firstNewLine.set(newLineNumber, index)
+        }
+        if (oldLineNumber !== undefined) {
+            file.oldLines.push(location)
+            if (!file.firstOldLine.has(oldLineNumber)) file.firstOldLine.set(oldLineNumber, index)
+        }
+        if (newLineNumber !== undefined && oldLineNumber !== undefined) {
+            const key = pairKey(newLineNumber, oldLineNumber)
+            if (!file.firstPair.has(key)) file.firstPair.set(key, index)
+        }
+    }
+    return layout
+}
+
+/** First entry for which the predicate is true in a sorted collection. */
+function lowerBound<T>(items: readonly T[], predicate: (item: T) => boolean): number {
+    let low = 0
+    let high = items.length
+    while (low < high) {
+        const mid = (low + high) >>> 1
+        if (predicate(items[mid]!)) high = mid
+        else low = mid + 1
+    }
+    return low
+}
+
+function currentLayoutFile(layout: DiffLayoutIndex, scrollTop: number) {
+    if (layout.totalRows === 0) return undefined
+    const top = Math.min(layout.totalRows - 1, Math.max(0, Math.floor(scrollTop)))
+    return layout.files[lowerBound(layout.files, (file) => file.start > top) - 1]
+}
+
+function nearestLine(lines: readonly LineLocation[], row: number): LineLocation | undefined {
+    const nextIndex = lowerBound(lines, (line) => line.end > row)
+    const next = lines[nextIndex]
+    const previous = lines[nextIndex - 1]
+    if (!next) return previous
+    if (!previous || next.start <= row) return next
+    // At equal distance, retain the existing preference for the later row.
+    return next.start - row <= row - (previous.end - 1) ? next : previous
+}
+
+export function findDiffScrollAnchorRowIndex(
+    layout: DiffLayoutIndex,
+    anchor: DiffScrollAnchor,
+): number | null {
+    const file = layout.filesById.get(anchor.fileId)
+    if (!file) return null
+    const { newLineNumber, oldLineNumber } = anchor
+    if (newLineNumber !== undefined && oldLineNumber !== undefined) {
+        return file.firstPair.get(pairKey(newLineNumber, oldLineNumber)) ?? null
+    }
+    if (newLineNumber !== undefined) return file.firstNewLine.get(newLineNumber) ?? null
+    if (oldLineNumber !== undefined) return file.firstOldLine.get(oldLineNumber) ?? null
+    return file.start
+}
+
+export function getCurrentDiffScrollAnchor(
+    layout: DiffLayoutIndex,
+    scrollTop: number,
     focusRow = scrollTop,
 ): DiffScrollAnchor | null {
-    if (rows.length === 0) return null
-    const topIndex = Math.min(rows.length - 1, Math.max(0, Math.floor(scrollTop)))
-    const focusIndex = Math.min(rows.length - 1, Math.max(0, Math.floor(focusRow)))
-    const fileId = rows[topIndex]?.row.fileId
-    if (!fileId) return null
-
-    for (let distance = 0; distance < rows.length; distance++) {
-        const indexes =
-            distance === 0 ? [focusIndex] : [focusIndex + distance, focusIndex - distance]
-        for (const index of indexes) {
-            const row = rows[index]
-            if (!row || row.row.fileId !== fileId) continue
-            const newLineNumber = getNewLineNumber(row)
-            const oldLineNumber = getOldLineNumber(row)
-            if (newLineNumber === undefined && oldLineNumber === undefined) {
-                continue
-            }
-            return {
-                fileId,
-                newLineNumber,
-                oldLineNumber,
-                viewportOffset: index - scrollTop,
-            }
-        }
+    const file = currentLayoutFile(layout, scrollTop)
+    if (!file) return null
+    const focus = Math.min(layout.totalRows - 1, Math.max(0, Math.floor(focusRow)))
+    const line = nearestLine(file.lines, focus)
+    if (!line) return null
+    return {
+        fileId: file.fileId,
+        newLineNumber: line.newLineNumber,
+        oldLineNumber: line.oldLineNumber,
+        viewportOffset: Math.max(line.start, Math.min(line.end - 1, focus)) - scrollTop,
     }
-    return null
 }
 
-export function getCurrentDiffPosition<Row extends { row: { fileId: FileId } }>(
-    rows: readonly Row[],
+export function getCurrentDiffPosition(
+    layout: DiffLayoutIndex,
     scrollTop: number,
-    getNewLineNumber: (row: Row) => number | undefined,
-    getOldLineNumber: (row: Row) => number | undefined,
     focusRow = scrollTop,
 ): DiffPosition | null {
-    if (rows.length === 0) return null
-    const index = Math.min(rows.length - 1, Math.max(0, Math.floor(scrollTop)))
-    const focusIndex = Math.min(rows.length - 1, Math.max(0, Math.floor(focusRow)))
-    const current = rows[index]
-    if (!current) return null
-
-    const fileId = current.row.fileId
-    const findNearestLine = (
-        getLineNumber: (row: Row) => number | undefined,
-    ): number | undefined => {
-        for (let distance = 0; distance < rows.length; distance++) {
-            const after = rows[focusIndex + distance]
-            if (after?.row.fileId === fileId) {
-                const line = getLineNumber(after)
-                if (line !== undefined) return line
-            }
-
-            if (distance === 0) continue
-            const before = rows[focusIndex - distance]
-            if (before?.row.fileId === fileId) {
-                const line = getLineNumber(before)
-                if (line !== undefined) return line
-            }
-        }
-        return undefined
-    }
-
-    return {
-        fileId,
-        lineNumber: findNearestLine(getNewLineNumber) ?? findNearestLine(getOldLineNumber),
-    }
+    const file = currentLayoutFile(layout, scrollTop)
+    if (!file) return null
+    const focus = Math.min(layout.totalRows - 1, Math.max(0, Math.floor(focusRow)))
+    // Empty side indexes make deletion-only and binary files constant-time fallbacks.
+    const lineNumber = file.newLines.length
+        ? nearestLine(file.newLines, focus)?.newLineNumber
+        : nearestLine(file.oldLines, focus)?.oldLineNumber
+    return { fileId: file.fileId, lineNumber }
 }
 
 export function getCurrentFileId<Row extends { row: { fileId: FileId; type?: string } }>(
@@ -269,17 +353,15 @@ export function getCurrentFileId<Row extends { row: { fileId: FileId; type?: str
     return current.fileId
 }
 
-export function getFileScrollTailHeight<Row extends { row: { fileId: FileId; type: string } }>(
-    rows: readonly Row[],
+export function getFileScrollTailHeight(
+    layout: DiffLayoutIndex,
     viewportHeight: number,
     leadingContentHeight = 0,
 ): number {
-    const offsets = getFileRowOffsets(rows)
-    if (offsets.size <= 1) return 0
-    if (leadingContentHeight + rows.length <= viewportHeight) return 0
-    const lastHeaderOffset = Array.from(offsets.values()).at(-1)
-    if (lastHeaderOffset === undefined) return 0
-    const rowsAfterHeader = rows.length - lastHeaderOffset
+    if (layout.fileOffsets.size <= 1) return 0
+    if (leadingContentHeight + layout.totalRows <= viewportHeight) return 0
+    if (layout.lastFileOffset === undefined) return 0
+    const rowsAfterHeader = layout.totalRows - layout.lastFileOffset
     return Math.max(0, viewportHeight - rowsAfterHeader)
 }
 
@@ -361,33 +443,33 @@ export function getAdjacentHunk(
     return positions[currentIndex + direction]
 }
 
-export function getAdjacentHunkFromRow(
+export interface HunkRowPosition extends HunkPosition {
+    row: number
+}
+
+export function buildHunkNavigationIndex(
     files: readonly { hunks: readonly { hunkId: HunkId }[] }[],
     offsets: ReadonlyMap<HunkId, number>,
+): HunkRowPosition[] {
+    const positions: HunkRowPosition[] = []
+    for (const [fileIndex, file] of files.entries()) {
+        for (const [hunkIndex, hunk] of file.hunks.entries()) {
+            const row = offsets.get(hunk.hunkId)
+            if (row !== undefined)
+                positions.push({ fileIndex, hunkIndex, hunkId: hunk.hunkId, row })
+        }
+    }
+    return positions.sort((a, b) => a.row - b.row)
+}
+
+export function getAdjacentHunkFromRow(
+    positions: readonly HunkRowPosition[],
     row: number,
     direction: 1 | -1,
 ): HunkPosition | undefined {
-    const positions = files
-        .flatMap((file, fileIndex) =>
-            file.hunks.map((hunk, hunkIndex) => ({
-                fileIndex,
-                hunkIndex,
-                hunkId: hunk.hunkId,
-                row: offsets.get(hunk.hunkId),
-            })),
-        )
-        .filter(
-            (position): position is HunkPosition & { row: number } => position.row !== undefined,
-        )
-
-    const position =
+    const index =
         direction === 1
-            ? positions.find((candidate) => candidate.row > row)
-            : positions.findLast((candidate) => candidate.row < row)
-    if (!position) return undefined
-    return {
-        fileIndex: position.fileIndex,
-        hunkIndex: position.hunkIndex,
-        hunkId: position.hunkId,
-    }
+            ? lowerBound(positions, (position) => position.row > row)
+            : lowerBound(positions, (position) => position.row >= row) - 1
+    return positions[index]
 }

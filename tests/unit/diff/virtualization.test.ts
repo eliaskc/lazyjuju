@@ -3,6 +3,8 @@ import type { FileId, HunkId } from "../../../src/diff/identifiers"
 import type { FlattenedFile } from "../../../src/diff/parser"
 import {
     BINARY_PREVIEW_HEIGHT,
+    buildDiffLayoutIndex,
+    buildHunkNavigationIndex,
     findDiffScrollAnchorRowIndex,
     flattenToRows,
     getAdjacentHunk,
@@ -15,6 +17,24 @@ import {
     getHunkRowOffsets,
     shouldShowStickyFileHeader,
 } from "../../../src/diff/virtualization"
+
+interface TestRow {
+    row: {
+        fileId: FileId
+        type?: string
+        hunkId?: HunkId | null
+        newLine?: number
+        oldLine?: number
+    }
+}
+
+function indexRows(rows: readonly TestRow[]) {
+    return buildDiffLayoutIndex(
+        rows,
+        ({ row }) => row.newLine,
+        ({ row }) => row.oldLine,
+    )
+}
 
 describe("flattenToRows", () => {
     test("keeps binary previews in file order", () => {
@@ -115,19 +135,19 @@ describe("getFileScrollTailHeight", () => {
     ]
 
     test("adds only enough space for a short last file header to reach the top", () => {
-        expect(getFileScrollTailHeight(rows, 10, 6)).toBe(7)
+        expect(getFileScrollTailHeight(indexRows(rows), 10, 6)).toBe(7)
     })
 
     test("adds no space when the last file already fills the viewport", () => {
-        expect(getFileScrollTailHeight(rows, 3)).toBe(0)
+        expect(getFileScrollTailHeight(indexRows(rows), 3)).toBe(0)
     })
 
     test("adds no space when all files fit without scrolling", () => {
-        expect(getFileScrollTailHeight(rows, 10)).toBe(0)
+        expect(getFileScrollTailHeight(indexRows(rows), 10)).toBe(0)
     })
 
     test("adds no space for a single file", () => {
-        expect(getFileScrollTailHeight(rows.slice(2), 3, 10)).toBe(0)
+        expect(getFileScrollTailHeight(indexRows(rows.slice(2)), 3, 10)).toBe(0)
     })
 })
 
@@ -157,13 +177,7 @@ describe("getCurrentDiffPosition", () => {
         { row: { fileId: first, newLine: 11 } },
         { row: { fileId: second, newLine: 80 } },
     ]
-    const position = (scrollTop: number) =>
-        getCurrentDiffPosition(
-            rows,
-            scrollTop,
-            ({ row }) => row.newLine,
-            ({ row }) => row.oldLine,
-        )
+    const position = (scrollTop: number) => getCurrentDiffPosition(indexRows(rows), scrollTop)
 
     test("uses the top row's file and nearest new-side line", () => {
         expect(position(0)).toEqual({ fileId: first, lineNumber: 11 })
@@ -172,26 +186,17 @@ describe("getCurrentDiffPosition", () => {
     })
 
     test("keeps the top-row file when the viewport center crosses a boundary", () => {
-        expect(
-            getCurrentDiffPosition(
-                rows,
-                0,
-                ({ row }) => row.newLine,
-                ({ row }) => row.oldLine,
-                3,
-            ),
-        ).toEqual({ fileId: first, lineNumber: 11 })
+        expect(getCurrentDiffPosition(indexRows(rows), 0, 3)).toEqual({
+            fileId: first,
+            lineNumber: 11,
+        })
     })
 
     test("falls back to an old-side line when no new-side line exists", () => {
-        expect(
-            getCurrentDiffPosition(
-                rows.slice(0, 2),
-                0,
-                ({ row }) => row.newLine,
-                ({ row }) => row.oldLine,
-            ),
-        ).toEqual({ fileId: first, lineNumber: 10 })
+        expect(getCurrentDiffPosition(indexRows(rows.slice(0, 2)), 0)).toEqual({
+            fileId: first,
+            lineNumber: 10,
+        })
     })
 })
 
@@ -202,11 +207,8 @@ describe("semantic diff scroll anchors", () => {
         { row: { fileId: first, oldLine: 10 } },
         { row: { fileId: first, newLine: 11 } },
     ]
-    const getNewLine = ({ row }: (typeof rows)[number]) => row.newLine
-    const getOldLine = ({ row }: (typeof rows)[number]) => row.oldLine
-
     test("records the source line's offset within the viewport", () => {
-        expect(getCurrentDiffScrollAnchor(rows, 1, getNewLine, getOldLine, 2)).toEqual({
+        expect(getCurrentDiffScrollAnchor(indexRows(rows), 1, 2)).toEqual({
             fileId: first,
             newLineNumber: 11,
             oldLineNumber: undefined,
@@ -219,16 +221,11 @@ describe("semantic diff scroll anchors", () => {
         if (!firstRow) throw new Error("expected fixture row")
         const reflowedRows = [firstRow, firstRow, ...rows.slice(1)]
         expect(
-            findDiffScrollAnchorRowIndex(
-                reflowedRows,
-                {
-                    fileId: first,
-                    newLineNumber: 11,
-                    viewportOffset: 1,
-                },
-                getNewLine,
-                getOldLine,
-            ),
+            findDiffScrollAnchorRowIndex(indexRows(reflowedRows), {
+                fileId: first,
+                newLineNumber: 11,
+                viewportOffset: 1,
+            }),
         ).toBe(3)
     })
 })
@@ -312,25 +309,27 @@ describe("getAdjacentHunkFromRow", () => {
         ["c:1", 20],
     ])
 
+    const navigation = buildHunkNavigationIndex(files, offsets)
+
     test("navigates relative to the visible row", () => {
-        expect(getAdjacentHunkFromRow(files, offsets, 7, 1)?.hunkId).toBe("a:2")
-        expect(getAdjacentHunkFromRow(files, offsets, 7, -1)?.hunkId).toBe("a:1")
+        expect(getAdjacentHunkFromRow(navigation, 7, 1)?.hunkId).toBe("a:2")
+        expect(getAdjacentHunkFromRow(navigation, 7, -1)?.hunkId).toBe("a:1")
     })
 
     test("crosses files without relying on stale indexes", () => {
-        expect(getAdjacentHunkFromRow(files, offsets, 10, 1)?.hunkId).toBe("c:1")
-        expect(getAdjacentHunkFromRow(files, offsets, 20, -1)?.hunkId).toBe("a:2")
+        expect(getAdjacentHunkFromRow(navigation, 10, 1)?.hunkId).toBe("c:1")
+        expect(getAdjacentHunkFromRow(navigation, 20, -1)?.hunkId).toBe("a:2")
     })
 
     test("advances from the last navigation target when scrolling clamps", () => {
         const extendedFiles = [...files, { hunks: [{ hunkId: "d:1" }] }]
         const extendedOffsets = new Map(offsets).set("d:1", 25)
-        const first = getAdjacentHunkFromRow(extendedFiles, extendedOffsets, 15, 1)
+        const extendedNavigation = buildHunkNavigationIndex(extendedFiles, extendedOffsets)
+        const first = getAdjacentHunkFromRow(extendedNavigation, 15, 1)
         expect(first?.hunkId).toBe("c:1")
         expect(
             getAdjacentHunkFromRow(
-                extendedFiles,
-                extendedOffsets,
+                extendedNavigation,
                 extendedOffsets.get(first?.hunkId ?? "") ?? 15,
                 1,
             )?.hunkId,

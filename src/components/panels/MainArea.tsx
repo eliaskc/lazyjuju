@@ -35,6 +35,7 @@ import {
     type FileId,
     type FlattenedFile,
     type HunkId,
+    buildHunkNavigationIndex,
     getAdjacentHunkFromRow,
     getLineNumWidth,
     getMaxLineNumber,
@@ -469,6 +470,9 @@ export function MainArea() {
     const [hunkRowOffsets, setHunkRowOffsets] = createSignal(new Map<HunkId, number>())
     const [fileRowOffsets, setFileRowOffsets] = createSignal(new Map<FileId, number>())
     const [scrollTailHeight, setScrollTailHeight] = createSignal(0)
+    const hunkNavigationIndex = createMemo(() =>
+        buildHunkNavigationIndex(orderedFiles(), hunkRowOffsets()),
+    )
     let hunkNavigationTarget: HunkId | null = null
 
     const diffStats = createMemo((): DiffStats | null => {
@@ -679,11 +683,10 @@ export function MainArea() {
 
     const navigateHunk = (direction: 1 | -1) => {
         setFileNavigationTarget(null)
-        const files = orderedFiles()
         const visibleRow =
             (hunkNavigationTarget ? hunkRowOffsets().get(hunkNavigationTarget) : undefined) ??
             adjustedScrollTop()
-        const target = getAdjacentHunkFromRow(files, hunkRowOffsets(), visibleRow, direction)
+        const target = getAdjacentHunkFromRow(hunkNavigationIndex(), visibleRow, direction)
         if (!target) return
 
         const rowOffset = hunkRowOffsets().get(target.hunkId)

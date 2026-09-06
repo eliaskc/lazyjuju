@@ -70,6 +70,8 @@ export type { SupportedLanguages } from "@pierre/diffs"
 // Virtualization
 export {
     BINARY_PREVIEW_HEIGHT,
+    buildDiffLayoutIndex,
+    buildHunkNavigationIndex,
     findDiffScrollAnchorRowIndex,
     findRowIndexByFileId,
     findRowIndexByHunkId,
