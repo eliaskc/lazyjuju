@@ -39,7 +39,7 @@ const ProcessCommandDiagnostic = Schema.Struct({
     cwd: Schema.String,
 })
 
-export class ProcessSpawnError extends Schema.TaggedErrorClass<ProcessSpawnError>()(
+export class ProcessSpawnError extends Schema.TaggedError<ProcessSpawnError>()(
     "ProcessSpawnError",
     {
         command: ProcessCommandDiagnostic,
@@ -47,16 +47,13 @@ export class ProcessSpawnError extends Schema.TaggedErrorClass<ProcessSpawnError
     },
 ) {}
 
-export class ProcessReadError extends Schema.TaggedErrorClass<ProcessReadError>()(
-    "ProcessReadError",
-    {
-        command: ProcessCommandDiagnostic,
-        stream: Schema.Literals(["stdout", "stderr"]),
-        cause: Schema.Defect(),
-    },
-) {}
+export class ProcessReadError extends Schema.TaggedError<ProcessReadError>()("ProcessReadError", {
+    command: ProcessCommandDiagnostic,
+    stream: Schema.Literals(["stdout", "stderr"]),
+    cause: Schema.Defect(),
+}) {}
 
-export class ProcessWriteError extends Schema.TaggedErrorClass<ProcessWriteError>()(
+export class ProcessWriteError extends Schema.TaggedError<ProcessWriteError>()(
     "ProcessWriteError",
     {
         command: ProcessCommandDiagnostic,
@@ -64,7 +61,7 @@ export class ProcessWriteError extends Schema.TaggedErrorClass<ProcessWriteError
     },
 ) {}
 
-export class ProcessTimeoutError extends Schema.TaggedErrorClass<ProcessTimeoutError>()(
+export class ProcessTimeoutError extends Schema.TaggedError<ProcessTimeoutError>()(
     "ProcessTimeoutError",
     {
         command: ProcessCommandDiagnostic,

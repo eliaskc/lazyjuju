@@ -34,7 +34,7 @@ function errorMessage(error: unknown): string {
     return String(error)
 }
 
-export class StackPrepareError extends Schema.TaggedErrorClass<StackPrepareError>()(
+export class StackPrepareError extends Schema.TaggedError<StackPrepareError>()(
     "StackPrepareError",
     {
         message: Schema.String,
@@ -42,7 +42,7 @@ export class StackPrepareError extends Schema.TaggedErrorClass<StackPrepareError
     },
 ) {}
 
-export class StackPlanStaleError extends Schema.TaggedErrorClass<StackPlanStaleError>()(
+export class StackPlanStaleError extends Schema.TaggedError<StackPlanStaleError>()(
     "StackPlanStaleError",
     {
         stackRootName: Schema.String,
@@ -53,7 +53,7 @@ export class StackPlanStaleError extends Schema.TaggedErrorClass<StackPlanStaleE
     }
 }
 
-export class StackApplyError extends Schema.TaggedErrorClass<StackApplyError>()("StackApplyError", {
+export class StackApplyError extends Schema.TaggedError<StackApplyError>()("StackApplyError", {
     message: Schema.String,
     cause: Schema.Defect(),
     completedEntries: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),

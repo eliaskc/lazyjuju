@@ -141,7 +141,7 @@ export interface JjRevisionSummary {
     readonly description: string
 }
 
-export class JjStaleWorkingCopyError extends Schema.TaggedErrorClass<JjStaleWorkingCopyError>()(
+export class JjStaleWorkingCopyError extends Schema.TaggedError<JjStaleWorkingCopyError>()(
     "JjStaleWorkingCopyError",
     {
         output: Schema.String,
@@ -152,7 +152,7 @@ export class JjStaleWorkingCopyError extends Schema.TaggedErrorClass<JjStaleWork
     }
 }
 
-export class JjCommandError extends Schema.TaggedErrorClass<JjCommandError>()("JjCommandError", {
+export class JjCommandError extends Schema.TaggedError<JjCommandError>()("JjCommandError", {
     command: Schema.String,
     result: ProcessResult,
 }) {
@@ -178,7 +178,7 @@ const JjReadFailureKind = Schema.Literals([
 
 export type JjReadFailureKind = typeof JjReadFailureKind.Type
 
-export class JjReadError extends Schema.TaggedErrorClass<JjReadError>()("JjReadError", {
+export class JjReadError extends Schema.TaggedError<JjReadError>()("JjReadError", {
     kind: JjReadFailureKind,
     command: Schema.String,
     result: ProcessResult,

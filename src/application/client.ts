@@ -366,7 +366,7 @@ export class ApplicationClientClosedError extends Error {
     }
 }
 
-class ApplicationStreamConsumerError extends Schema.TaggedErrorClass<ApplicationStreamConsumerError>()(
+class ApplicationStreamConsumerError extends Schema.TaggedError<ApplicationStreamConsumerError>()(
     "ApplicationStreamConsumerError",
     { cause: Schema.Defect() },
 ) {
@@ -375,7 +375,7 @@ class ApplicationStreamConsumerError extends Schema.TaggedErrorClass<Application
     }
 }
 
-class ApplicationStreamIncompleteError extends Schema.TaggedErrorClass<ApplicationStreamIncompleteError>()(
+class ApplicationStreamIncompleteError extends Schema.TaggedError<ApplicationStreamIncompleteError>()(
     "ApplicationStreamIncompleteError",
     {},
 ) {

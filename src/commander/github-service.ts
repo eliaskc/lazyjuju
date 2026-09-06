@@ -24,7 +24,7 @@ export interface GitHubOperationResult extends ProcessResult {
     readonly command: string
 }
 
-export class GitHubCommandError extends Schema.TaggedErrorClass<GitHubCommandError>()(
+export class GitHubCommandError extends Schema.TaggedError<GitHubCommandError>()(
     "GitHubCommandError",
     {
         command: Schema.String,
@@ -47,7 +47,7 @@ const GitHubComments = Schema.Array(
 
 export type GitHubDecodeOperation = typeof GitHubDecodeOperation.Type
 
-export class GitHubDecodeError extends Schema.TaggedErrorClass<GitHubDecodeError>()(
+export class GitHubDecodeError extends Schema.TaggedError<GitHubDecodeError>()(
     "GitHubDecodeError",
     {
         operation: GitHubDecodeOperation,

@@ -19,7 +19,7 @@ export interface StackJournal {
     readonly entries: StackJournalEntry[]
 }
 
-export class StackStoreError extends Schema.TaggedErrorClass<StackStoreError>()("StackStoreError", {
+export class StackStoreError extends Schema.TaggedError<StackStoreError>()("StackStoreError", {
     operation: Schema.Literals(["read-state", "write-state", "write-journal"]),
     cause: Schema.Defect(),
 }) {

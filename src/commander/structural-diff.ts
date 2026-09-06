@@ -9,7 +9,7 @@ import { flattenStructuralFile, structuralCandidate } from "../diff/structural/f
 import { AppProcess, type ProcessError } from "../process/app-process"
 import type { JjDiffTarget } from "./jj"
 
-export class StructuralDiffError extends Schema.TaggedErrorClass<StructuralDiffError>()(
+export class StructuralDiffError extends Schema.TaggedError<StructuralDiffError>()(
     "StructuralDiffError",
     {
         reason: Schema.String,

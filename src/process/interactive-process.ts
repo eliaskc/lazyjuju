@@ -18,7 +18,7 @@ const InteractiveProcessCommandDiagnostic = Schema.Struct({
     cwd: Schema.String,
 })
 
-export class InteractiveProcessSpawnError extends Schema.TaggedErrorClass<InteractiveProcessSpawnError>()(
+export class InteractiveProcessSpawnError extends Schema.TaggedError<InteractiveProcessSpawnError>()(
     "InteractiveProcessSpawnError",
     {
         command: InteractiveProcessCommandDiagnostic,
