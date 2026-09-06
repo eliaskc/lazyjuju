@@ -4,6 +4,10 @@ This is a local findings list, not an issue tracker or a claim that every cause
 is known. See [BENCHMARKING.md](BENCHMARKING.md) for measurement methods.
 No GitHub issues have been filed for these entries.
 
+See [PERFORMANCE-PLAN.md](PERFORMANCE-PLAN.md) for the ordered implementation
+checklist, the 2026-09-06 investigation results, and acceptance checks. Use that
+plan to track completion; this file retains the earlier observations.
+
 ## Fixed: immediate bookmark submission used stale text
 
 - **Evidence:** With the bookmark input focused, sending `immediate-submit\r`
@@ -23,12 +27,15 @@ No GitHub issues have been filed for these entries.
 - **Evidence from early harness validation:** An 80-key downward run on the
   small generated fixture advanced 76 positions. The final log contained 101
   revisions, so there was room for the requested position. The run was rejected.
-- **Lead:** Page loading may temporarily clamp navigation against a partial list.
-  This has not been independently established as the cause. It is also not proof
-  that every reported log stutter has the same cause.
-- **Next check:** Repeat with `--sample-ms 0`. Record the loaded
-  count, selected index, page request/cancellation times, and input receipt around
-  the page boundary. Compare requests with applied movement, not just FPS.
+- **Follow-up, 2026-09-06:** An endpoint-mode run sent and received all 80 Down
+  inputs but moved only 69 positions. The final log had 101 revisions; maximum
+  sender lateness was 1.37 ms. Code inspection found that `selectNextCommit`
+  returns while `logLoadingMore()` is true, even with loaded rows available.
+  This identifies a dropped-input path, not the cause of every log delay.
+- **Next check:** See P08 in [PERFORMANCE-PLAN.md](PERFORMANCE-PLAN.md). Add a
+  delayed-page regression test and preserve requested movement during loading.
+  Record page request/cancellation times and input receipt around the boundary.
+  Compare requests with applied movement, not just FPS.
 - **Starting command:**
 
   ```sh
@@ -64,11 +71,18 @@ No GitHub issues have been filed for these entries.
 - **Measurement:** The harness reports `contentReadyOutputMs` and
   `highlightedReadyOutputMs` separately. `highlightingAfterContentMs` is the
   gap between those output frames.
-- **Next check:** Separate worker creation, module loading, initialization,
-  first token request, token completion, and output. Test first visits and
-  warmed visits separately before choosing an optimization.
+- **Follow-up, 2026-09-06:** A stress-fixture run reached content readiness at
+  1.58 s and highlighting readiness at 2.33 s. Isolated tests of three fresh
+  workers per engine found worker readiness around 94 ms with the current
+  JavaScript engine, followed by 623–636 ms for the first TypeScript token.
+  A temporary Oniguruma/WASM variant took 28–33 ms for that token after readiness.
+  Oniguruma is the regex engine inside Shiki, not a replacement highlighter.
+- **Next check:** See P06 in [PERFORMANCE-PLAN.md](PERFORMANCE-PLAN.md). Compare
+  supported engines in the full app, test more languages and compiled builds,
+  and review maintenance risks. These isolated results are not proof of a
+  600 ms whole-app startup improvement.
 
-## Open: log navigation has substantial detail recovery in GoodMorning
+## Open: log navigation has substantial detail recovery in a reference repository
 
 - **Evidence from early reference runs with periodic screen sampling:** At a 16 ms key interval, log
   input-to-output p95 was about 79–102 ms and final detail/highlighting recovery
@@ -93,7 +107,7 @@ No GitHub issues have been filed for these entries.
 
 ## Measurement finding: periodic screen reads interfere with input
 
-- In GoodMorning, runs with 32 ms screen polling made the sender late.
+- In a reference repository, runs with 32 ms screen polling made the sender late.
   A 128 ms diagnostic interval passed the same 16 ms input schedule.
 - Trace-file writes also had long wall times under load. They are asynchronous
   and drained at shutdown; serialization and write time are reported separately.

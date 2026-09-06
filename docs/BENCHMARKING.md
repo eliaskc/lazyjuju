@@ -4,6 +4,8 @@ Use the real TUI benchmark to compare application changes and Bun/OpenTUI update
 It measures startup and sustained navigation in generated or copied repositories.
 It is a local test, not a CI speed threshold. Investigation leads and confirmed
 findings are tracked separately in [PERFORMANCE-FINDINGS.md](PERFORMANCE-FINDINGS.md).
+Use [PERFORMANCE-PLAN.md](PERFORMANCE-PLAN.md) for the ordered improvement
+checklist and acceptance checks.
 
 The report format starts at version 1. It separates content readiness from
 highlighting and defaults to start/end-only screen checks.
@@ -49,16 +51,16 @@ bun bench:tui --fixture .kajji-benchmarks/fixtures/small \
 
 A short run checks the harness. It does not establish a performance baseline.
 
-## Use GoodMorning or another real repository
+## Use a real repository
 
 ```sh
 bun bench:prepare \
-  --source ~/sleepcycle/mobile/GoodMorning \
+  --source ~/projects/example-repo \
   --revision YOUR_LARGE_DIFF_REVISION \
-  --fixture .kajji-benchmarks/fixtures/goodmorning
+  --fixture .kajji-benchmarks/fixtures/example-repo
 
-bun bench:tui --fixture .kajji-benchmarks/fixtures/goodmorning \
-  --output .kajji-benchmarks/goodmorning-baseline.json
+bun bench:tui --fixture .kajji-benchmarks/fixtures/example-repo \
+  --output .kajji-benchmarks/example-repo-baseline.json
 ```
 
 `--revision` is optional. It selects a revision **in the copy only**. Without it,
