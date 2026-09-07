@@ -321,7 +321,7 @@ export interface JjService {
     readonly showDescription: (
         revision: string,
         options: JjOperationOptions,
-    ) => Effect.Effect<JjDescription, ProcessError>
+    ) => Effect.Effect<JjDescription, JjCommandError | ProcessError>
     readonly nearestAncestorBookmarkNames: (
         revision: string,
         options: JjOperationOptions,
@@ -343,7 +343,7 @@ export interface JjService {
     readonly commitDetails: (
         revision: string,
         options: JjOperationOptions,
-    ) => Effect.Effect<JjCommitDetails, ProcessError>
+    ) => Effect.Effect<JjCommitDetails, JjCommandError | ProcessError>
     readonly opLog: (
         limit: number | undefined,
         options: JjOperationOptions,
@@ -433,21 +433,12 @@ class RefreshKey extends Data.Class<{
     readonly previousCommitId: string | undefined
 }> {}
 
-function readOperationArgs(
+/** Only read execution paths call this; command/global-flag order is irrelevant. */
+export function makeReadOperationArgs(
     args: readonly string[],
-    options: JjOperationOptions,
+    options: Pick<JjOperationOptions, "atOperation">,
 ): readonly string[] {
     if (!options.atOperation) return args
-    // A read option must never turn a mutation into a historical operation.
-    const commandIndex = args[0] === "--color" ? 2 : 0
-    const command = args[commandIndex]
-    const subcommand = args[commandIndex + 1]
-    const read =
-        ["log", "diff", "root"].includes(command ?? "") ||
-        (command === "bookmark" && subcommand === "list") ||
-        (command === "op" && subcommand === "log") ||
-        (command === "file" && ["show", "list"].includes(subcommand ?? ""))
-    if (!read) return args
     const separator = args.indexOf("--")
     const index = separator < 0 ? args.length : separator
     return [...args.slice(0, index), "--at-operation", options.atOperation, ...args.slice(index)]
@@ -468,7 +459,6 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 stdoutFile?: string
             } = {},
         ) {
-            args = readOperationArgs(args, options)
             const command = runOptions.displayCommand ?? `jj ${args.join(" ")}`
             notify(() => options.sink?.start(command, "jj"))
 
@@ -504,8 +494,16 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             return { ...result, command }
         })
 
-        const streamRaw = (args: readonly string[], options: JjOperationOptions) => {
-            args = readOperationArgs(args, options)
+        const runRead = Effect.fn("Jj.runRead")(
+            (
+                args: readonly string[],
+                options: JjOperationOptions,
+                runOptions?: Parameters<typeof runRaw>[2],
+            ) => runRaw(makeReadOperationArgs(args, options), options, runOptions),
+        )
+
+        const streamRead = (args: readonly string[], options: JjOperationOptions) => {
+            args = makeReadOperationArgs(args, options)
             const command = `jj ${args.join(" ")}`
             let settled = false
             const processCommand = {
@@ -551,7 +549,8 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             }
         }
 
-        const run = Effect.fn("Jj.run")(function* (
+        // Mutations always operate on the live repository, even if callers pass read options.
+        const run = Effect.fn("Jj.runMutation")(function* (
             args: readonly string[],
             options: JjOperationOptions,
             displayCommand?: string,
@@ -586,7 +585,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
         })
 
         const readOpLogId = Effect.fn("Jj.opLogId")(function* (options: JjOperationOptions) {
-            const result = yield* runRaw(
+            const result = yield* runRead(
                 [
                     "op",
                     "log",
@@ -606,7 +605,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
         const readWorkingCopyCommitId = Effect.fn("Jj.workingCopyCommitId")(function* (
             options: JjOperationOptions,
         ) {
-            const result = yield* runRaw(
+            const result = yield* runRead(
                 ["log", "--limit", "1", "--no-graph", "-r", "@", "-T", "commit_id"],
                 options,
             )
@@ -627,7 +626,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             if (options.paths?.length) {
                 args.push(...toFilesetArgs([...options.paths]))
             }
-            const result = yield* runRaw(args, options, {
+            const result = yield* runRead(args, options, {
                 env: options.columns ? { COLUMNS: String(options.columns) } : undefined,
             })
             if (result.exitCode !== 0) {
@@ -646,7 +645,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             options: JjOperationOptions,
         ) {
             const [summaryResult, binaryResult] = yield* Effect.all(
-                [runRaw(summaryArgs, options), runRaw(binaryArgs, options)],
+                [runRead(summaryArgs, options), runRead(binaryArgs, options)],
                 { concurrency: "unbounded" },
             )
             yield* throwIfStale(summaryResult)
@@ -706,7 +705,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
 
         return Jj.of({
             repositoryRoot: Effect.fn("Jj.repositoryRoot")(function* (options: JjOperationOptions) {
-                const result = yield* runRaw(["root"], options)
+                const result = yield* runRead(["root"], options)
                 const root = result.stdout.trim()
                 if (result.exitCode !== 0 || root.length === 0) {
                     return yield* new JjReadError({
@@ -723,7 +722,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             ) {
                 const template =
                     'change_id ++ "\\t" ++ commit_id ++ "\\t" ++ description.first_line()'
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     ["log", "-r", revset, "--no-graph", "-T", template],
                     options,
                 )
@@ -751,7 +750,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 path: string,
                 options: JjOperationOptions,
             ) {
-                const result = yield* runRaw(["file", "show", "-r", revision, path], options)
+                const result = yield* runRead(["file", "show", "-r", revision, path], options)
                 if (result.exitCode !== 0) {
                     return yield* new JjReadError({
                         kind: "file-show",
@@ -928,7 +927,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 outputPath: string,
                 options: JjOperationOptions,
             ) {
-                const result = yield* runRaw(["file", "show", "-r", revision, path], options, {
+                const result = yield* runRead(["file", "show", "-r", revision, path], options, {
                     stdoutFile: outputPath,
                 })
                 if (result.exitCode !== 0) {
@@ -943,7 +942,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 revision: string,
                 options: JjOperationOptions,
             ) {
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     ["log", "-r", `${revision} & ::trunk()`, "--no-graph", "-T", "change_id"],
                     options,
                 )
@@ -953,11 +952,13 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 revision: string,
                 options: JjOperationOptions,
             ) {
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     ["log", "-r", revision, "--no-graph", "-T", "description"],
                     options,
                 )
-                if (result.exitCode !== 0) return { subject: "", body: "" }
+                if (result.exitCode !== 0) {
+                    return yield* new JjCommandError({ command: result.command, result })
+                }
                 const lines = result.stdout.trim().split("\n")
                 return {
                     subject: lines[0] ?? "",
@@ -969,7 +970,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 revset: string,
                 options: JjOperationOptions,
             ) {
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     ["log", "-r", revset, "--limit", "1", "--no-graph", "-T", "commit_id"],
                     options,
                 )
@@ -980,10 +981,13 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 options: JjOperationOptions,
             ) {
                 const revset = `heads(::${revision} & bookmarks())`
-                const result = yield* run(
+                const result = yield* runRead(
                     ["bookmark", "list", "-r", revset, "--template", 'name ++ "\\n"'],
                     options,
                 )
+                if (result.exitCode !== 0) {
+                    return yield* new JjCommandError({ command: result.command, result })
+                }
                 return result.stdout
                     .split("\n")
                     .map((line) => line.trim())
@@ -1016,7 +1020,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             ) {
                 const separator = "\n---KAJJI_DETAILS_SEPARATOR---\n"
                 const styledSubjectTemplate = `if(empty, label("empty", "(empty) "), "") ++ if(description.first_line(), description.first_line(), label("description placeholder", "(no description set)"))`
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     [
                         "log",
                         "-r",
@@ -1029,7 +1033,9 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                     ],
                     options,
                 )
-                if (result.exitCode !== 0) return { subject: "", body: "" }
+                if (result.exitCode !== 0) {
+                    return yield* new JjCommandError({ command: result.command, result })
+                }
                 const parts = result.stdout.split(separator)
                 const description = (parts[1] ?? "").trim().split("\n")
                 return {
@@ -1043,7 +1049,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
             ) {
                 const args = ["op", "log", "--color", "always", "--ignore-working-copy"]
                 if (limit) args.push("--limit", String(limit))
-                const result = yield* runRaw(args, options)
+                const result = yield* runRead(args, options)
                 yield* throwIfStale(result)
                 if (result.exitCode !== 0) {
                     return yield* new JjReadError({
@@ -1076,7 +1082,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                     BOOKMARK_TEMPLATE,
                 ]
                 if (options.allRemotes) args.push("--all-remotes")
-                const result = yield* runRaw(args, options)
+                const result = yield* runRead(args, options)
                 yield* throwIfStale(result)
                 if (result.exitCode !== 0) {
                     return yield* new JjReadError({
@@ -1103,7 +1109,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
 
                     let output = ""
                     let lastCount = 0
-                    const { command, events } = streamRaw(args, options)
+                    const { command, events } = streamRead(args, options)
                     return events.pipe(
                         Stream.flatMap((event) => {
                             if (event._tag === "Output") {
@@ -1148,7 +1154,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 }),
             logPage: Effect.fn("Jj.logPage")(function* (options: JjLogReadOptions) {
                 const commandLimit = options.limit ? options.limit + 1 : undefined
-                const result = yield* runRaw(
+                const result = yield* runRead(
                     buildLogArgs(options, buildLogTemplate(), commandLimit),
                     options,
                 )
@@ -1188,7 +1194,7 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                     }
                     const visible = () =>
                         options.limit ? commits.slice(0, options.limit) : commits.slice()
-                    const { command, events } = streamRaw(
+                    const { command, events } = streamRead(
                         buildLogArgs(options, buildLogTemplate(), commandLimit),
                         options,
                     )

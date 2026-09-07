@@ -114,7 +114,7 @@ describe("repository refresh", () => {
                         await writeFile(output, "materialized text")
                         return result("")
                     })
-                return Effect.succeed(result(""))
+                return Effect.succeed(result(command.args[0] === "root" ? options.cwd : ""))
             }),
         )
         try {
@@ -122,6 +122,14 @@ describe("repository refresh", () => {
             await client.jjDiff({ revision: "@" }, { ...pinned, paths: ["--file.txt"] })
             await client.jjFiles({ revision: "@" }, pinned)
             await client.jjCommitDetails("@", pinned)
+            await client.jjShowDescription("@", pinned)
+            await client.jjRepositoryRoot(pinned)
+            await client.jjRevisionSummaries("@", pinned)
+            await client.jjFileContent("@", "file.txt", pinned)
+            await client.jjIsInTrunk("@", pinned)
+            await client.jjNearestAncestorBookmarkNames("@", pinned)
+            await client.jjLogPage(pinned)
+            await client.jjBookmarks(pinned)
             await client.jjStreamLogPage(pinned, () => {}).result
             await client.jjStreamBookmarks(pinned, () => {}).result
             await client.jjOpLog(10, pinned)
@@ -137,8 +145,17 @@ describe("repository refresh", () => {
             expect(materialized).not.toEqual(otherView)
             expect(materialized).not.toEqual(otherRepo)
             expect(commands.every((command) => command.args.includes("--at-operation"))).toBe(true)
+            const readCount = commands.length
             await client.jjDescribe("@", "new description", pinned)
-            expect(commands.at(-1)?.args).not.toContain("--at-operation")
+            await client.jjOpRestore("old-operation", pinned)
+            await client.jjBookmarkSet("main", "@", pinned)
+            await client.jjRestore(["file.txt"], pinned)
+            expect(commands.slice(readCount)).toHaveLength(4)
+            expect(
+                commands
+                    .slice(readCount)
+                    .every((command) => !command.args.includes("--at-operation")),
+            ).toBe(true)
             await client.jjDiff({ revision: "@" }, options)
             expect(commands.at(-1)?.args).not.toContain("--at-operation")
         } finally {

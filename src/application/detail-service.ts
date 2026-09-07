@@ -58,9 +58,7 @@ export const DetailsLive = Layer.effect(
             Effect.Error<ReturnType<JjService["logPage"]>>
         >()
         const descriptionSize = (value: { subject: string; body: string }) =>
-            value.subject || value.body
-                ? (value.subject.length + value.body.length) * 2 + 128
-                : Infinity
+            (value.subject.length + value.body.length) * 2 + 128
 
         return Details.of({
             invalidate: reads.invalidate,

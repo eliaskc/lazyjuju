@@ -8,6 +8,7 @@ import {
     JjLive,
     JjReadError,
     JjStaleWorkingCopyError,
+    makeReadOperationArgs,
     type OperationSink,
 } from "../../../src/commander/jj"
 import type { LogPageResult } from "../../../src/commander/log"
@@ -43,6 +44,28 @@ const success: ProcessResult = {
 }
 
 describe("Jj", () => {
+    test.each(
+        [
+            ["log", "-r", "@"],
+            ["--color", "always", "bookmark", "list"],
+            ["--quiet", "--config", "ui.color=never", "log", "-r", "@"],
+            ["--color=always", "--no-pager", "file", "list"],
+            ["--ignore-working-copy", "diff", "--", "--file.txt"],
+        ].map((args) => ({ args })),
+    )("pins read arguments without interpreting global flags: %j", ({ args }) => {
+        const original = [...args]
+        const separator = args.indexOf("--")
+        const index = separator < 0 ? args.length : separator
+        expect(makeReadOperationArgs(args, { atOperation: "operation-a" })).toEqual([
+            ...args.slice(0, index),
+            "--at-operation",
+            "operation-a",
+            ...args.slice(index),
+        ])
+        expect(args).toEqual(original)
+        expect(makeReadOperationArgs(args, {})).toBe(args)
+    })
+
     test("constructs all fetch options and preserves explicit cwd", async () => {
         const invocation = runWithResult(success, {
             cwd: "/tmp/repository",

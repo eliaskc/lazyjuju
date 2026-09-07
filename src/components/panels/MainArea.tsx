@@ -1203,13 +1203,24 @@ export function MainArea() {
 
     onMount(() => {
         const unsubscribeConfig = onConfigChange((config) => {
-            setDiffLayout(config.diff.layout)
-            setDiffAutoSwitchWidth(config.diff.autoSwitchWidth)
-            setDiffWrap(config.diff.wrap)
-            setConfiguredEngine(config.diff.engine)
-            setEngineOverride(null)
-            setViewStyleOverride(null)
-            setWrapOverride(null)
+            batch(() => {
+                if (
+                    config.diff.layout !== diffLayout() ||
+                    config.diff.autoSwitchWidth !== diffAutoSwitchWidth()
+                ) {
+                    setDiffLayout(config.diff.layout)
+                    setDiffAutoSwitchWidth(config.diff.autoSwitchWidth)
+                    setViewStyleOverride(null)
+                }
+                if (config.diff.wrap !== diffWrap()) {
+                    setDiffWrap(config.diff.wrap)
+                    setWrapOverride(null)
+                }
+                if (config.diff.engine !== configuredEngine()) {
+                    setConfiguredEngine(config.diff.engine)
+                    setEngineOverride(null)
+                }
+            })
         })
         onCleanup(unsubscribeConfig)
 

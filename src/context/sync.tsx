@@ -211,16 +211,10 @@ export function SyncProvider(props: {
     const [showTree, setShowTree] = createSignal(readConfig().ui.showFileTree)
     const [activeBookmarkDiff, setActiveBookmarkDiff] = createSignal<BookmarkDiffView | null>(null)
     onMount(() => {
-        const unsubscribeConfig = onConfigChange(async (config) => {
-            try {
-                await app.invalidateDetailReads()
-                if (syncDisposed) return
-                setRefreshCounter((c) => c + 1)
-                setShowTree(config.ui.showFileTree)
-            } catch (error) {
-                if (!syncDisposed)
-                    setError(error instanceof Error ? error.message : "Refresh failed")
-            }
+        const unsubscribeConfig = onConfigChange((config) => {
+            // Presentation changes do not invalidate repository content. The detail
+            // panel selects a new read when its engine/formatter options change.
+            setShowTree(config.ui.showFileTree)
         })
         onCleanup(unsubscribeConfig)
     })

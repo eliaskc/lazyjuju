@@ -63,6 +63,56 @@ describe("detail loading", () => {
         }
     })
 
+    test.each(["jjCommitDetails", "jjShowDescription"] as const)(
+        "%s caches successful empty results but retries command failures",
+        async (method) => {
+            let calls = 0
+            let fail = true
+            const client = makeApplicationClient(
+                makeAppProcessFake(() => {
+                    calls++
+                    return Effect.succeed(
+                        fail
+                            ? { ...result(""), exitCode: 1, stderr: "description read failed" }
+                            : result(""),
+                    )
+                }),
+            )
+            try {
+                await expect(client[method](a, options)).rejects.toMatchObject({
+                    _tag: "JjCommandError",
+                })
+                fail = false
+                const empty = await client[method](a, options)
+                expect(empty).toEqual({ subject: "", body: "" })
+                expect(await client[method](a, options)).toBe(empty)
+                expect(calls).toBe(2)
+            } finally {
+                await client.dispose()
+            }
+        },
+    )
+
+    test("caches the styled placeholder for an undescribed commit", async () => {
+        let calls = 0
+        const client = makeApplicationClient(
+            makeAppProcessFake(() => {
+                calls++
+                return Effect.succeed(
+                    result("(empty) (no description set)\n---KAJJI_DETAILS_SEPARATOR---\n"),
+                )
+            }),
+        )
+        try {
+            const details = await client.jjCommitDetails(a, options)
+            expect(details).toEqual({ subject: "(empty) (no description set)", body: "" })
+            expect(await client.jjCommitDetails(a, options)).toBe(details)
+            expect(calls).toBe(1)
+        } finally {
+            await client.dispose()
+        }
+    })
+
     test("shares concurrent prepared reads and isolates options and repositories", async () => {
         let calls = 0
         const client = makeApplicationClient(

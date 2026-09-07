@@ -1,9 +1,10 @@
 # Performance improvement plan
 
-Status: P01 and P03 implemented and measured. P02 list virtualization is retained,
-but summary virtualization remains open after rejection of the file-count limit.
-P03 page-scroll timing remains inconclusive. P04 is implemented and functionally checked, but final performance
-acceptance remains open. P05–P16 remain open.
+Status: P01, P03, and P05 are implemented and measured. P02 list virtualization
+is retained, but summary virtualization remains open after rejection of the
+file-count limit. P03 page-scroll timing remains inconclusive. P04 is implemented
+and functionally checked, but final performance acceptance remains open.
+P06–P16 remain open.
 
 Investigated on 2026-09-06 against `4faaf28f` (clean working copy).
 See [BENCHMARKING.md](BENCHMARKING.md) for measurement rules and
@@ -37,7 +38,7 @@ an optimization as delivered.
 - [x] **P01 — Coordinated, cancellable, cached detail loading**
 - [ ] **P02 — Virtualize log, bookmark, file, and summary lists** (summary work remains open)
 - [x] **P03 — Remove full-diff work from scroll updates**
-- [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content**
+- [ ] **P04 — Limit word-diff and wrapped-row preparation to needed content** (performance acceptance remains open)
 - [x] **P05 — Coordinate working-copy snapshots and repository reads**
 - [ ] **P06 — Reduce first-use syntax cost; compare regex engines**
 - [ ] **P07 — Parse and publish bookmark streams incrementally**
@@ -1221,3 +1222,32 @@ No enabled-Watchman, network, structural timing, or compiled-startup claim is ma
 `/tmp/kajji-p05-{a1,b1,a2,a3}*`. Validation logs are
 `/tmp/kajji-p05-{unit,e2e,e2e-final,check,bench-check,lint}.log`;
 reviewed changes are in `/tmp/kajji-p05-final.diff`.
+
+### P01–P05 review corrections
+
+- Description reads now fail with `JjCommandError` on non-zero exit. Successful
+  empty descriptions use the normal bounded cache. Styled undescribed-commit
+  placeholders remain cacheable; failures are not retained.
+- Kajji presentation config updates no longer clear repository detail caches or
+  trigger a repository refresh. Changes to engine, layout, and wrapping clear
+  only the corresponding temporary override. Unrelated changes preserve it.
+- Captured and streamed reads use explicit read execution paths that apply
+  `--at-operation` without guessing command position. Mutations and intentional
+  live snapshot/check commands remain separate.
+- Removed five unused diff-layout helpers and their exports. Moved useful offset
+  and navigation checks to the replacement indexed APIs.
+- Corrected the status header. P02 summary work and P04 performance acceptance
+  remain open. The LogPanel viewport/prefetch poll remains for P08.
+
+Validation: 455 unit tests and 21 E2E tests passed, along with `bun check`,
+`bun bench:check`, and `bun lint`, using Bun 1.4.2. Added checks for empty-result
+reuse, failed-read retry, global-flag ordering, pinned reads, mutation isolation,
+and config updates with native-renderer output and command counts. Config tests
+use a private process/home and do not write the user's configuration.
+
+The first full E2E run passed 20 tests and timed out entering file-navigation
+mode. That test passed alone, then all 21 passed in a second full run. Both full
+logs are retained. No timing benchmark was run and no new latency claim is made.
+Local evidence: `/tmp/kajji-review-{unit,config,check,bench-check,lint}.log`,
+`/tmp/kajji-review-e2e{,-navigation,-final}.log`, and
+`/tmp/kajji-review-fixes.diff`.

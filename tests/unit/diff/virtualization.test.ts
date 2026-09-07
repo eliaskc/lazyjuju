@@ -7,14 +7,11 @@ import {
     buildHunkNavigationIndex,
     findDiffScrollAnchorRowIndex,
     flattenToRows,
-    getAdjacentHunk,
     getAdjacentHunkFromRow,
     getCurrentDiffPosition,
     getCurrentDiffScrollAnchor,
     getCurrentFileId,
-    getFileRowOffsets,
     getFileScrollTailHeight,
-    getHunkRowOffsets,
     shouldShowStickyFileHeader,
 } from "../../../src/diff/virtualization"
 
@@ -70,17 +67,17 @@ describe("flattenToRows", () => {
     })
 })
 
-describe("getHunkRowOffsets", () => {
+describe("layout hunk offsets", () => {
     test("returns the first visual row for each hunk", () => {
         const first: HunkId = "first"
         const second: HunkId = "second"
-        const offsets = getHunkRowOffsets([
-            { row: { hunkId: null } },
-            { row: { hunkId: first } },
-            { row: { hunkId: first } },
-            { row: { hunkId: null } },
-            { row: { hunkId: second } },
-        ])
+        const offsets = indexRows([
+            { row: { fileId: "file", hunkId: null } },
+            { row: { fileId: "file", hunkId: first } },
+            { row: { fileId: "file", hunkId: first } },
+            { row: { fileId: "file", hunkId: null } },
+            { row: { fileId: "file", hunkId: second } },
+        ]).hunkOffsets
 
         expect(offsets).toEqual(
             new Map([
@@ -93,27 +90,27 @@ describe("getHunkRowOffsets", () => {
     test("counts wrapped rows before later hunks", () => {
         const first: HunkId = "first"
         const second: HunkId = "second"
-        const offsets = getHunkRowOffsets([
-            { row: { hunkId: first } },
-            { row: { hunkId: first } },
-            { row: { hunkId: first } },
-            { row: { hunkId: second } },
-        ])
+        const offsets = indexRows([
+            { row: { fileId: "file", hunkId: first } },
+            { row: { fileId: "file", hunkId: first } },
+            { row: { fileId: "file", hunkId: first } },
+            { row: { fileId: "file", hunkId: second } },
+        ]).hunkOffsets
 
         expect(offsets.get(second)).toBe(3)
     })
 })
 
-describe("getFileRowOffsets", () => {
+describe("layout file offsets", () => {
     test("returns each file header's visual row", () => {
         const first = "first" as FileId
         const second = "second" as FileId
         expect(
-            getFileRowOffsets([
+            indexRows([
                 { row: { fileId: first, type: "file-header" } },
                 { row: { fileId: first, type: "content" } },
                 { row: { fileId: second, type: "file-header" } },
-            ]),
+            ]).fileOffsets,
         ).toEqual(
             new Map([
                 [first, 0],
@@ -260,7 +257,7 @@ describe("getCurrentFileId", () => {
     })
 })
 
-describe("getAdjacentHunk", () => {
+describe("indexed hunk navigation", () => {
     const first: HunkId = "first"
     const second: HunkId = "second"
     const third: HunkId = "third"
@@ -270,8 +267,17 @@ describe("getAdjacentHunk", () => {
         { hunks: [{ hunkId: third }] },
     ]
 
+    const navigation = buildHunkNavigationIndex(
+        files,
+        new Map([
+            [first, 0],
+            [second, 5],
+            [third, 10],
+        ]),
+    )
+
     test("navigates within a file", () => {
-        expect(getAdjacentHunk(files, 0, 0, 1)).toEqual({
+        expect(getAdjacentHunkFromRow(navigation, 0, 1)).toMatchObject({
             fileIndex: 0,
             hunkIndex: 1,
             hunkId: second,
@@ -279,12 +285,12 @@ describe("getAdjacentHunk", () => {
     })
 
     test("crosses files and skips files without hunks", () => {
-        expect(getAdjacentHunk(files, 0, 1, 1)).toEqual({
+        expect(getAdjacentHunkFromRow(navigation, 5, 1)).toMatchObject({
             fileIndex: 2,
             hunkIndex: 0,
             hunkId: third,
         })
-        expect(getAdjacentHunk(files, 2, 0, -1)).toEqual({
+        expect(getAdjacentHunkFromRow(navigation, 10, -1)).toMatchObject({
             fileIndex: 0,
             hunkIndex: 1,
             hunkId: second,
@@ -292,8 +298,8 @@ describe("getAdjacentHunk", () => {
     })
 
     test("stops at the first and last hunk", () => {
-        expect(getAdjacentHunk(files, 0, 0, -1)).toBeUndefined()
-        expect(getAdjacentHunk(files, 2, 0, 1)).toBeUndefined()
+        expect(getAdjacentHunkFromRow(navigation, 0, -1)).toBeUndefined()
+        expect(getAdjacentHunkFromRow(navigation, 10, 1)).toBeUndefined()
     })
 })
 

@@ -7,9 +7,7 @@ import {
     getAdjacentHunkFromRow,
     getCurrentDiffPosition,
     getCurrentDiffScrollAnchor,
-    getFileRowOffsets,
     getFileScrollTailHeight,
-    getHunkRowOffsets,
 } from "../../../src/diff/virtualization"
 
 interface Row {
@@ -86,8 +84,6 @@ describe("diff layout index", () => {
     test("matches linear position and anchor rules across files, gaps, wrapping, and absent sides", () => {
         const rows = fixture()
         const layout = indexRows(rows)
-        expect(layout.fileOffsets).toEqual(getFileRowOffsets(rows))
-        expect(layout.hunkOffsets).toEqual(getHunkRowOffsets(rows))
         for (let top = -1; top <= rows.length + 1; top += 1.5) {
             for (const delta of [-40, 0, 10, 100]) {
                 const focus = top + delta

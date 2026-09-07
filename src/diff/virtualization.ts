@@ -389,68 +389,10 @@ export function getVisibleRange(
     return { start, end }
 }
 
-export function findRowIndexByHunkId(rows: DiffRow[], hunkId: HunkId): number {
-    return rows.findIndex(
-        (r) =>
-            r.hunkId === hunkId &&
-            r.type !== "file-header" &&
-            r.type !== "gap" &&
-            r.type !== "file-gap",
-    )
-}
-
-export function findRowIndexByFileId(rows: DiffRow[], fileId: FileId): number {
-    return rows.findIndex((r) => r.fileId === fileId && r.type === "file-header")
-}
-
-export function getHunkRowOffsets(
-    rows: readonly { row: { hunkId: HunkId | null } }[],
-): Map<HunkId, number> {
-    const offsets = new Map<HunkId, number>()
-    for (const [index, { row }] of rows.entries()) {
-        if (row.hunkId && !offsets.has(row.hunkId)) {
-            offsets.set(row.hunkId, index)
-        }
-    }
-    return offsets
-}
-
-export function getFileRowOffsets(
-    rows: readonly { row: { fileId: FileId; type: string } }[],
-): Map<FileId, number> {
-    const offsets = new Map<FileId, number>()
-    for (const [index, { row }] of rows.entries()) {
-        if (row.type === "file-header" && !offsets.has(row.fileId)) {
-            offsets.set(row.fileId, index)
-        }
-    }
-    return offsets
-}
-
 export interface HunkPosition {
     fileIndex: number
     hunkIndex: number
     hunkId: HunkId
-}
-
-export function getAdjacentHunk(
-    files: readonly { hunks: readonly { hunkId: HunkId }[] }[],
-    fileIndex: number,
-    hunkIndex: number,
-    direction: 1 | -1,
-): HunkPosition | undefined {
-    const positions = files.flatMap((file, currentFileIndex) =>
-        file.hunks.map((hunk, currentHunkIndex) => ({
-            fileIndex: currentFileIndex,
-            hunkIndex: currentHunkIndex,
-            hunkId: hunk.hunkId,
-        })),
-    )
-    const currentIndex = positions.findIndex(
-        (position) => position.fileIndex === fileIndex && position.hunkIndex === hunkIndex,
-    )
-    if (currentIndex === -1) return undefined
-    return positions[currentIndex + direction]
 }
 
 export interface HunkRowPosition extends HunkPosition {
