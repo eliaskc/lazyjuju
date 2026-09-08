@@ -15,6 +15,7 @@ import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { featureFlags } from "../../feature-flags"
 import { createHorizontalCropScroll } from "../../hooks/horizontal-crop-scroll"
+import { useOpenPullRequest } from "../../hooks/open-pull-request"
 import { createScrollViewport } from "../../hooks/scroll-viewport"
 import type { OperationResult } from "../../process/operation-result"
 import { getRepoPath } from "../../repo"
@@ -42,6 +43,7 @@ type BookmarkRow = BookmarkStackRow<Bookmark>
 
 export function BookmarksPanel() {
     const app = useApplication()
+    const openPullRequest = useOpenPullRequest(() => refreshPullRequestMetadata())
     const {
         commits,
         bookmarks,
@@ -155,15 +157,7 @@ export function BookmarksPanel() {
             await refresh()
         }
 
-        const observer = commandLog.observer()
-        const prResult = await app.ghPrCreateWeb(bookmark.name, {
-            cwd: getRepoPath(),
-            observer,
-        })
-        commandLog.addEntry(prResult)
-        if (prResult.success) {
-            refreshPullRequestMetadata()
-        }
+        await openPullRequest(bookmark.name)
     }
 
     const isFocused = () => focus.isPanel("refs")

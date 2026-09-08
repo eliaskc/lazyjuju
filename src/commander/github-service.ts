@@ -62,7 +62,16 @@ export class GitHubDecodeError extends Schema.TaggedError<GitHubDecodeError>()(
 
 export type GitHubError = GitHubCommandError | GitHubDecodeError | ProcessError
 
+export interface PullRequestBaseOptions {
+    readonly repository: string
+    readonly defaultBranch: string
+    readonly remote?: string
+}
+
 export interface GitHubService {
+    readonly prBaseOptions: (
+        options: GitHubReadOptions,
+    ) => Effect.Effect<PullRequestBaseOptions, GitHubError>
     readonly listPullRequestsByHead: (
         heads: readonly string[],
         options: GitHubReadOptions & { readonly includeClosed?: boolean },
@@ -87,7 +96,7 @@ export interface GitHubService {
     ) => Effect.Effect<GitHubOperationResult, GitHubError>
     readonly prCreateWeb: (
         head: string,
-        options: GitHubOperationOptions,
+        options: GitHubOperationOptions & { readonly base?: string; readonly repository?: string },
     ) => Effect.Effect<GitHubOperationResult, ProcessError>
     readonly browseCommit: (
         commit: string,
@@ -204,6 +213,26 @@ export const GitHubLive = Layer.effect(
         })
 
         return GitHub.of({
+            prBaseOptions: Effect.fn("GitHub.prBaseOptions")(function* (options) {
+                const originUrl = yield* git.originRemoteUrl(options)
+                const origin = originUrl ? parseGitHubRemoteUrl(originUrl) : undefined
+                const args = ["repo", "view", "--json", "nameWithOwner,defaultBranchRef"]
+                if (origin) args.push("--repo", `${origin.owner}/${origin.name}`)
+                const stdout = yield* output(args, options)
+                const repo = yield* decodeGitHubOutput("repository", stdout, () =>
+                    Schema.decodeUnknownSync(
+                        Schema.Struct({
+                            nameWithOwner: Schema.String,
+                            defaultBranchRef: Schema.Struct({ name: Schema.String }),
+                        }),
+                    )(JSON.parse(stdout)),
+                )
+                return {
+                    repository: repo.nameWithOwner,
+                    defaultBranch: repo.defaultBranchRef.name,
+                    remote: origin ? "origin" : undefined,
+                }
+            }),
             listPullRequestsByHead: Effect.fn("GitHub.listPullRequestsByHead")(
                 function* (heads, options) {
                     const uniqueHeads = [...new Set(heads)].filter(Boolean)
@@ -302,7 +331,18 @@ ${uniqueHeads
                 },
             ),
             prCreateWeb: Effect.fn("GitHub.prCreateWeb")((head, options) =>
-                runRaw(["pr", "create", "--web", "--head", head], options),
+                runRaw(
+                    [
+                        "pr",
+                        "create",
+                        "--web",
+                        "--head",
+                        head,
+                        ...(options.base ? ["--base", options.base] : []),
+                        ...(options.repository ? ["--repo", options.repository] : []),
+                    ],
+                    options,
+                ),
             ),
             browseCommit: Effect.fn("GitHub.browseCommit")((commit, options) =>
                 runRaw(["browse", commit], options),

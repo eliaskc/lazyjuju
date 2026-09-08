@@ -136,6 +136,37 @@ describe("ApplicationClient", () => {
         expect(status.startupError).toBe("The working copy is stale")
     })
 
+    test.each([
+        { names: ["release/1"], expected: ["release/1"] },
+        { names: ["release/1", "release/2"], expected: ["release/1", "release/2"] },
+        { names: [], expected: ["develop"] },
+    ])("selects PR base choices or the repository default: %j", async ({ names, expected }) => {
+        const layer = makeAppProcessFake((command) =>
+            Effect.succeed({
+                ...success,
+                stdout:
+                    command.executable === "git"
+                        ? "git@github.com:team/project.git\n"
+                        : command.executable === "gh"
+                          ? JSON.stringify({
+                                nameWithOwner: "team/project",
+                                defaultBranchRef: { name: "develop" },
+                            })
+                          : `head\0parent\0feature\nparent\0\0${names.join("\0")}\n`,
+                stderr: "",
+            }),
+        )
+        const client = makeApplicationClient(layer)
+        try {
+            expect(await client.ghPrBaseChoices("feature", { cwd: "/repo" })).toEqual({
+                repository: "team/project",
+                branches: [...expected],
+            })
+        } finally {
+            await client.dispose()
+        }
+    })
+
     test("routes GitHub reads and browser operations through the supplied process", async () => {
         const commands: string[] = []
         const layer = makeAppProcessFake((command) => {

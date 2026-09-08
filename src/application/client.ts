@@ -353,9 +353,16 @@ export interface ApplicationClient {
         heads: readonly string[],
         options: ApplicationReadOptions & { readonly includeClosed?: boolean },
     ) => Promise<Map<string, GitHubPullRequestSummary>>
+    readonly ghPrBaseChoices: (
+        head: string,
+        options: ApplicationReadOptions,
+    ) => Promise<{ readonly repository: string; readonly branches: string[] }>
     readonly ghPrCreateWeb: (
         head: string,
-        options: ApplicationGitHubOperationOptions,
+        options: ApplicationGitHubOperationOptions & {
+            readonly base?: string
+            readonly repository?: string
+        },
     ) => Promise<OperationResult>
     readonly ghBrowseCommit: (
         commit: string,
@@ -866,6 +873,19 @@ export function makeApplicationClient(
             ),
         ghListPullRequestsByHead: (heads, options) =>
             runGitHubRead(options, (gitHub) => gitHub.listPullRequestsByHead(heads, options)),
+        ghPrBaseChoices: async (head, options) => {
+            const target = await runGitHubRead(options, (gitHub) => gitHub.prBaseOptions(options))
+            const remote = target.remote
+            const ancestors = remote
+                ? await runRead(options, (jj) =>
+                      jj.nearestRemoteAncestorBookmarkNames(head, remote, options),
+                  )
+                : []
+            return {
+                repository: target.repository,
+                branches: ancestors.length > 0 ? ancestors : [target.defaultBranch],
+            }
+        },
         ghPrCreateWeb: (head, { observer, signal, ...options }) =>
             runGitHubOperation({ ...options, observer, signal }, (gitHub, sink) =>
                 gitHub.prCreateWeb(head, { ...options, sink }),

@@ -200,6 +200,11 @@ Default keybindings are contextual. Press `?` or `ctrl+p` in kajji for the full 
 | `o` / `O` | Open selected revision on GitHub (prompt / direct) |
 | `o`       | Open selected bookmark's commit or PR on GitHub    |
 
+When creating a PR, kajji suggests the nearest strict ancestor bookmark on `origin`,
+using its remote position. Local-only bookmarks are ignored. If no ancestor qualifies,
+kajji uses the target repository's default branch. You can change the base before
+opening the browser. If several branches are equally near, kajji asks you to choose.
+
 ## Built With
 
 - [OpenTUI](https://github.com/sst/opentui) + [SolidJS](https://www.solidjs.com/) - TypeScript TUI framework

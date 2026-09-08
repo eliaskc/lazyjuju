@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { TerminalControl } from "@kitlangton/terminal-control"
@@ -83,6 +83,7 @@ async function withKajji(
             inheritEnv: true,
             env: {
                 HOME: home,
+                PATH: `${join(home, "bin")}:${process.env.PATH ?? ""}`,
                 XDG_CONFIG_HOME: join(home, ".config"),
                 XDG_STATE_HOME: join(home, ".local/state"),
                 NODE_ENV: "development",
@@ -118,6 +119,47 @@ async function withKajji(
         rmSync(root, { recursive: true, force: true })
     }
 }
+
+test("suggests the remote release base and allows an override before opening a PR", async () => {
+    await withKajji(
+        async (session, repository) => {
+            await session.keyboard.type("o")
+            await session.screen.waitForText("Base for feature: release/1", { timeoutMs: 10_000 })
+            await waitForInput(session)
+            await session.keyboard.type("-hotfix")
+            await session.keyboard.press("Enter")
+            const output = join(repository, "..", "pr-args")
+            await session.screen.waitUntil(() => existsSync(output), { timeoutMs: 10_000 })
+            expect(readFileSync(output, "utf8")).toContain(
+                "--base release/1-hotfix --repo team/project",
+            )
+        },
+        (repository, home) => {
+            const remote = join(repository, "..", "remote")
+            const initialized = Bun.spawnSync(["git", "init", "--bare", remote])
+            if (!initialized.success) throw new Error(initialized.stderr.toString())
+            runJj(repository, "git", "remote", "add", "origin", remote)
+            runJj(repository, "bookmark", "create", "main", "-r", "@--")
+            runJj(repository, "bookmark", "create", "release/1", "-r", "@-")
+            runJj(repository, "bookmark", "create", "feature", "-r", "@")
+            runJj(repository, "git", "push", "-b", "main", "-b", "release/1", "-b", "feature")
+            const bin = join(home, "bin")
+            mkdirSync(bin)
+            const git = Bun.which("git")
+            if (!git) throw new Error("git not found")
+            writeFileSync(
+                join(bin, "git"),
+                `#!/bin/sh\nif [ "$1 $2 $3" = "remote get-url origin" ]; then\n echo git@github.com:team/project.git\nelse\n exec '${git}' "$@"\nfi\n`,
+                { mode: 0o755 },
+            )
+            writeFileSync(
+                join(bin, "gh"),
+                `#!/bin/sh\ncase "$1 $2" in\n "repo view") echo '{"nameWithOwner":"team/project","defaultBranchRef":{"name":"main"}}' ;;\n "pr create") echo "$*" > ../pr-args ;;\n *) echo '{"data":{"repository":{}}}' ;;\nesac\n`,
+                { mode: 0o755 },
+            )
+        },
+    )
+}, 45_000)
 
 test("scrolls variable-height revision, filtered, and operation logs", async () => {
     await withKajji(

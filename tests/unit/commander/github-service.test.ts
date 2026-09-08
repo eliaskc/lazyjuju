@@ -30,6 +30,66 @@ function runWithFake<A, E>(
 }
 
 describe("GitHub", () => {
+    test("resolves PR base metadata for the origin repository", async () => {
+        const commands: ProcessCommand[] = []
+        const result = await runWithFake(
+            (command) => {
+                commands.push(command)
+                return Effect.succeed({
+                    ...success,
+                    stdout:
+                        command.executable === "git"
+                            ? "git@github.com:team/project.git\n"
+                            : JSON.stringify({
+                                  nameWithOwner: "team/project",
+                                  defaultBranchRef: { name: "develop" },
+                              }),
+                })
+            },
+            (gitHub) => gitHub.prBaseOptions({ cwd: "/repo" }),
+        )
+        expect(result).toEqual({
+            repository: "team/project",
+            defaultBranch: "develop",
+            remote: "origin",
+        })
+        expect(commands[1]?.args).toEqual([
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner,defaultBranchRef",
+            "--repo",
+            "team/project",
+        ])
+    })
+
+    test("passes the chosen base and target repository to the browser command", async () => {
+        let args: readonly string[] | undefined
+        await runWithFake(
+            (command) => {
+                args = command.args
+                return Effect.succeed(success)
+            },
+            (gitHub) =>
+                gitHub.prCreateWeb("feature", {
+                    cwd: "/repo",
+                    base: "release/1",
+                    repository: "team/project",
+                }),
+        )
+        expect(args).toEqual([
+            "pr",
+            "create",
+            "--web",
+            "--head",
+            "feature",
+            "--base",
+            "release/1",
+            "--repo",
+            "team/project",
+        ])
+    })
+
     test("resolves the origin repository and lists pull requests by head", async () => {
         const commands: ProcessCommand[] = []
         const pulls = await runWithFake(

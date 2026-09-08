@@ -23,6 +23,7 @@ import {
     finalizeLogStream,
     parseLogOutput,
 } from "./log"
+import { nearestRemoteAncestorBookmarks } from "./pr-base"
 import type { Commit, FileChange } from "./types"
 
 export type JjStreamEvent<A, R> =
@@ -322,6 +323,11 @@ export interface JjService {
         revision: string,
         options: JjOperationOptions,
     ) => Effect.Effect<JjDescription, JjCommandError | ProcessError>
+    readonly nearestRemoteAncestorBookmarkNames: (
+        head: string,
+        remote: string,
+        options: JjOperationOptions,
+    ) => Effect.Effect<string[], JjCommandError | ProcessError>
     readonly nearestAncestorBookmarkNames: (
         revision: string,
         options: JjOperationOptions,
@@ -976,6 +982,20 @@ export const JjLayer: Layer.Layer<Jj, never, AppProcess | Hooks> = Layer.effect(
                 )
                 return result.exitCode === 0 && result.stdout.trim().length > 0
             }),
+            nearestRemoteAncestorBookmarkNames: Effect.fn("Jj.nearestRemoteAncestorBookmarkNames")(
+                function* (head, remote, options) {
+                    const revset = `::bookmarks(exact:${JSON.stringify(head)})`
+                    const template = `commit_id ++ "\\0" ++ parents.map(|p| p.commit_id()).join(" ") ++ "\\0" ++ remote_bookmarks.filter(|b| b.remote() == ${JSON.stringify(remote)}).map(|b| b.name()).join("\\0") ++ "\\n"`
+                    const result = yield* runRead(
+                        ["log", "-r", revset, "--no-graph", "-T", template],
+                        options,
+                    )
+                    if (result.exitCode !== 0) {
+                        return yield* new JjCommandError({ command: result.command, result })
+                    }
+                    return nearestRemoteAncestorBookmarks(result.stdout, head)
+                },
+            ),
             nearestAncestorBookmarkNames: Effect.fn("Jj.nearestAncestorBookmarkNames")(function* (
                 revision: string,
                 options: JjOperationOptions,

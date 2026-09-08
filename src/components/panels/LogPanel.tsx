@@ -14,6 +14,7 @@ import { useStatus } from "../../context/status"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import type { Context } from "../../context/types"
+import { useOpenPullRequest } from "../../hooks/open-pull-request"
 import { createScrollViewport } from "../../hooks/scroll-viewport"
 import { HookOperation } from "../../hooks/types"
 import type { OperationResult } from "../../process/operation-result"
@@ -144,6 +145,7 @@ function sortBookmarksByProximity(
 
 export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
     const app = useApplication()
+    const openPullRequest = useOpenPullRequest(() => refreshPullRequestMetadata())
     const renderer = useRenderer()
     const {
         commits,
@@ -703,11 +705,7 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         await refresh()
         await loadBookmarks()
 
-        const prResult = await app.ghPrCreateWeb(bookmarkName, {
-            cwd: getRepoPath(),
-            observer,
-        })
-        commandLog.addEntry(prResult)
+        await openPullRequest(bookmarkName)
     }
 
     const promptForBookmarkAndOpen = (commit: Commit) => {
@@ -780,16 +778,15 @@ export function LogPanel(props: { filesWithRevisions?: boolean } = {}) {
         }
 
         const existingPrNumber = bookmarkPrNumbers().get(bookmark.name)
+        if (!existingPrNumber) {
+            await openPullRequest(bookmark.name)
+            return
+        }
         const observer = commandLog.observer()
-        const prResult = existingPrNumber
-            ? await app.ghPrViewWeb(existingPrNumber, {
-                  cwd: getRepoPath(),
-                  observer,
-              })
-            : await app.ghPrCreateWeb(bookmark.name, {
-                  cwd: getRepoPath(),
-                  observer,
-              })
+        const prResult = await app.ghPrViewWeb(existingPrNumber, {
+            cwd: getRepoPath(),
+            observer,
+        })
         commandLog.addEntry(prResult)
         if (prResult.success) {
             refreshPullRequestMetadata()
